@@ -154,7 +154,7 @@ async function packiyoFetch(endpoint, params = {}) {
   const res = await fetch(url.toString(), {
     headers: {
       'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`,
-      'Content-Type': 'application/json',
+      'Accept': '*/*',
     }
   });
   if (!res.ok) throw new Error(`Packiyo ${res.status}: ${res.statusText}`);
