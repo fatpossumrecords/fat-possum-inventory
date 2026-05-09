@@ -167,11 +167,11 @@ async function loadPackiyo() {
     // Load all products paginated
     let page = 1, allProducts = [];
     while (true) {
-      const data = await packiyoFetch('/products', { per_page: 100, page });
-      const items = data.data || data.products || data || [];
+      const data = await packiyoFetch('/products', { 'page[number]': page, 'page[size]': 100 });
+      const items = data.data || data.products || [];
       if (!Array.isArray(items) || items.length === 0) break;
       allProducts = allProducts.concat(items);
-      if (!data.meta || page >= (data.meta.last_page || 1)) break;
+      const lastPage = data.meta?.last_page || data.meta?.page_count || data.meta?.total_pages || 1; if (page >= lastPage) break;
       page++;
     }
     State.packiyoProducts = allProducts;
