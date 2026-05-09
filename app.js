@@ -152,72 +152,70 @@ async function loadPackiyo() {
 
 async function loadPackiyoPOs() {
   try {
-    // Step 1: fetch all PO headers
-    let page = 1, allPOs = [];
+    // Fetch all POs with line items included in one request using JSON:API include
+    let page = 1, allPOs = [], allIncluded = [];
     while (true) {
-      const data = await packiyoFetch('/purchase-orders', { 'page[number]': page, 'page[size]': 100 });
+      const data = await packiyoFetch('/purchase-orders', {
+        'page[number]': page,
+        'page[size]': 100,
+        'include': 'purchase_order_items.product',
+      });
       const items = data.data || [];
       if (!Array.isArray(items) || items.length === 0) break;
       allPOs = allPOs.concat(items);
+      // JSON:API puts included resources in top-level "included" array
+      if (Array.isArray(data.included)) allIncluded = allIncluded.concat(data.included);
       const lastPage = data.meta?.page?.lastPage || 1;
       if (page >= lastPage) break;
       page++;
     }
 
-    // Filter to open POs only (closed_at is null = still open)
-    const openPOs = allPOs.filter(po => {
-      const attrs = po.attributes || {};
-      return !attrs.closed_at;
-    });
+    // Build lookups for line items and products from included
+    const lineItemById = {};
+    const productById = {};
+    for (const inc of allIncluded) {
+      if (inc.type === 'purchase-order-items') lineItemById[inc.id] = inc;
+      if (inc.type === 'products') productById[inc.id] = inc.attributes || {};
+    }
 
-    // Step 2: collect all purchase-order-item IDs from relationships
-    const allItemIds = [];
-    const poHeaderByItemId = {};
-    for (const po of openPOs) {
+    // Build sku -> PO map from open POs only
+    const poMap = {};
+    for (const po of allPOs) {
       const attrs = po.attributes || {};
+      if (attrs.closed_at) continue; // skip closed POs
       const poNumber = attrs.number || po.id;
       const itemRefs = po.relationships?.purchase_order_items?.data || [];
       for (const ref of itemRefs) {
-        allItemIds.push(ref.id);
-        poHeaderByItemId[ref.id] = { poNumber, attrs };
-      }
-    }
-
-    if (allItemIds.length === 0) {
-      State.packiyoPOs = {};
-      console.log('POs loaded: no open PO line items found');
-      return;
-    }
-
-    // Step 3: fetch all PO items paginated
-    const poMap = {};
-    let itemPage = 1;
-    while (true) {
-      const data = await packiyoFetch('/purchase-order-items', { 'page[number]': itemPage, 'page[size]': 100 });
-      const items = data.data || [];
-      if (!Array.isArray(items) || items.length === 0) break;
-      for (const item of items) {
-        const a = item.attributes || {};
-        // Only include items that belong to our open POs
-        if (!poHeaderByItemId[item.id]) continue;
-        const sku = a.sku || a.product_sku || '';
-        const qty = safeNum(a.quantity || a.qty || 0);
-        const qtyReceived = safeNum(a.quantity_received || a.qty_received || 0);
-        const qtyPending = Math.max(0, qty - qtyReceived);
+        const lineItem = lineItemById[ref.id];
+        if (!lineItem) continue;
+        const lineAttrs = lineItem.attributes || {};
+        // Get SKU from the related product via the line item's relationship
+        const productRef = lineItem.relationships?.product?.data;
+        const product = productRef ? productById[productRef.id] : null;
+        const sku = product?.sku || lineAttrs.sku || lineAttrs.product_sku || '';
+        const qtyPending = safeNum(lineAttrs.quantity_pending ?? Math.max(0, safeNum(lineAttrs.quantity) - safeNum(lineAttrs.quantity_received)));
         if (sku && qtyPending > 0) {
-          const { poNumber } = poHeaderByItemId[item.id];
           if (!poMap[sku]) poMap[sku] = { qty: 0, pos: [] };
           poMap[sku].qty += qtyPending;
           poMap[sku].pos.push({ poId: poNumber, qty: qtyPending });
         }
       }
-      const lastPage = data.meta?.page?.lastPage || 1;
-      if (itemPage >= lastPage) break;
-      itemPage++;
     }
 
     State.packiyoPOs = poMap;
-    console.log('POs loaded:', Object.keys(poMap).length, 'SKUs with open orders', poMap);
+    const poCount = Object.keys(poMap).length;
+    console.log(`POs loaded: ${poCount} SKUs with open orders | allPOs: ${allPOs.length} | openPOs: ${allPOs.filter(p=>!p.attributes?.closed_at).length} | included: ${allIncluded.length} | lineItems: ${Object.keys(lineItemById).length} | products: ${Object.keys(productById).length}`);
+    if (poCount > 0) console.log('Sample PO data:', JSON.stringify(Object.entries(poMap).slice(0,3)));
+    if (poCount === 0 && Object.keys(lineItemById).length > 0) {
+      // Debug: show a sample line item and its product lookup
+      const sampleId = Object.keys(lineItemById)[0];
+      const sampleLine = lineItemById[sampleId];
+      const sampleProdRef = sampleLine.relationships?.product?.data;
+      const sampleProd = sampleProdRef ? productById[sampleProdRef.id] : null;
+      console.log('Sample line item:', JSON.stringify(sampleLine.attributes));
+      console.log('Sample product ref:', JSON.stringify(sampleProdRef));
+      console.log('Sample product found:', JSON.stringify(sampleProd));
+    }
   } catch(e) {
     console.warn('Could not load POs:', e.message);
     State.packiyoPOs = {};
