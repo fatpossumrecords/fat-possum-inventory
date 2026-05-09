@@ -652,13 +652,18 @@ function renderManufacturing() {
 
     const isLPItem = isVinyl(p.format || '');
     const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
-    const poDeadlineDate = new Date(today.getTime() + (monthsLeft - leadTime) * 30 * 24 * 3600 * 1000);
-    const daysToDeadline = Math.round((poDeadlineDate - today) / (24 * 3600 * 1000));
+    // Handle Infinity monthsLeft (no sales velocity) gracefully
+    const poDeadlineDate = isFinite(monthsLeft)
+      ? new Date(today.getTime() + (monthsLeft - leadTime) * 30 * 24 * 3600 * 1000)
+      : null;
+    const daysToDeadline = poDeadlineDate ? Math.round((poDeadlineDate - today) / (24 * 3600 * 1000)) : Infinity;
 
-    let urgency = 'plan';
-    if (daysToDeadline < 0) urgency = 'overdue';
-    else if (daysToDeadline < 30) urgency = 'urgent';
-    else if (daysToDeadline < 90) urgency = 'soon';
+    let urgency = hasPO && !isFinite(monthsLeft) ? 'plan' : 'plan';
+    if (isFinite(daysToDeadline)) {
+      if (daysToDeadline < 0) urgency = 'overdue';
+      else if (daysToDeadline < 30) urgency = 'urgent';
+      else if (daysToDeadline < 90) urgency = 'soon';
+    }
 
     return { ...p, totalStock, poQty, totalWithInbound, monthly, need12mo, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem, hasPO };
   }).filter(Boolean);
@@ -708,9 +713,11 @@ function renderManufacturing() {
       plan:    `<span class="pill pill-plan">Plan</span>`,
     }[p.urgency] || '';
 
-    const dl = p.daysToDeadline < 0
-      ? `<span style="color:var(--red);font-weight:600">PAST DUE</span>`
-      : formatDate(p.poDeadlineDate);
+    const dl = !p.poDeadlineDate
+      ? `<span style="color:var(--text-muted)">No velocity data</span>`
+      : p.daysToDeadline < 0
+        ? `<span style="color:var(--red);font-weight:600">PAST DUE</span>`
+        : formatDate(p.poDeadlineDate);
 
     const inboundCell = p.fp_inbound > 0
       ? `<span style="color:var(--green);font-weight:500">${p.fp_inbound}</span>`
