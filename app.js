@@ -31,8 +31,8 @@ const State = {
   expanded: { fp: false, us: false, ca: false, uk: false, eu: false },
   // pinned column ids
   pinnedCols: new Set(),
-  // hidden manufacturing items (by upc)
-  hiddenMfgItems: new Set(),
+  // hidden manufacturing items (by upc) - persisted to localStorage
+  hiddenMfgItems: new Set(JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]')),
   // purchase orders from packiyo, keyed by sku
   packiyoPOs: {},
   // manual column widths: { colId: px }
@@ -748,11 +748,12 @@ function renderManufacturing() {
       <td>${urgPill}</td>
       <td><button class="btn-ghost" style="font-size:11px;color:var(--text-dim)" onclick="hideMfgItem('${p.upc}')">Hide</button></td>
     </tr>`;
-  }).join('') + (hiddenCount > 0 ? `<tr><td colspan="14" style="text-align:center;padding:10px;color:var(--text-muted);font-size:11px;background:var(--surface2)">${hiddenCount} item${hiddenCount>1?'s':''} hidden. <a href="#" onclick="event.preventDefault();State.hiddenMfgItems.clear();renderManufacturing()" style="color:var(--accent)">Show all</a></td></tr>` : '');
+  }).join('') + (hiddenCount > 0 ? `<tr><td colspan="14" style="text-align:center;padding:10px;color:var(--text-muted);font-size:11px;background:var(--surface2)">${hiddenCount} item${hiddenCount>1?'s':''} hidden. <a href="#" onclick="event.preventDefault();State.hiddenMfgItems.clear();localStorage.removeItem('fp_hidden_mfg');renderManufacturing()" style="color:var(--accent)">Show all</a></td></tr>` : '');
 }
 
 window.hideMfgItem = function(upc) {
   State.hiddenMfgItems.add(upc);
+  localStorage.setItem('fp_hidden_mfg', JSON.stringify([...State.hiddenMfgItems]));
   renderManufacturing();
   toast('Item hidden. Use "Show all" to restore.', '');
 };
