@@ -149,9 +149,10 @@ function bootApp() {
 
 // ── PACKIYO API ───────────────────────────────────────────────
 async function packiyoFetch(endpoint, params = {}) {
-  const url = new URL(CONFIG.PACKIYO_BASE + endpoint);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), {
+  // Build query string manually to preserve bracket notation for JSON:API
+  const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  const url = CONFIG.PACKIYO_BASE + endpoint + (qs ? '?' + qs : '');
+  const res = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`,
       'Accept': '*/*',
