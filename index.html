@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fat Possum — Global Inventory</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="login-screen hidden">
+  <div class="login-box">
+    <div class="login-logo">
+      <span class="fp-mark">FP</span>
+      <h1>Fat Possum Records</h1>
+      <p>Global Inventory System</p>
+    </div>
+    <div id="g_id_onload"
+      data-client_id="955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com"
+      data-callback="handleGoogleLogin"
+      data-auto_prompt="false">
+    </div>
+    <div class="g_id_signin"
+      data-type="standard"
+      data-size="large"
+      data-theme="outline"
+      data-text="sign_in_with"
+      data-shape="pill"
+      data-logo_alignment="left">
+    </div>
+    <p id="login-error" class="login-error hidden">Access denied. Only authorized Fat Possum accounts may log in.</p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="hidden">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <span class="fp-mark-sm">FP</span>
+      <span class="sidebar-title">Inventory</span>
+    </div>
+    <nav>
+      <a href="#" class="nav-item active" data-view="inventory">
+        <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg>
+        Inventory
+      </a>
+      <a href="#" class="nav-item" data-view="movements">
+        <svg viewBox="0 0 24 24"><path d="M8 5l-1.5 1.5L10 11H3v2h7l-3.5 4.5L8 19l5-7-5-7zm8 2h-3v2h3v9h-3v2h3a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
+        Stock Movements
+      </a>
+      <a href="#" class="nav-item" data-view="manufacturing">
+        <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+        Manufacturing
+      </a>
+      <a href="#" class="nav-item" data-view="alerts">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        Alerts
+        <span id="alert-badge" class="badge hidden">0</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="data-status">
+        <div class="status-row">
+          <span class="status-dot" id="packiyo-dot"></span>
+          <span>Packiyo</span>
+          <span id="packiyo-status-text" class="status-label">—</span>
+        </div>
+        <div class="status-row">
+          <span class="status-dot" id="orchard-dot"></span>
+          <span>Orchard CSV</span>
+          <span id="orchard-status-text" class="status-label">—</span>
+        </div>
+      </div>
+      <button id="upload-csv-btn" class="btn-secondary btn-sm">Upload Orchard CSV</button>
+      <input type="file" id="csv-file-input" accept=".csv" class="hidden" />
+      <button id="refresh-packiyo-btn" class="btn-secondary btn-sm">Refresh Packiyo</button>
+      <div class="user-row" id="user-row"></div>
+      <button id="logout-btn" class="btn-ghost btn-sm">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content">
+
+    <!-- INVENTORY VIEW -->
+    <div id="view-inventory" class="view active">
+      <div class="view-header">
+        <div>
+          <h2>Global Inventory</h2>
+          <p class="view-sub" id="inventory-count">Loading…</p>
+        </div>
+        <div class="view-actions">
+          <input type="text" id="search-input" placeholder="Search artist, title, UPC, catalog…" class="search-input" />
+          <select id="filter-config" class="select-sm">
+            <option value="">All formats</option>
+            <option value="LP">LP / Vinyl</option>
+            <option value="CD">CD</option>
+          </select>
+          <select id="filter-warehouse" class="select-sm">
+            <option value="">All warehouses</option>
+            <option value="fp">Fat Possum WH</option>
+            <option value="us">Orchard US</option>
+            <option value="ca">Orchard Canada</option>
+            <option value="uk">Orchard UK</option>
+            <option value="eu">Orchard EU</option>
+          </select>
+          <button id="export-inventory-btn" class="btn-secondary btn-sm">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="inventory-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-col="artist">Artist</th>
+              <th class="sortable" data-col="title">Title</th>
+              <th class="sortable" data-col="catalog">Catalog #</th>
+              <th>UPC</th>
+              <th>Format</th>
+              <th class="num sortable" data-col="fp_avail">FP WH</th>
+              <th class="num sortable" data-col="us_avail">US Avail</th>
+              <th class="num">US MTD</th>
+              <th class="num">US 3MS</th>
+              <th class="num">US 12MS</th>
+              <th class="num sortable" data-col="ca_avail">CA Avail</th>
+              <th class="num">CA MTD</th>
+              <th class="num">CA 3MS</th>
+              <th class="num">CA 12MS</th>
+              <th class="num sortable" data-col="uk_avail">UK Avail</th>
+              <th class="num">UK Open Ord</th>
+              <th class="num">UK Last Mo</th>
+              <th class="num">UK This Yr</th>
+              <th class="num">UK Last Yr</th>
+              <th class="num sortable" data-col="eu_avail">EU Avail</th>
+              <th class="num">EU MTD</th>
+              <th class="num">EU Last Mo</th>
+              <th class="num">EU This Yr</th>
+              <th class="num sortable" data-col="total">Total Stock</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="inventory-tbody">
+            <tr><td colspan="25" class="loading-cell">Loading data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MOVEMENTS VIEW -->
+    <div id="view-movements" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h2>Stock Movements</h2>
+          <p class="view-sub">Plan transfers between warehouses</p>
+        </div>
+        <div class="view-actions">
+          <button id="export-movements-btn" class="btn-primary btn-sm">Export Movement Request</button>
+          <button id="clear-movements-btn" class="btn-secondary btn-sm">Clear All</button>
+        </div>
+      </div>
+
+      <div class="movement-builder">
+        <div class="movement-form card">
+          <h3>Add Movement</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>From Warehouse</label>
+              <select id="mov-from">
+                <option value="fp">Fat Possum Warehouse</option>
+                <option value="us">Orchard US</option>
+                <option value="uk">Orchard UK</option>
+              </select>
+            </div>
+            <div class="arrow-sep">→</div>
+            <div class="form-group">
+              <label>To Warehouse</label>
+              <select id="mov-to">
+                <option value="us">Orchard US</option>
+                <option value="ca">Orchard Canada</option>
+                <option value="uk">Orchard UK</option>
+                <option value="eu">Orchard EU</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label>Product (search by artist, title, UPC, or catalog #)</label>
+              <input type="text" id="mov-product-search" placeholder="Search products…" autocomplete="off" />
+              <div id="mov-product-dropdown" class="product-dropdown hidden"></div>
+              <input type="hidden" id="mov-product-upc" />
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="mov-qty" min="1" value="1" />
+            </div>
+          </div>
+          <div id="mov-selected-product" class="selected-product hidden"></div>
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label>Notes</label>
+              <input type="text" id="mov-notes" placeholder="Optional notes…" />
+            </div>
+            <button id="add-movement-btn" class="btn-primary">Add to Queue</button>
+          </div>
+          <p id="mov-route-warning" class="route-warning hidden"></p>
+        </div>
+
+        <div class="card">
+          <h3>Movement Queue <span id="mov-queue-count" class="badge-inline">0 items</span></h3>
+          <div class="table-wrap">
+            <table id="movements-table">
+              <thead>
+                <tr>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Artist</th>
+                  <th>Title</th>
+                  <th>Catalog #</th>
+                  <th>UPC</th>
+                  <th>Format</th>
+                  <th class="num">Qty</th>
+                  <th>Notes</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="movements-tbody">
+                <tr><td colspan="10" class="empty-cell">No movements queued yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MANUFACTURING VIEW -->
+    <div id="view-manufacturing" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h2>Manufacturing Predictions</h2>
+          <p class="view-sub">Items flagged need a PO within the lead time window to avoid stockout</p>
+        </div>
+        <div class="view-actions">
+          <select id="mfg-filter" class="select-sm">
+            <option value="all">All flagged items</option>
+            <option value="urgent">Urgent (&lt; 1 month)</option>
+            <option value="lp">LP / Vinyl only</option>
+            <option value="cd">CD only</option>
+          </select>
+          <button id="export-mfg-btn" class="btn-secondary btn-sm">Export CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="mfg-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-col="artist">Artist</th>
+              <th class="sortable" data-col="title">Title</th>
+              <th>Catalog #</th>
+              <th>UPC</th>
+              <th>Format</th>
+              <th class="num">Total Stock</th>
+              <th class="num">Global Velocity/mo</th>
+              <th class="num sortable" data-col="months_left">Months Left</th>
+              <th class="num">PO Deadline</th>
+              <th>Urgency</th>
+              <th>Ship To</th>
+            </tr>
+          </thead>
+          <tbody id="mfg-tbody">
+            <tr><td colspan="11" class="loading-cell">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ALERTS VIEW -->
+    <div id="view-alerts" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h2>Reorder Alerts</h2>
+          <p class="view-sub">Warehouses below 8 weeks of stock based on 12-month velocity</p>
+        </div>
+        <div class="view-actions">
+          <button id="export-alerts-btn" class="btn-secondary btn-sm">Export CSV</button>
+        </div>
+      </div>
+      <div id="alerts-container">
+        <div class="loading-cell">Loading alerts…</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
