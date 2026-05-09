@@ -272,6 +272,15 @@
           <p class="view-sub">Warehouses below 8 weeks of stock based on 12-month velocity</p>
         </div>
         <div class="view-actions">
+          <select id="alert-jump-wh" class="select-sm" onchange="jumpToAlertWarehouse(this.value)">
+            <option value="">Jump to warehouse…</option>
+            <option value="us">Orchard US</option>
+            <option value="ca">Orchard Canada</option>
+            <option value="uk">Orchard UK</option>
+            <option value="eu">Orchard EU</option>
+          </select>
+          <input type="text" id="alert-filter-label" placeholder="Filter by label…" class="select-sm" style="width:150px" oninput="renderAlerts()" />
+          <button id="apply-alert-selections-btn" class="btn-primary btn-sm" onclick="applyAlertSelections()">Apply Selected → Movements</button>
           <button id="export-alerts-btn" class="btn-secondary btn-sm">Export CSV</button>
         </div>
       </div>
