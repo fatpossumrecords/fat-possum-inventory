@@ -660,14 +660,18 @@ function renderManufacturing() {
       : null;
     const daysToDeadline = poDeadlineDate ? Math.round((poDeadlineDate - today) / (24 * 3600 * 1000)) : Infinity;
 
-    let urgency = hasPO && !isFinite(monthsLeft) ? 'plan' : 'plan';
+    let urgency = 'plan';
     if (isFinite(daysToDeadline)) {
       if (daysToDeadline < 0) urgency = 'overdue';
       else if (daysToDeadline < 30) urgency = 'urgent';
       else if (daysToDeadline < 90) urgency = 'soon';
     }
 
-    return { ...p, totalStock, poQty, totalWithInbound, monthly, need12mo, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem, hasPO };
+    // Shortfall = 12mo global need minus total stock (including inbound/PO)
+    // This is the manufacturing gap — how many units are needed beyond what exists or is coming
+    const globalShortfall = Math.max(0, need12mo - totalWithInbound);
+
+    return { ...p, totalStock, poQty, totalWithInbound, monthly, need12mo, globalShortfall, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem, hasPO };
   }).filter(Boolean);
 
   // Urgency filter
@@ -732,6 +736,9 @@ function renderManufacturing() {
     const rowStyle = p.hasPO ? 'background:#fffbe6;' : '';
     const rowHoverClass = p.hasPO ? 'class="row-has-po"' : '';
 
+    const shortfallCell = p.globalShortfall > 0
+      ? `<span style="color:var(--red);font-weight:700">${p.globalShortfall.toLocaleString()}</span>`
+      : `<span style="color:var(--green);font-size:11px">✓ covered</span>`;
     return `<tr style="${rowStyle}" ${rowHoverClass}>
       <td>${esc(p.artist)}</td>
       <td>${esc(p.title)}</td>
@@ -743,7 +750,8 @@ function renderManufacturing() {
       <td class="num" style="font-style:italic;color:var(--text-muted)">${numCell(p.totalWithInbound)}</td>
       <td class="num">${p.monthly.toFixed(1)}</td>
       <td class="num" style="font-weight:600;color:var(--accent)">${p.need12mo}</td>
-      <td class="num" style="font-weight:600">${p.monthsLeft.toFixed(1)}</td>
+      <td class="num">${shortfallCell}</td>
+      <td class="num" style="font-weight:600">${isFinite(p.monthsLeft) ? p.monthsLeft.toFixed(1) : '∞'}</td>
       <td>${dl}</td>
       <td>${urgPill}</td>
       <td><button class="btn-ghost" style="font-size:11px;color:var(--text-dim)" onclick="hideMfgItem('${p.upc}')">Hide</button></td>
@@ -781,7 +789,15 @@ function renderAlerts() {
       const weeksLeft = (avail / monthly) * 4.33;
       if (weeksLeft >= CONFIG.REORDER_WEEKS) return null;
       const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
-      return { ...p, avail, monthly, weeksLeft, suggestQty };
+      // Cap transfer at what the source warehouse actually has available
+      const sourceAvail = wh.key === 'us' ? (p.fp_available||0)
+                        : wh.key === 'ca' ? (p.us_avail||0)
+                        : wh.key === 'uk' ? (p.us_avail||0)
+                        : wh.key === 'eu' ? (p.uk_avail||0) + (p.us_avail||0)
+                        : suggestQty;
+      const transferQty = Math.min(suggestQty, sourceAvail);
+      const shortfall   = Math.max(0, suggestQty - sourceAvail); // units needed from manufacturing
+      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail };
     }).filter(Boolean);
 
     // Apply label filter
@@ -832,7 +848,8 @@ function renderAlerts() {
           ${sortTh('monthly','Mo. Velocity',true)}
           ${sortTh('weeksLeft','Weeks Left',true)}
           <th>Status</th>
-          ${sortTh('suggestQty','Suggested Transfer',true)}
+          ${sortTh('transferQty','Can Transfer',true)}
+          ${sortTh('shortfall','Mfg Shortfall',true)}
           <th>Replenish From</th>
         </tr></thead>
         <tbody>
@@ -841,7 +858,7 @@ function renderAlerts() {
             const cls = p.weeksLeft < 2 ? 'pill-critical' : p.weeksLeft < 4 ? 'pill-urgent' : 'pill-low';
             const rowKey = `${wh.key}|${p.upc}`;
             return `<tr>
-              <td style="text-align:center"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.suggestQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
+              <td style="text-align:center"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.transferQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
               <td>${esc(p.artist)}</td>
               <td>${esc(p.title)}</td>
               <td><code>${esc(p.catalog)}</code></td>
@@ -851,7 +868,8 @@ function renderAlerts() {
               <td class="num">${p.monthly.toFixed(1)}</td>
               <td class="num" style="font-weight:600">${weeks}</td>
               <td><span class="pill ${cls}">${weeks} wks</span></td>
-              <td class="num suggest-qty">${p.suggestQty > 0 ? p.suggestQty : '—'}</td>
+              <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}</td>
+              <td class="num">${p.shortfall > 0 ? `<span style="color:var(--red);font-weight:600">${p.shortfall}</span>` : '<span style="color:var(--green);font-size:11px">✓ covered</span>'}</td>
               <td style="color:var(--text-muted);font-size:11px">${repLabel}</td>
             </tr>`;
           }).join('')}
@@ -1054,8 +1072,8 @@ function exportManufacturing() {
     return { ...p, totalStock, totalWithInbound, monthly, monthsLeft, poDeadlineDate };
   }).filter(Boolean);
   downloadCSV('fp_manufacturing_'+dateStr()+'.csv',
-    ['Artist','Title','Catalog #','Format','Total Stock','FP Inbound','Total w/ Inbound','Mo. Velocity','Months Left','PO Deadline'],
-    items.map(p => [p.artist,p.title,p.catalog,p.format,p.totalStock,p.fp_inbound,p.totalWithInbound,p.monthly.toFixed(1),p.monthsLeft.toFixed(1),formatDate(p.poDeadlineDate)])
+    ['Artist','Title','Catalog #','Format','Total Stock','FP Inbound','Open PO Qty','Total w/ All Inbound','Mo. Velocity','12mo Need','Mfg Shortfall','Months Left','PO Deadline'],
+    items.map(p => [p.artist,p.title,p.catalog,p.format,p.totalStock,p.fp_inbound,p.poQty,p.totalWithInbound,p.monthly.toFixed(1),p.need12mo,p.globalShortfall,isFinite(p.monthsLeft)?p.monthsLeft.toFixed(1):'∞',p.poDeadlineDate?formatDate(p.poDeadlineDate):'—'])
   );
   toast('Manufacturing report exported.', 'success');
 }
@@ -1069,12 +1087,15 @@ function exportAlerts() {
       const weeksLeft = (avail / monthly) * 4.33;
       if (weeksLeft < CONFIG.REORDER_WEEKS) {
         const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
-        rows.push([wh.label,p.artist,p.title,p.label,p.catalog,p.upc,p.format,avail,monthly.toFixed(1),weeksLeft.toFixed(1),suggestQty]);
+        const sourceAvail2 = wh.key==='us' ? (p.fp_available||0) : wh.key==='ca' ? (p.us_avail||0) : wh.key==='uk' ? (p.us_avail||0) : (p.uk_avail||0)+(p.us_avail||0);
+        const transferQty2 = Math.min(suggestQty, sourceAvail2);
+        const shortfall2   = Math.max(0, suggestQty - sourceAvail2);
+        rows.push([wh.label,p.artist,p.title,p.label,p.catalog,p.upc,p.format,avail,monthly.toFixed(1),weeksLeft.toFixed(1),suggestQty,transferQty2,shortfall2]);
       }
     }
   }
   downloadCSV('fp_reorder_alerts_'+dateStr()+'.csv',
-    ['Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Available','Mo. Velocity','Weeks Left','Suggested Transfer'],
+    ['Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Available','Mo. Velocity','Weeks Left','12mo Need','Can Transfer','Mfg Shortfall'],
     rows
   );
   toast('Alerts exported.', 'success');
