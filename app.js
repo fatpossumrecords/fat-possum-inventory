@@ -70,6 +70,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('mfg-filter').addEventListener('change', renderManufacturing);
   document.getElementById('export-mfg-btn').addEventListener('click', exportManufacturing);
   document.getElementById('export-alerts-btn').addEventListener('click', exportAlerts);
+  document.getElementById('alert-filter-label').addEventListener('change', renderAlerts);
 });
 
 // ── GOOGLE AUTH ───────────────────────────────────────────────
@@ -354,9 +355,19 @@ function mergeData() {
   }
 
   State.merged = Array.from(products.values()).filter(p => p.title || p.catalog);
+  populateLabelDropdown();
   renderInventory();
   renderManufacturing();
   renderAlerts();
+}
+
+function populateLabelDropdown() {
+  const sel = document.getElementById('alert-filter-label');
+  if (!sel) return;
+  const labels = [...new Set(State.merged.map(p => p.label).filter(Boolean))].sort();
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All labels</option>' +
+    labels.map(l => `<option value="${esc(l)}"${l === current ? ' selected' : ''}>${esc(l)}</option>`).join('');
 }
 
 // ── INVENTORY VIEW ────────────────────────────────────────────
