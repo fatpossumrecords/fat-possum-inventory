@@ -344,6 +344,8 @@ function mergeData() {
       Object.assign(p, o);
       if (!p.catalog) p.catalog = o.orchard_catalog;
       if (!p.title)   p.title   = o.orchard_title;
+      // Always keep orchard catalog # separate for Orchard-bound exports
+      p.orchard_catalog = o.orchard_catalog || p.catalog;
     } else {
       products.set(upc, {
         upc, catalog: o.orchard_catalog, title: o.orchard_title,
@@ -945,7 +947,7 @@ window.applyAlertSelections = function() {
       from, to,
       artist:  prod.artist,
       title:   prod.title,
-      catalog: prod.catalog,
+      catalog: prod.orchard_catalog || prod.catalog,
       upc:     prod.upc,
       format:  prod.format,
       label:   prod.label,
@@ -1023,7 +1025,7 @@ function addMovement() {
   if (from === to) { toast('Origin and destination cannot be the same.', 'error'); return; }
   const prod = State.merged.find(p => p.upc === upc);
   if (!prod) { toast('Product not found.', 'error'); return; }
-  State.movements.push({ from, to, artist:prod.artist, title:prod.title, catalog:prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, timestamp: new Date().toISOString() });
+  State.movements.push({ from, to, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, timestamp: new Date().toISOString() });
   document.getElementById('mov-product-search').value = '';
   document.getElementById('mov-product-upc').value = '';
   document.getElementById('mov-selected-product').classList.add('hidden');
