@@ -178,10 +178,12 @@ async function loadPackiyoPOs() {
       if (inc.type === 'products') productById[inc.id] = inc.attributes || {};
     }
 
-    // Build sku -> PO map — use quantity_pending > 0 as the only gate (don't rely on closed_at)
+    // Build sku -> PO map — skip closed POs, use quantity_pending > 0
     const poMap = {};
     for (const po of allPOs) {
       const attrs = po.attributes || {};
+      // Skip closed or fully received POs
+      if (attrs.closed_at) continue;
       const poNumber = attrs.number || po.id;
       const itemRefs = po.relationships?.purchase_order_items?.data || [];
       for (const ref of itemRefs) {
