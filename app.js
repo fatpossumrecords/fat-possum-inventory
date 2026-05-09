@@ -3,111 +3,69 @@
    app.js — Main application logic
    ============================================================ */
 
-// ── CONFIG ──────────────────────────────────────────────────
 const CONFIG = {
   GOOGLE_CLIENT_ID: '955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com',
-  ALLOWED_DOMAIN:   'fatpossum.com', // set to null to allow any Google account
+  ALLOWED_DOMAIN:   'fatpossum.com',
   PACKIYO_BASE:     'https://fatpossum.app.packiyo.com/api/v1',
   PACKIYO_TOKEN:    '314|AJSEnucp8nigZM7YEkgEvWfNgH4JdTuraKYBkLp2',
   REORDER_WEEKS:    8,
   MFG_TRIGGER_MONTHS: 5,
-  // LP lead time = 4 months, CD = 1.5 months (midpoint)
   LEAD_TIME: { lp: 4, cd: 1.5 },
 };
 
-// ── STATE ────────────────────────────────────────────────────
 const State = {
   user: null,
-  packiyoProducts: [],   // raw from Packiyo
-  orchardData: [],        // parsed from CSV, deduplicated
-  merged: [],             // final merged product list
-  movements: [],          // movement queue
+  packiyoProducts: [],
+  orchardData: [],
+  merged: [],
+  movements: [],
   packiyoLoaded: false,
   orchardLoaded: false,
-  sortCol: 'artist',
-  sortDir: 'asc',
-  mfgSortCol: 'months_left',
-  mfgSortDir: 'asc',
+  // inventory sort
+  sortCol: 'artist', sortDir: 'asc',
+  // mfg sort
+  mfgSortCol: 'months_left', mfgSortDir: 'asc',
+  // alerts sort per warehouse
+  alertSort: { us: { col: 'weeksLeft', dir: 'asc' }, ca: { col: 'weeksLeft', dir: 'asc' }, uk: { col: 'weeksLeft', dir: 'asc' }, eu: { col: 'weeksLeft', dir: 'asc' } },
+  // which warehouse sales panels are expanded
+  expanded: { fp: false, us: false, ca: false, uk: false, eu: false },
 };
 
-// ── BOOT ─────────────────────────────────────────────────────
+// ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // Show login screen
   document.getElementById('login-screen').classList.remove('hidden');
-
-  // Restore session
   const saved = sessionStorage.getItem('fp_user');
-  if (saved) {
-    State.user = JSON.parse(saved);
-    bootApp();
-  }
+  if (saved) { State.user = JSON.parse(saved); bootApp(); }
 
-  // CSV upload
-  document.getElementById('upload-csv-btn').addEventListener('click', () => {
-    document.getElementById('csv-file-input').click();
-  });
-  document.getElementById('csv-file-input').addEventListener('change', (e) => {
-    if (e.target.files[0]) loadOrchardCSV(e.target.files[0]);
-  });
-
+  document.getElementById('upload-csv-btn').addEventListener('click', () => document.getElementById('csv-file-input').click());
+  document.getElementById('csv-file-input').addEventListener('change', e => { if (e.target.files[0]) loadOrchardCSV(e.target.files[0]); });
   document.getElementById('refresh-packiyo-btn').addEventListener('click', loadPackiyo);
   document.getElementById('logout-btn').addEventListener('click', logout);
 
-  // Navigation
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      e.preventDefault();
-      switchView(item.dataset.view);
-    });
+    item.addEventListener('click', e => { e.preventDefault(); switchView(item.dataset.view); });
   });
 
-  // Inventory controls
   document.getElementById('search-input').addEventListener('input', renderInventory);
   document.getElementById('filter-config').addEventListener('change', renderInventory);
   document.getElementById('filter-warehouse').addEventListener('change', renderInventory);
   document.getElementById('export-inventory-btn').addEventListener('click', exportInventory);
 
-  // Table sorting
-  document.querySelectorAll('th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = th.dataset.col;
-      const table = th.closest('table').id;
-      if (table === 'inventory-table') {
-        if (State.sortCol === col) State.sortDir = State.sortDir === 'asc' ? 'desc' : 'asc';
-        else { State.sortCol = col; State.sortDir = 'asc'; }
-        updateSortHeaders('inventory-table', State.sortCol, State.sortDir);
-        renderInventory();
-      } else if (table === 'mfg-table') {
-        if (State.mfgSortCol === col) State.mfgSortDir = State.mfgSortDir === 'asc' ? 'desc' : 'asc';
-        else { State.mfgSortCol = col; State.mfgSortDir = 'asc'; }
-        updateSortHeaders('mfg-table', State.mfgSortCol, State.mfgSortDir);
-        renderManufacturing();
-      }
-    });
-  });
-
-  // Movements
   document.getElementById('add-movement-btn').addEventListener('click', addMovement);
   document.getElementById('export-movements-btn').addEventListener('click', exportMovements);
-  document.getElementById('clear-movements-btn').addEventListener('click', () => {
-    State.movements = [];
-    renderMovementsTable();
-    toast('Movement queue cleared.');
-  });
+  document.getElementById('clear-movements-btn').addEventListener('click', () => { State.movements = []; renderMovementsTable(); toast('Movement queue cleared.'); });
   document.getElementById('mov-product-search').addEventListener('input', debounce(updateMovementDropdown, 200));
   document.getElementById('mov-from').addEventListener('change', validateRoute);
   document.getElementById('mov-to').addEventListener('change', validateRoute);
 
-  // Manufacturing filter
   document.getElementById('mfg-filter').addEventListener('change', renderManufacturing);
   document.getElementById('export-mfg-btn').addEventListener('click', exportManufacturing);
   document.getElementById('export-alerts-btn').addEventListener('click', exportAlerts);
 });
 
-// ── GOOGLE AUTH ──────────────────────────────────────────────
+// ── GOOGLE AUTH ───────────────────────────────────────────────
 window.handleGoogleLogin = function(response) {
   const payload = parseJwt(response.credential);
-  // allow any google account (adjust ALLOWED_DOMAIN to restrict)
   if (CONFIG.ALLOWED_DOMAIN && !payload.email.endsWith('@' + CONFIG.ALLOWED_DOMAIN)) {
     document.getElementById('login-error').classList.remove('hidden');
     return;
@@ -116,26 +74,21 @@ window.handleGoogleLogin = function(response) {
   sessionStorage.setItem('fp_user', JSON.stringify(State.user));
   bootApp();
 };
-
 function parseJwt(token) {
-  const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(atob(base64));
+  return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
 }
-
 function logout() {
   sessionStorage.removeItem('fp_user');
   State.user = null;
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
 }
-
 function bootApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadPackiyo();
-  // Try to restore orchard data from sessionStorage
   const saved = sessionStorage.getItem('fp_orchard');
   if (saved) {
     try {
@@ -143,20 +96,16 @@ function bootApp() {
       State.orchardLoaded = true;
       setStatus('orchard', 'ok', `${State.orchardData.length} items`);
       mergeData();
-    } catch(e) { /* ignore */ }
+    } catch(e) {}
   }
 }
 
 // ── PACKIYO API ───────────────────────────────────────────────
 async function packiyoFetch(endpoint, params = {}) {
-  // Build query string manually to preserve bracket notation for JSON:API
   const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const url = CONFIG.PACKIYO_BASE + endpoint + (qs ? '?' + qs : '');
   const res = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`,
-      'Accept': '*/*',
-    }
+    headers: { 'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`, 'Accept': '*/*' }
   });
   if (!res.ok) throw new Error(`Packiyo ${res.status}: ${res.statusText}`);
   return res.json();
@@ -165,26 +114,25 @@ async function packiyoFetch(endpoint, params = {}) {
 async function loadPackiyo() {
   setStatus('packiyo', 'loading', 'Loading…');
   try {
-    // Load all products paginated
     let page = 1, allProducts = [];
     while (true) {
       const data = await packiyoFetch('/products', { 'page[number]': page, 'page[size]': 100 });
-      const items = data.data || data.products || [];
+      const items = data.data || [];
       if (!Array.isArray(items) || items.length === 0) break;
       allProducts = allProducts.concat(items);
-      const lastPage = data.meta?.page?.lastPage || 1; if (page >= lastPage) break;
+      const lastPage = data.meta?.page?.lastPage || 1;
+      if (page >= lastPage) break;
       page++;
     }
     // Flatten JSON:API attributes
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
-    setStatus('packiyo', 'ok', `${allProducts.length} items`);
+    setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
     mergeData();
   } catch (err) {
     setStatus('packiyo', 'error', 'Error');
     toast('Packiyo load failed: ' + err.message, 'error');
     console.error('Packiyo error:', err);
-    // Still try to render with whatever we have
     mergeData();
   }
 }
@@ -193,11 +141,9 @@ async function loadPackiyo() {
 function loadOrchardCSV(file) {
   setStatus('orchard', 'loading', 'Parsing…');
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = e => {
     try {
-      const text = e.target.result;
-      const parsed = parseCSV(text);
-      State.orchardData = deduplicateOrchard(parsed);
+      State.orchardData = deduplicateOrchard(parseCSV(e.target.result));
       State.orchardLoaded = true;
       sessionStorage.setItem('fp_orchard', JSON.stringify(State.orchardData));
       setStatus('orchard', 'ok', `${State.orchardData.length} items`);
@@ -214,19 +160,15 @@ function loadOrchardCSV(file) {
 function parseCSV(text) {
   const lines = text.split('\n');
   const headers = parseCSVLine(lines[0]);
-  return lines.slice(1)
-    .filter(l => l.trim())
-    .map(line => {
-      const vals = parseCSVLine(line);
-      const row = {};
-      headers.forEach((h, i) => { row[h.trim()] = (vals[i] || '').trim(); });
-      return row;
-    });
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const vals = parseCSVLine(line);
+    const row = {};
+    headers.forEach((h, i) => { row[h.trim()] = (vals[i] || '').trim(); });
+    return row;
+  });
 }
-
 function parseCSVLine(line) {
-  const result = [];
-  let cur = '', inQuote = false;
+  const result = []; let cur = '', inQuote = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') { inQuote = !inQuote; }
@@ -236,54 +178,45 @@ function parseCSVLine(line) {
   result.push(cur);
   return result;
 }
-
 function deduplicateOrchard(rows) {
-  // Group by Display UPC, merge non-empty cells preferring rows with data
   const byUPC = new Map();
   for (const row of rows) {
     const upc = normalizeUPC(row['Display UPC'] || '');
     if (!upc) continue;
-    if (!byUPC.has(upc)) {
-      byUPC.set(upc, { ...row });
-    } else {
-      // Merge: for each field, prefer non-empty/non-zero value
+    if (!byUPC.has(upc)) { byUPC.set(upc, { ...row }); }
+    else {
       const existing = byUPC.get(upc);
       for (const [k, v] of Object.entries(row)) {
         const cur = existing[k];
-        if ((!cur || cur === '0' || cur === '' || cur === '#N/A') && v && v !== '0' && v !== '#N/A') {
-          existing[k] = v;
-        }
+        if ((!cur || cur === '0' || cur === '' || cur === '#N/A') && v && v !== '0' && v !== '#N/A') existing[k] = v;
       }
     }
   }
   return Array.from(byUPC.values());
 }
-
 function normalizeUPC(upc) {
-  return String(upc).replace(/\D/g, '').replace(/^0+/, '') || '';
+  return String(upc).replace(/\D/g,'').replace(/^0+/,'') || '';
 }
 
 // ── MERGE DATA ────────────────────────────────────────────────
 function mergeData() {
-  const products = new Map(); // keyed by normalized UPC
+  const products = new Map();
 
-  // First: process Packiyo products
   for (const p of State.packiyoProducts) {
     const upc = normalizeUPC(p.barcode || '');
     if (!upc) continue;
-    const isLP = isVinyl(p.name || p.title || '');
     products.set(upc, {
       upc,
-      catalog:    p.sku || '',
-      title:      p.name || '',
-      artist:     '',       // filled from orchard
-      format:     p.name ? guessFormat(p.name) : '',
-      fromPackiyo: true,
-      fp_available: safeNum(p.quantity_available ?? 0),
-      fp_onhand:    safeNum(p.quantity_on_hand ?? 0),
-      fp_inbound:   safeNum(p.quantity_inbound ?? 0),
-      fp_allocated: safeNum(p.quantity_allocated ?? 0),
-      // Orchard fields filled below
+      catalog:      p.sku || '',
+      title:        p.name || '',
+      artist:       '',
+      label:        '',
+      format:       p.name ? guessFormat(p.name) : '',
+      fromPackiyo:  true,
+      fp_available: safeNum(p.quantity_available),
+      fp_onhand:    safeNum(p.quantity_on_hand),
+      fp_inbound:   safeNum(p.quantity_inbound),
+      fp_allocated: safeNum(p.quantity_allocated),
       us_avail: 0, us_mtd: 0, us_3ms: 0, us_12ms: 0,
       ca_avail: 0, ca_mtd: 0, ca_3ms: 0, ca_12ms: 0,
       uk_avail: 0, uk_open: 0, uk_last_mo: 0, uk_this_yr: 0, uk_last_yr: 0,
@@ -291,14 +224,14 @@ function mergeData() {
     });
   }
 
-  // Second: process Orchard rows
   for (const row of State.orchardData) {
     const upc = normalizeUPC(row['Display UPC'] || '');
     if (!upc) continue;
-    const orchardFields = {
+    const o = {
       orchard_catalog: row['Product Code'] || '',
       orchard_title:   row['Release Name'] || '',
       artist:          row['Artist Name'] || '',
+      label:           row['Label Name'] || '',
       format:          row['Configuration'] || '',
       us_avail:   safeNum(row['US Available']),
       us_mtd:     safeNum(row['US MTDS#']),
@@ -318,66 +251,147 @@ function mergeData() {
       eu_last_mo: safeNum(row['EU Last Month']),
       eu_this_yr: safeNum(row['EU This Year']),
     };
-
     if (products.has(upc)) {
-      // Merge orchard into packiyo entry
       const p = products.get(upc);
-      Object.assign(p, orchardFields);
-      // Use orchard catalog/title only if packiyo didn't provide them
-      if (!p.catalog) p.catalog = orchardFields.orchard_catalog;
-      if (!p.title)   p.title   = orchardFields.orchard_title;
+      Object.assign(p, o);
+      if (!p.catalog) p.catalog = o.orchard_catalog;
+      if (!p.title)   p.title   = o.orchard_title;
     } else {
-      // Orchard-only product
       products.set(upc, {
-        upc,
-        catalog:     orchardFields.orchard_catalog,
-        title:       orchardFields.orchard_title,
-        artist:      orchardFields.artist,
-        format:      orchardFields.format,
-        fromPackiyo: false,
-        fp_available: 0, fp_onhand: 0,
-        ...orchardFields,
+        upc, catalog: o.orchard_catalog, title: o.orchard_title,
+        artist: o.artist, label: o.label, format: o.format,
+        fromPackiyo: false, fp_available: 0, fp_onhand: 0, fp_inbound: 0, fp_allocated: 0,
+        ...o,
       });
     }
   }
 
   State.merged = Array.from(products.values()).filter(p => p.title || p.catalog);
-
   renderInventory();
   renderManufacturing();
   renderAlerts();
-  updateAlertBadge();
 }
 
-// ── INVENTORY VIEW ─────────────────────────────────────────────
+// ── INVENTORY VIEW ────────────────────────────────────────────
+// Column definitions: id, label, numeric, group (fp/us/ca/uk/eu/meta), always-visible
+const INV_COLS = [
+  { id:'artist',     label:'Artist',      num:false, group:'meta',  always:true  },
+  { id:'title',      label:'Title',       num:false, group:'meta',  always:true  },
+  { id:'label',      label:'Label',       num:false, group:'meta',  always:true  },
+  { id:'catalog',    label:'Catalog #',   num:false, group:'meta',  always:true  },
+  { id:'upc',        label:'UPC',         num:false, group:'meta',  always:true  },
+  { id:'format',     label:'Format',      num:false, group:'meta',  always:true  },
+  { id:'total',      label:'Total Stock', num:true,  group:'meta',  always:true  },
+  { id:'status',     label:'Status',      num:false, group:'meta',  always:true  },
+  // FP WH
+  { id:'fp_available', label:'FP Avail',  num:true,  group:'fp',    always:true  },
+  { id:'fp_inbound',   label:'FP Inbound',num:true,  group:'fp',    always:false },
+  // Orchard US
+  { id:'us_avail',   label:'US Avail',    num:true,  group:'us',    always:true  },
+  { id:'us_mtd',     label:'US MTD',      num:true,  group:'us',    always:false },
+  { id:'us_3ms',     label:'US 3MS',      num:true,  group:'us',    always:false },
+  { id:'us_12ms',    label:'US 12MS',     num:true,  group:'us',    always:false },
+  // Orchard Canada
+  { id:'ca_avail',   label:'CA Avail',    num:true,  group:'ca',    always:true  },
+  { id:'ca_mtd',     label:'CA MTD',      num:true,  group:'ca',    always:false },
+  { id:'ca_3ms',     label:'CA 3MS',      num:true,  group:'ca',    always:false },
+  { id:'ca_12ms',    label:'CA 12MS',     num:true,  group:'ca',    always:false },
+  // Orchard UK
+  { id:'uk_avail',   label:'UK Avail',    num:true,  group:'uk',    always:true  },
+  { id:'uk_open',    label:'UK Open Ord', num:true,  group:'uk',    always:false },
+  { id:'uk_last_mo', label:'UK Last Mo',  num:true,  group:'uk',    always:false },
+  { id:'uk_this_yr', label:'UK This Yr',  num:true,  group:'uk',    always:false },
+  { id:'uk_last_yr', label:'UK Last Yr',  num:true,  group:'uk',    always:false },
+  // Orchard EU
+  { id:'eu_avail',   label:'EU Avail',    num:true,  group:'eu',    always:true  },
+  { id:'eu_mtd',     label:'EU MTD',      num:true,  group:'eu',    always:false },
+  { id:'eu_last_mo', label:'EU Last Mo',  num:true,  group:'eu',    always:false },
+  { id:'eu_this_yr', label:'EU This Yr',  num:true,  group:'eu',    always:false },
+];
+
+const GROUP_LABELS = { fp:'Fat Possum WH', us:'Orchard US', ca:'Orchard Canada', uk:'Orchard UK', eu:'Orchard EU', meta:'' };
+
+function visibleCols() {
+  return INV_COLS.filter(c => c.always || State.expanded[c.group]);
+}
+
+function buildInventoryHeader() {
+  const thead = document.querySelector('#inventory-table thead');
+
+  // Row 1: group headers
+  const groups = ['meta','fp','us','ca','uk','eu'];
+  let row1 = '<tr>';
+  for (const g of groups) {
+    const cols = INV_COLS.filter(c => c.group === g);
+    const visCols = cols.filter(c => c.always || State.expanded[g]);
+    if (visCols.length === 0) continue;
+    if (g === 'meta') {
+      row1 += `<th colspan="${visCols.length}" style="background:transparent;border-right:2px solid var(--border2);"></th>`;
+    } else {
+      const hasSales = cols.some(c => !c.always);
+      const expandBtn = hasSales
+        ? `<span onclick="toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:11px;opacity:0.6;" title="${State.expanded[g]?'Collapse sales':'Expand sales'}">${State.expanded[g]?'▾':'▸'}</span>`
+        : '';
+      row1 += `<th colspan="${visCols.length}" class="group-header" style="text-align:center;border-right:2px solid var(--border2);">${GROUP_LABELS[g]}${expandBtn}</th>`;
+    }
+  }
+  row1 += '</tr>';
+
+  // Row 2: column headers
+  let row2 = '<tr>';
+  for (const col of visibleCols()) {
+    const isLast = col === visibleCols()[visibleCols().length - 1] || visibleCols()[visibleCols().indexOf(col)+1]?.group !== col.group;
+    const borderStyle = isLast ? 'border-right:2px solid var(--border2);' : '';
+    const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
+    const sortCls = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
+    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}" data-col="${col.id}" style="${borderStyle}" onclick="handleInvSort('${col.id}')">${col.label}</th>`;
+  }
+  row2 += '</tr>';
+
+  thead.innerHTML = row1 + row2;
+}
+
+window.toggleExpand = function(group) {
+  State.expanded[group] = !State.expanded[group];
+  renderInventory();
+};
+
+window.handleInvSort = function(col) {
+  if (!col || col === 'status' || col === 'upc') return;
+  if (State.sortCol === col) State.sortDir = State.sortDir === 'asc' ? 'desc' : 'asc';
+  else { State.sortCol = col; State.sortDir = 'asc'; }
+  renderInventory();
+};
+
+function getVal(p, colId) {
+  if (colId === 'total') return (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
+  if (colId === 'status') return stockStatus(p);
+  return p[colId] ?? '';
+}
+
 function renderInventory() {
-  const search  = (document.getElementById('search-input').value || '').toLowerCase();
+  const search    = (document.getElementById('search-input').value || '').toLowerCase();
   const cfgFilter = document.getElementById('filter-config').value.toLowerCase();
   const whFilter  = document.getElementById('filter-warehouse').value;
 
   let rows = State.merged.filter(p => {
     if (search) {
-      const hay = `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase();
-      if (!hay.includes(search)) return false;
+      if (!`${p.artist} ${p.title} ${p.catalog} ${p.upc} ${p.label}`.toLowerCase().includes(search)) return false;
     }
     if (cfgFilter) {
-      const fmt = (p.format || '').toLowerCase();
+      const fmt = (p.format||'').toLowerCase();
       if (cfgFilter === 'lp' && !fmt.includes('vinyl') && !fmt.includes('lp') && !fmt.includes('12"')) return false;
-      if (cfgFilter === 'cd' && !fmt.toLowerCase().includes('cd')) return false;
+      if (cfgFilter === 'cd' && !fmt.includes('cd')) return false;
     }
     if (whFilter) {
-      const avail = {
-        fp: p.fp_available, us: p.us_avail, ca: p.ca_avail,
-        uk: p.uk_avail,     eu: p.eu_avail,
-      };
-      if ((avail[whFilter] ?? 0) <= 0) return false;
+      const avail = { fp:p.fp_available, us:p.us_avail, ca:p.ca_avail, uk:p.uk_avail, eu:p.eu_avail };
+      if ((avail[whFilter]||0) <= 0) return false;
     }
     return true;
   });
 
-  // Sort
   rows.sort((a, b) => {
-    let av = a[State.sortCol] ?? '', bv = b[State.sortCol] ?? '';
+    let av = getVal(a, State.sortCol), bv = getVal(b, State.sortCol);
     if (typeof av === 'string') av = av.toLowerCase();
     if (typeof bv === 'string') bv = bv.toLowerCase();
     if (av < bv) return State.sortDir === 'asc' ? -1 : 1;
@@ -385,96 +399,90 @@ function renderInventory() {
     return 0;
   });
 
-  const tbody = document.getElementById('inventory-tbody');
   document.getElementById('inventory-count').textContent =
     `${rows.length.toLocaleString()} products${State.merged.length !== rows.length ? ` (of ${State.merged.length.toLocaleString()})` : ''}`;
 
+  buildInventoryHeader();
+
+  const cols = visibleCols();
+  const tbody = document.getElementById('inventory-tbody');
+
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="25" class="empty-cell">No products match current filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty-cell">No products match current filters.</td></tr>`;
     return;
   }
 
-  const totalStock = p => (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
-
+  // Track group boundaries for right-border styling
   tbody.innerHTML = rows.map(p => {
-    const total = totalStock(p);
-    const status = stockStatus(p);
-    return `<tr>
-      <td>${esc(p.artist)}</td>
-      <td>${esc(p.title)}</td>
-      <td><code>${esc(p.catalog)}</code></td>
-      <td><code style="font-size:11px">${esc(p.upc)}</code></td>
-      <td><span class="pill pill-plan" style="font-size:9px">${esc(p.format)}</span></td>
-      <td class="num" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(p.fp_available)}</td>
-      <td class="num">${numCell(p.us_avail)}</td>
-      <td class="num">${numCell(p.us_mtd)}</td>
-      <td class="num">${numCell(p.us_3ms)}</td>
-      <td class="num">${numCell(p.us_12ms)}</td>
-      <td class="num">${numCell(p.ca_avail)}</td>
-      <td class="num">${numCell(p.ca_mtd)}</td>
-      <td class="num">${numCell(p.ca_3ms)}</td>
-      <td class="num">${numCell(p.ca_12ms)}</td>
-      <td class="num">${numCell(p.uk_avail)}</td>
-      <td class="num">${numCell(p.uk_open)}</td>
-      <td class="num">${numCell(p.uk_last_mo)}</td>
-      <td class="num">${numCell(p.uk_this_yr)}</td>
-      <td class="num">${numCell(p.uk_last_yr)}</td>
-      <td class="num">${numCell(p.eu_avail)}</td>
-      <td class="num">${numCell(p.eu_mtd)}</td>
-      <td class="num">${numCell(p.eu_last_mo)}</td>
-      <td class="num">${numCell(p.eu_this_yr)}</td>
-      <td class="num" style="font-weight:600">${numCell(total)}</td>
-      <td>${statusPill(status)}</td>
-    </tr>`;
+    return '<tr>' + cols.map((col, i) => {
+      const nextCol = cols[i+1];
+      const isGroupEnd = !nextCol || nextCol.group !== col.group;
+      const borderStyle = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
+      const v = getVal(p, col.id);
+
+      if (col.id === 'status') return `<td style="${borderStyle}">${statusPill(v)}</td>`;
+      if (col.id === 'total')  return `<td class="num" style="font-weight:600;${borderStyle}">${numCell(v)}</td>`;
+      if (col.id === 'catalog') return `<td style="${borderStyle}"><code>${esc(v)}</code></td>`;
+      if (col.id === 'upc')    return `<td style="${borderStyle}"><code style="font-size:10px">${esc(v)}</code></td>`;
+      if (col.id === 'format') return `<td style="${borderStyle}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
+      if (col.id === 'fp_available') return `<td class="num" style="${borderStyle}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
+      if (col.num) return `<td class="num" style="${borderStyle}">${numCell(v)}</td>`;
+      return `<td style="${borderStyle}">${esc(v)}</td>`;
+    }).join('') + '</tr>';
   }).join('');
 }
 
 function stockStatus(p) {
   const total = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
   if (total === 0) return 'out';
-  // Check any per-warehouse low stock
   const checks = [
     { avail: p.us_avail, vel12: p.us_12ms },
     { avail: p.ca_avail, vel12: p.ca_12ms },
-    { avail: p.uk_avail, vel12: p.uk_last_yr / 12 },
-    { avail: p.eu_avail, vel12: p.eu_this_yr / 12 },
+    { avail: p.uk_avail, vel12: p.uk_last_yr },
+    { avail: p.eu_avail, vel12: p.eu_this_yr },
   ];
   let worst = 'ok';
   for (const { avail, vel12 } of checks) {
     if (avail <= 0) continue;
-    const monthly = (vel12 || 0) / 12;
+    const monthly = (vel12||0) / 12;
     if (monthly <= 0) continue;
     const weeksLeft = (avail / monthly) * 4.33;
-    if (weeksLeft < 4) worst = 'critical';
-    else if (weeksLeft < CONFIG.REORDER_WEEKS && worst !== 'critical') worst = 'low';
+    if (weeksLeft < 4 && worst !== 'critical') worst = 'critical';
+    else if (weeksLeft < CONFIG.REORDER_WEEKS && worst === 'ok') worst = 'low';
   }
   return worst;
 }
-
 function statusPill(status) {
-  const map = {
-    ok:       ['OK',       'pill-ok'],
-    low:      ['Low',      'pill-low'],
-    critical: ['Critical', 'pill-critical'],
-    out:      ['Out',      'pill-out'],
-  };
-  const [label, cls] = map[status] || ['—', ''];
+  const map = { ok:['OK','pill-ok'], low:['Low','pill-low'], critical:['Critical','pill-critical'], out:['Out','pill-out'] };
+  const [label, cls] = map[status] || ['—',''];
   return `<span class="pill ${cls}">${label}</span>`;
 }
 
-// ── MANUFACTURING VIEW ─────────────────────────────────────────
+// ── MANUFACTURING VIEW ────────────────────────────────────────
+async function loadPackiyoInbound() {
+  // Fetch purchase orders from Packiyo to show inbound quantities
+  try {
+    const data = await packiyoFetch('/purchase-orders', { 'page[number]': 1, 'page[size]': 100, 'filter[status]': 'open' });
+    return data.data || [];
+  } catch(e) {
+    console.warn('Could not load POs:', e.message);
+    return [];
+  }
+}
+
 function renderManufacturing() {
   const filter = document.getElementById('mfg-filter').value;
   const today  = new Date();
 
-  // Global velocity = sum of all warehouse 12MS / 12
   let items = State.merged.map(p => {
     const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
-    const annual = (p.us_12ms||0) + (p.ca_12ms||0) + ((p.uk_last_yr||0)) + ((p.eu_this_yr||0));
+    // Include FP inbound in total for manufacturing calculation
+    const totalWithInbound = totalStock + (p.fp_inbound||0);
+    const annual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0);
     const monthly = annual / 12;
     if (monthly <= 0) return null;
-    const monthsLeft = totalStock / monthly;
-    if (monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null; // not relevant
+    const monthsLeft = totalWithInbound / monthly;
+    if (monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
 
     const isLPItem = isVinyl(p.format || p.title || '');
     const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
@@ -482,19 +490,17 @@ function renderManufacturing() {
     const daysToDeadline = Math.round((poDeadlineDate - today) / (24 * 3600 * 1000));
 
     let urgency = 'plan';
-    if (daysToDeadline < 0)  urgency = 'overdue';
-    else if (daysToDeadline < 30)  urgency = 'urgent';
-    else if (daysToDeadline < 90)  urgency = 'soon';
+    if (daysToDeadline < 0) urgency = 'overdue';
+    else if (daysToDeadline < 30) urgency = 'urgent';
+    else if (daysToDeadline < 90) urgency = 'soon';
 
-    return { ...p, totalStock, monthly, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem };
+    return { ...p, totalStock, totalWithInbound, monthly, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem };
   }).filter(Boolean);
 
-  // Apply filter
-  if (filter === 'urgent')  items = items.filter(i => i.urgency === 'urgent' || i.urgency === 'overdue');
-  if (filter === 'lp')      items = items.filter(i => i.isLP);
-  if (filter === 'cd')      items = items.filter(i => !i.isLP);
+  if (filter === 'urgent') items = items.filter(i => i.urgency === 'urgent' || i.urgency === 'overdue');
+  if (filter === 'lp')     items = items.filter(i => i.isLP);
+  if (filter === 'cd')     items = items.filter(i => !i.isLP);
 
-  // Sort
   items.sort((a, b) => {
     let av = a[State.mfgSortCol], bv = b[State.mfgSortCol];
     if (typeof av === 'string') av = av.toLowerCase();
@@ -504,149 +510,174 @@ function renderManufacturing() {
     return 0;
   });
 
+  // Wire up mfg sort headers
+  document.querySelectorAll('#mfg-table th.sortable').forEach(th => {
+    th.onclick = () => {
+      const col = th.dataset.col;
+      if (State.mfgSortCol === col) State.mfgSortDir = State.mfgSortDir === 'asc' ? 'desc' : 'asc';
+      else { State.mfgSortCol = col; State.mfgSortDir = 'asc'; }
+      document.querySelectorAll('#mfg-table th.sortable').forEach(t => { t.classList.remove('sort-asc','sort-desc'); });
+      th.classList.add(State.mfgSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      renderManufacturing();
+    };
+  });
+
   const tbody = document.getElementById('mfg-tbody');
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-cell">No items require manufacturing attention right now.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="empty-cell">No items require manufacturing attention right now.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = items.map(p => {
-    const urgPill = {
-      overdue: `<span class="pill pill-critical">Overdue</span>`,
-      urgent:  `<span class="pill pill-urgent">Urgent</span>`,
-      soon:    `<span class="pill pill-soon">Soon</span>`,
-      plan:    `<span class="pill pill-plan">Plan</span>`,
-    }[p.urgency] || '';
+    const urgPill = { overdue:`<span class="pill pill-critical">Overdue</span>`, urgent:`<span class="pill pill-urgent">Urgent</span>`, soon:`<span class="pill pill-soon">Soon</span>`, plan:`<span class="pill pill-plan">Plan</span>` }[p.urgency] || '';
     const dl = p.daysToDeadline < 0
-      ? `<span style="color:var(--red)">PAST DUE (${Math.abs(p.daysToDeadline)}d ago)</span>`
+      ? `<span style="color:var(--red);font-weight:600">PAST DUE</span>`
       : formatDate(p.poDeadlineDate);
+    const inboundCell = p.fp_inbound > 0
+      ? `<span style="color:var(--green);font-weight:500">${p.fp_inbound}</span>`
+      : `<span class="num-zero">0</span>`;
     return `<tr>
       <td>${esc(p.artist)}</td>
       <td>${esc(p.title)}</td>
       <td><code>${esc(p.catalog)}</code></td>
-      <td><code style="font-size:11px">${esc(p.upc)}</code></td>
       <td>${esc(p.format)}</td>
       <td class="num">${numCell(p.totalStock)}</td>
+      <td class="num">${inboundCell}</td>
+      <td class="num" style="font-style:italic;color:var(--text-muted)">${numCell(p.totalWithInbound)}</td>
       <td class="num">${p.monthly.toFixed(1)}</td>
       <td class="num" style="font-weight:600">${p.monthsLeft.toFixed(1)}</td>
-      <td class="num">${dl}</td>
+      <td>${dl}</td>
       <td>${urgPill}</td>
-      <td><span class="pill pill-plan" style="font-size:9px">FP WH / Orchard US</span></td>
+      <td style="font-size:11px;color:var(--text-muted)">FP WH / Orchard US</td>
     </tr>`;
   }).join('');
 }
 
 // ── ALERTS VIEW ───────────────────────────────────────────────
-function renderAlerts() {
-  const WAREHOUSES = [
-    { key: 'us', label: 'Orchard US',     avail: 'us_avail', vel: 'us_12ms',  velDiv: 12 },
-    { key: 'ca', label: 'Orchard Canada', avail: 'ca_avail', vel: 'ca_12ms',  velDiv: 12 },
-    { key: 'uk', label: 'Orchard UK',     avail: 'uk_avail', vel: 'uk_last_yr', velDiv: 12 },
-    { key: 'eu', label: 'Orchard EU',     avail: 'eu_avail', vel: 'eu_this_yr', velDiv: 12 },
-  ];
+const WAREHOUSES = [
+  { key:'us', label:'Orchard US',     avail:'us_avail', vel:'us_12ms',   velDiv:12 },
+  { key:'ca', label:'Orchard Canada', avail:'ca_avail', vel:'ca_12ms',   velDiv:12 },
+  { key:'uk', label:'Orchard UK',     avail:'uk_avail', vel:'uk_last_yr',velDiv:12 },
+  { key:'eu', label:'Orchard EU',     avail:'eu_avail', vel:'eu_this_yr',velDiv:12 },
+];
 
+function renderAlerts() {
   const container = document.getElementById('alerts-container');
   let totalAlerts = 0;
   let html = '';
 
   for (const wh of WAREHOUSES) {
-    const alerts = State.merged.map(p => {
-      const avail = p[wh.avail] || 0;
-      const annual = p[wh.vel] || 0;
+    let alerts = State.merged.map(p => {
+      const avail   = p[wh.avail] || 0;
+      const annual  = p[wh.vel] || 0;
       const monthly = annual / wh.velDiv;
       if (monthly <= 0 || avail < 0) return null;
       const weeksLeft = (avail / monthly) * 4.33;
       if (weeksLeft >= CONFIG.REORDER_WEEKS) return null;
-      return { ...p, avail, monthly, weeksLeft };
-    }).filter(Boolean).sort((a, b) => a.weeksLeft - b.weeksLeft);
+      // Suggested transfer = 12 months of velocity minus current stock
+      const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
+      return { ...p, avail, monthly, weeksLeft, suggestQty };
+    }).filter(Boolean);
 
     if (alerts.length === 0) continue;
+
+    // Sort
+    const s = State.alertSort[wh.key];
+    alerts.sort((a, b) => {
+      let av = a[s.col], bv = b[s.col];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return s.dir === 'asc' ? -1 : 1;
+      if (av > bv) return s.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
     totalAlerts += alerts.length;
+    const repFrom = wh.key==='us' ? 'Fat Possum WH' : wh.key==='ca' ? 'Orchard US' : wh.key==='uk' ? 'Orchard US' : 'Orchard UK / US';
+
+    const sortTh = (col, label, num=false) => {
+      const active = s.col === col;
+      const arrow  = active ? (s.dir==='asc'?' ↑':' ↓') : '';
+      return `<th class="${num?'num':''} sortable${active?(s.dir==='asc'?' sort-asc':' sort-desc'):''}"
+        onclick="sortAlerts('${wh.key}','${col}')">${label}${arrow}</th>`;
+    };
 
     html += `<div class="alert-section">
-      <h3>${wh.label} — ${alerts.length} item${alerts.length > 1 ? 's' : ''} below ${CONFIG.REORDER_WEEKS} weeks</h3>
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th>Artist</th><th>Title</th><th>Catalog #</th><th>Format</th>
-            <th class="num">Avail</th><th class="num">Monthly Vel</th><th class="num">Weeks Left</th><th>Status</th>
-            <th>Replenish From</th>
-          </tr></thead>
-          <tbody>
-            ${alerts.map(p => {
-              const weeks = p.weeksLeft.toFixed(1);
-              const cls = p.weeksLeft < 2 ? 'pill-critical' : p.weeksLeft < 4 ? 'pill-urgent' : 'pill-low';
-              const repFrom = wh.key === 'us' ? 'Fat Possum WH'
-                            : wh.key === 'ca' ? 'Orchard US'
-                            : wh.key === 'uk' ? 'Orchard US'
-                            : wh.key === 'eu' ? 'Orchard UK / Orchard US'
-                            : '—';
-              return `<tr>
-                <td>${esc(p.artist)}</td>
-                <td>${esc(p.title)}</td>
-                <td><code>${esc(p.catalog)}</code></td>
-                <td>${esc(p.format)}</td>
-                <td class="num">${numCell(p.avail)}</td>
-                <td class="num">${p.monthly.toFixed(1)}</td>
-                <td class="num" style="font-weight:600">${weeks}</td>
-                <td><span class="pill ${cls}">${weeks} wks</span></td>
-                <td style="color:var(--text-muted);font-size:11px">${repFrom}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
+      <h3>${wh.label} — ${alerts.length} item${alerts.length>1?'s':''} below ${CONFIG.REORDER_WEEKS} weeks</h3>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          ${sortTh('artist','Artist')}
+          ${sortTh('title','Title')}
+          ${sortTh('catalog','Catalog #')}
+          ${sortTh('label','Label')}
+          ${sortTh('format','Format')}
+          ${sortTh('avail','Avail',true)}
+          ${sortTh('monthly','Mo. Velocity',true)}
+          ${sortTh('weeksLeft','Weeks Left',true)}
+          <th>Status</th>
+          ${sortTh('suggestQty','Suggested Transfer',true)}
+          <th>Replenish From</th>
+        </tr></thead>
+        <tbody>
+          ${alerts.map(p => {
+            const weeks = p.weeksLeft.toFixed(1);
+            const cls = p.weeksLeft < 2 ? 'pill-critical' : p.weeksLeft < 4 ? 'pill-urgent' : 'pill-low';
+            return `<tr>
+              <td>${esc(p.artist)}</td>
+              <td>${esc(p.title)}</td>
+              <td><code>${esc(p.catalog)}</code></td>
+              <td style="color:var(--text-muted);font-size:11px">${esc(p.label)}</td>
+              <td>${esc(p.format)}</td>
+              <td class="num">${numCell(p.avail)}</td>
+              <td class="num">${p.monthly.toFixed(1)}</td>
+              <td class="num" style="font-weight:600">${weeks}</td>
+              <td><span class="pill ${cls}">${weeks} wks</span></td>
+              <td class="num suggest-qty">${p.suggestQty > 0 ? p.suggestQty : '—'}</td>
+              <td style="color:var(--text-muted);font-size:11px">${repFrom}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
     </div>`;
   }
 
   if (html === '') {
-    container.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:60px">
-      All warehouses are above the ${CONFIG.REORDER_WEEKS}-week threshold. No alerts.</div>`;
+    container.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:60px">All warehouses are above the ${CONFIG.REORDER_WEEKS}-week threshold. No alerts.</div>`;
   } else {
     container.innerHTML = html;
   }
 
-  document.getElementById('alert-badge').textContent = totalAlerts;
-  if (totalAlerts > 0) document.getElementById('alert-badge').classList.remove('hidden');
-  else document.getElementById('alert-badge').classList.add('hidden');
+  const badge = document.getElementById('alert-badge');
+  badge.textContent = totalAlerts;
+  totalAlerts > 0 ? badge.classList.remove('hidden') : badge.classList.add('hidden');
 }
 
-function updateAlertBadge() {
-  // Recomputed in renderAlerts
-}
+window.sortAlerts = function(whKey, col) {
+  const s = State.alertSort[whKey];
+  if (s.col === col) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+  else { s.col = col; s.dir = 'asc'; }
+  renderAlerts();
+};
 
 // ── MOVEMENTS ──────────────────────────────────────────────────
-const VALID_ROUTES = new Set([
-  'fp→us', 'us→ca', 'us→uk', 'us→eu', 'uk→eu',
-]);
-const WH_LABELS = {
-  fp: 'Fat Possum WH', us: 'Orchard US',
-  ca: 'Orchard Canada', uk: 'Orchard UK', eu: 'Orchard EU',
-};
+const VALID_ROUTES = new Set(['fp→us','us→ca','us→uk','us→eu','uk→eu']);
+const WH_LABELS = { fp:'Fat Possum WH', us:'Orchard US', ca:'Orchard Canada', uk:'Orchard UK', eu:'Orchard EU' };
 
 function validateRoute() {
   const from = document.getElementById('mov-from').value;
   const to   = document.getElementById('mov-to').value;
   const warn = document.getElementById('mov-route-warning');
   const route = `${from}→${to}`;
-  if (from === to) {
-    warn.textContent = 'Origin and destination cannot be the same.';
-    warn.classList.remove('hidden');
-  } else if (!VALID_ROUTES.has(route)) {
-    warn.textContent = `⚠ Non-standard route: ${WH_LABELS[from]} → ${WH_LABELS[to]}. Standard routes: FP WH→US, US→CA, US→UK, US→EU, UK→EU.`;
-    warn.classList.remove('hidden');
-  } else {
-    warn.classList.add('hidden');
-  }
+  if (from === to) { warn.textContent = 'Origin and destination cannot be the same.'; warn.classList.remove('hidden'); }
+  else if (!VALID_ROUTES.has(route)) { warn.textContent = `⚠ Non-standard route: ${WH_LABELS[from]} → ${WH_LABELS[to]}.`; warn.classList.remove('hidden'); }
+  else { warn.classList.add('hidden'); }
 }
 
 function updateMovementDropdown() {
-  const q = document.getElementById('mov-product-search').value.toLowerCase().trim();
+  const q  = document.getElementById('mov-product-search').value.toLowerCase().trim();
   const dd = document.getElementById('mov-product-dropdown');
   if (q.length < 2) { dd.classList.add('hidden'); return; }
-  const matches = State.merged.filter(p => {
-    return `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q);
-  }).slice(0, 15);
+  const matches = State.merged.filter(p => `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)).slice(0, 15);
   if (matches.length === 0) { dd.classList.add('hidden'); return; }
   dd.innerHTML = matches.map(p =>
     `<div class="product-dropdown-item" data-upc="${esc(p.upc)}">
@@ -657,11 +688,10 @@ function updateMovementDropdown() {
   dd.classList.remove('hidden');
   dd.querySelectorAll('.product-dropdown-item').forEach(item => {
     item.addEventListener('click', () => {
-      const upc = item.dataset.upc;
-      const prod = State.merged.find(p => p.upc === upc);
+      const prod = State.merged.find(p => p.upc === item.dataset.upc);
       if (!prod) return;
       document.getElementById('mov-product-search').value = `${prod.artist} — ${prod.title}`;
-      document.getElementById('mov-product-upc').value = upc;
+      document.getElementById('mov-product-upc').value = prod.upc;
       dd.classList.add('hidden');
       const sel = document.getElementById('mov-selected-product');
       sel.innerHTML = `<strong>${esc(prod.artist)} — ${esc(prod.title)}</strong>
@@ -670,239 +700,149 @@ function updateMovementDropdown() {
     });
   });
 }
-
-// Close dropdown on outside click
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('#mov-product-search') && !e.target.closest('#mov-product-dropdown')) {
+document.addEventListener('click', e => {
+  if (!e.target.closest('#mov-product-search') && !e.target.closest('#mov-product-dropdown'))
     document.getElementById('mov-product-dropdown')?.classList.add('hidden');
-  }
 });
 
 function addMovement() {
-  const from = document.getElementById('mov-from').value;
-  const to   = document.getElementById('mov-to').value;
-  const upc  = document.getElementById('mov-product-upc').value;
-  const qty  = parseInt(document.getElementById('mov-qty').value, 10);
+  const from  = document.getElementById('mov-from').value;
+  const to    = document.getElementById('mov-to').value;
+  const upc   = document.getElementById('mov-product-upc').value;
+  const qty   = parseInt(document.getElementById('mov-qty').value, 10);
   const notes = document.getElementById('mov-notes').value;
-
   if (!upc) { toast('Please select a product.', 'error'); return; }
   if (!qty || qty < 1) { toast('Quantity must be at least 1.', 'error'); return; }
   if (from === to) { toast('Origin and destination cannot be the same.', 'error'); return; }
-
   const prod = State.merged.find(p => p.upc === upc);
   if (!prod) { toast('Product not found.', 'error'); return; }
-
-  // For Orchard→Orchard movements, use orchard catalog/title (not Packiyo)
-  const useOrchard = from !== 'fp' || to !== 'fp';
-
-  State.movements.push({
-    from, to,
-    artist:  prod.artist,
-    title:   prod.title,
-    catalog: prod.catalog,
-    upc:     prod.upc,
-    format:  prod.format,
-    qty,
-    notes,
-    useOrchard,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Reset form
+  State.movements.push({ from, to, artist:prod.artist, title:prod.title, catalog:prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, timestamp: new Date().toISOString() });
   document.getElementById('mov-product-search').value = '';
   document.getElementById('mov-product-upc').value = '';
   document.getElementById('mov-selected-product').classList.add('hidden');
   document.getElementById('mov-qty').value = 1;
   document.getElementById('mov-notes').value = '';
-
   renderMovementsTable();
   toast('Movement added to queue.', 'success');
 }
 
 function renderMovementsTable() {
   const tbody = document.getElementById('movements-tbody');
-  document.getElementById('mov-queue-count').textContent = `${State.movements.length} item${State.movements.length !== 1 ? 's' : ''}`;
+  document.getElementById('mov-queue-count').textContent = `${State.movements.length} item${State.movements.length!==1?'s':''}`;
   if (State.movements.length === 0) {
     tbody.innerHTML = `<tr><td colspan="10" class="empty-cell">No movements queued yet.</td></tr>`;
     return;
   }
   tbody.innerHTML = State.movements.map((m, i) => `<tr>
-    <td>${WH_LABELS[m.from]}</td>
-    <td>${WH_LABELS[m.to]}</td>
-    <td>${esc(m.artist)}</td>
-    <td>${esc(m.title)}</td>
+    <td>${WH_LABELS[m.from]}</td><td>${WH_LABELS[m.to]}</td>
+    <td>${esc(m.artist)}</td><td>${esc(m.title)}</td>
+    <td style="color:var(--text-muted);font-size:11px">${esc(m.label)}</td>
     <td><code>${esc(m.catalog)}</code></td>
-    <td><code style="font-size:11px">${esc(m.upc)}</code></td>
+    <td><code style="font-size:10px">${esc(m.upc)}</code></td>
     <td>${esc(m.format)}</td>
     <td class="num">${m.qty}</td>
     <td style="color:var(--text-muted)">${esc(m.notes)}</td>
     <td><button class="btn-danger" onclick="removeMovement(${i})">×</button></td>
   </tr>`).join('');
 }
+window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); };
 
-window.removeMovement = function(i) {
-  State.movements.splice(i, 1);
-  renderMovementsTable();
-};
-
-// ── EXPORTS ────────────────────────────────────────────────────
+// ── EXPORTS ───────────────────────────────────────────────────
 function exportMovements() {
   if (State.movements.length === 0) { toast('No movements to export.', 'error'); return; }
-  const headers = ['From Warehouse','To Warehouse','Artist','Title','Catalog #','UPC','Format','Quantity','Notes'];
-  const rows = State.movements.map(m => [
-    WH_LABELS[m.from], WH_LABELS[m.to],
-    m.artist, m.title, m.catalog, m.upc, m.format, m.qty, m.notes
-  ]);
-  downloadCSV('fp_movement_request_' + dateStr() + '.csv', headers, rows);
+  downloadCSV('fp_movement_request_'+dateStr()+'.csv',
+    ['From Warehouse','To Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Quantity','Notes'],
+    State.movements.map(m => [WH_LABELS[m.from],WH_LABELS[m.to],m.artist,m.title,m.label,m.catalog,m.upc,m.format,m.qty,m.notes])
+  );
   toast('Movement request exported.', 'success');
 }
-
 function exportInventory() {
-  const headers = ['Artist','Title','Catalog #','UPC','Format',
-    'FP WH Available','FP WH On Hand',
-    'US Available','US MTD','US 3MS','US 12MS',
-    'CA Available','CA MTD','CA 3MS','CA 12MS',
-    'UK Available','UK Open Orders','UK Last Month','UK This Year','UK Last Year',
-    'EU Available','EU MTD','EU Last Month','EU This Year',
-    'Total Stock'];
-  const rows = State.merged.map(p => [
-    p.artist, p.title, p.catalog, p.upc, p.format,
-    p.fp_available, p.fp_onhand,
-    p.us_avail, p.us_mtd, p.us_3ms, p.us_12ms,
-    p.ca_avail, p.ca_mtd, p.ca_3ms, p.ca_12ms,
-    p.uk_avail, p.uk_open, p.uk_last_mo, p.uk_this_yr, p.uk_last_yr,
-    p.eu_avail, p.eu_mtd, p.eu_last_mo, p.eu_this_yr,
-    (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0)
-  ]);
-  downloadCSV('fp_global_inventory_' + dateStr() + '.csv', headers, rows);
+  downloadCSV('fp_global_inventory_'+dateStr()+'.csv',
+    ['Artist','Title','Label','Catalog #','UPC','Format','Total Stock','FP Avail','FP Inbound','US Avail','US MTD','US 3MS','US 12MS','CA Avail','CA MTD','CA 3MS','CA 12MS','UK Avail','UK Open Ord','UK Last Mo','UK This Yr','UK Last Yr','EU Avail','EU MTD','EU Last Mo','EU This Yr'],
+    State.merged.map(p => [p.artist,p.title,p.label,p.catalog,p.upc,p.format,
+      (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0),
+      p.fp_available,p.fp_inbound,p.us_avail,p.us_mtd,p.us_3ms,p.us_12ms,
+      p.ca_avail,p.ca_mtd,p.ca_3ms,p.ca_12ms,p.uk_avail,p.uk_open,p.uk_last_mo,p.uk_this_yr,p.uk_last_yr,
+      p.eu_avail,p.eu_mtd,p.eu_last_mo,p.eu_this_yr])
+  );
   toast('Inventory exported.', 'success');
 }
-
 function exportManufacturing() {
   const today = new Date();
   const items = State.merged.map(p => {
     const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
-    const annual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0);
-    const monthly = annual / 12;
+    const totalWithInbound = totalStock + (p.fp_inbound||0);
+    const monthly = ((p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0)) / 12;
     if (monthly <= 0) return null;
-    const monthsLeft = totalStock / monthly;
+    const monthsLeft = totalWithInbound / monthly;
     if (monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
-    const isLPItem = isVinyl(p.format || '');
-    const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
+    const leadTime = isVinyl(p.format||'') ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
     const poDeadlineDate = new Date(today.getTime() + (monthsLeft - leadTime) * 30 * 24 * 3600 * 1000);
-    const daysToDeadline = Math.round((poDeadlineDate - today) / (24 * 3600 * 1000));
-    return { ...p, totalStock, monthly, monthsLeft, poDeadlineDate, daysToDeadline };
+    return { ...p, totalStock, totalWithInbound, monthly, monthsLeft, poDeadlineDate };
   }).filter(Boolean);
-  const headers = ['Artist','Title','Catalog #','UPC','Format','Total Stock','Global Velocity/mo','Months Left','PO Deadline','Days to Deadline'];
-  const rows = items.map(p => [
-    p.artist, p.title, p.catalog, p.upc, p.format,
-    p.totalStock, p.monthly.toFixed(1), p.monthsLeft.toFixed(1),
-    formatDate(p.poDeadlineDate), p.daysToDeadline
-  ]);
-  downloadCSV('fp_manufacturing_' + dateStr() + '.csv', headers, rows);
+  downloadCSV('fp_manufacturing_'+dateStr()+'.csv',
+    ['Artist','Title','Catalog #','Format','Total Stock','FP Inbound','Total w/ Inbound','Mo. Velocity','Months Left','PO Deadline'],
+    items.map(p => [p.artist,p.title,p.catalog,p.format,p.totalStock,p.fp_inbound,p.totalWithInbound,p.monthly.toFixed(1),p.monthsLeft.toFixed(1),formatDate(p.poDeadlineDate)])
+  );
   toast('Manufacturing report exported.', 'success');
 }
-
 function exportAlerts() {
-  const WAREHOUSES = [
-    { key: 'us', label: 'Orchard US',     avail: 'us_avail', vel: 'us_12ms',   velDiv: 12 },
-    { key: 'ca', label: 'Orchard Canada', avail: 'ca_avail', vel: 'ca_12ms',   velDiv: 12 },
-    { key: 'uk', label: 'Orchard UK',     avail: 'uk_avail', vel: 'uk_last_yr', velDiv: 12 },
-    { key: 'eu', label: 'Orchard EU',     avail: 'eu_avail', vel: 'eu_this_yr', velDiv: 12 },
-  ];
-  const headers = ['Warehouse','Artist','Title','Catalog #','UPC','Format','Available','Monthly Velocity','Weeks Left'];
   const rows = [];
   for (const wh of WAREHOUSES) {
     for (const p of State.merged) {
-      const avail = p[wh.avail] || 0;
-      const monthly = (p[wh.vel] || 0) / wh.velDiv;
+      const avail = p[wh.avail]||0;
+      const monthly = (p[wh.vel]||0) / wh.velDiv;
       if (monthly <= 0) continue;
       const weeksLeft = (avail / monthly) * 4.33;
       if (weeksLeft < CONFIG.REORDER_WEEKS) {
-        rows.push([wh.label, p.artist, p.title, p.catalog, p.upc, p.format, avail, monthly.toFixed(1), weeksLeft.toFixed(1)]);
+        const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
+        rows.push([wh.label,p.artist,p.title,p.label,p.catalog,p.upc,p.format,avail,monthly.toFixed(1),weeksLeft.toFixed(1),suggestQty]);
       }
     }
   }
-  downloadCSV('fp_reorder_alerts_' + dateStr() + '.csv', headers, rows);
+  downloadCSV('fp_reorder_alerts_'+dateStr()+'.csv',
+    ['Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Available','Mo. Velocity','Weeks Left','Suggested Transfer'],
+    rows
+  );
   toast('Alerts exported.', 'success');
 }
-
 function downloadCSV(filename, headers, rows) {
-  const csvContent = [headers, ...rows].map(r =>
-    r.map(cell => {
-      const s = String(cell ?? '');
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(',')
-  ).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
+  const csv = [headers,...rows].map(r => r.map(cell => {
+    const s = String(cell??'');
+    return s.includes(',')||s.includes('"')||s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(',')).join('\n');
   const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download = filename; a.click();
 }
 
-// ── VIEW SWITCHING ─────────────────────────────────────────────
+// ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
-  document.querySelectorAll('.view').forEach(v => {
-    v.classList.add('hidden'); v.classList.remove('active');
-  });
+  document.querySelectorAll('.view').forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const view = document.getElementById(`view-${viewName}`);
-  if (view) { view.classList.remove('hidden'); view.classList.add('active'); }
-  const nav = document.querySelector(`[data-view="${viewName}"]`);
-  if (nav) nav.classList.add('active');
+  document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
+  document.getElementById(`view-${viewName}`)?.classList.add('active');
+  document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
 }
 
-// ── STATUS HELPERS ─────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────
 function setStatus(which, state, label) {
-  const dot  = document.getElementById(`${which}-dot`);
-  const text = document.getElementById(`${which}-status-text`);
-  if (dot)  { dot.className = 'status-dot ' + state; }
-  if (text) text.textContent = label;
+  const dot = document.getElementById(`${which}-dot`);
+  const txt = document.getElementById(`${which}-status-text`);
+  if (dot) dot.className = 'status-dot ' + state;
+  if (txt) txt.textContent = label;
 }
-
-function updateSortHeaders(tableId, col, dir) {
-  document.querySelectorAll(`#${tableId} th.sortable`).forEach(th => {
-    th.classList.remove('sort-asc', 'sort-desc');
-    if (th.dataset.col === col) th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
-  });
-}
-
-// ── UTILS ───────────────────────────────────────────────────────
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function safeNum(v) {
-  const n = parseFloat(String(v).replace(/[^0-9.-]/g,''));
-  return isNaN(n) ? 0 : n;
-}
-function numCell(n) {
-  if (n === 0 || n === null || n === undefined) return `<span class="num-zero">0</span>`;
-  return String(n);
-}
-function isVinyl(s) {
-  const l = (s || '').toLowerCase();
-  return l.includes('vinyl') || l.includes('lp') || l.includes('12"') || l.includes("12'") || l.includes('10"') || l.includes('7"');
-}
-function guessFormat(name) {
-  if (isVinyl(name)) return '12" Vinyl';
-  if (name.toLowerCase().includes('cd')) return 'CD';
-  return name;
-}
-function formatDate(d) {
-  return d.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
-}
-function dateStr() {
-  return new Date().toISOString().slice(0,10).replace(/-/g,'');
-}
-function debounce(fn, ms) {
-  let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-}
-function toast(msg, type = '') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast' + (type ? ` toast-${type}` : '');
-  el.classList.remove('hidden');
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.add('hidden'), 3500);
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function safeNum(v) { const n=parseFloat(String(v??'').replace(/[^0-9.-]/g,'')); return isNaN(n)?0:n; }
+function numCell(n) { return (!n||n===0)?`<span class="num-zero">0</span>`:String(n); }
+function isVinyl(s) { const l=(s||'').toLowerCase(); return l.includes('vinyl')||l.includes(' lp')||l.includes('12"')||l.includes('10"')||l.includes('7"'); }
+function guessFormat(name) { if(isVinyl(name)) return '12" Vinyl'; if(name.toLowerCase().includes('cd')) return 'CD'; return name; }
+function formatDate(d) { return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); }
+function dateStr() { return new Date().toISOString().slice(0,10).replace(/-/g,''); }
+function debounce(fn,ms) { let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),ms); }; }
+function toast(msg,type='') {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast'+(type?` toast-${type}`:'');
+  el.classList.remove('hidden'); clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.add('hidden'),3500);
 }
