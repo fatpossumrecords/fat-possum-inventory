@@ -768,6 +768,7 @@ const WAREHOUSES = [
 
 function renderAlerts() {
   const container = document.getElementById('alerts-container');
+  const labelFilter = (document.getElementById('alert-filter-label')?.value || '').toLowerCase().trim();
   let totalAlerts = 0;
   let html = '';
 
@@ -779,10 +780,12 @@ function renderAlerts() {
       if (monthly <= 0 || avail < 0) return null;
       const weeksLeft = (avail / monthly) * 4.33;
       if (weeksLeft >= CONFIG.REORDER_WEEKS) return null;
-      // Suggested transfer = 12 months of velocity minus current stock
       const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
       return { ...p, avail, monthly, weeksLeft, suggestQty };
     }).filter(Boolean);
+
+    // Apply label filter
+    if (labelFilter) alerts = alerts.filter(p => (p.label||'').toLowerCase().includes(labelFilter));
 
     if (alerts.length === 0) continue;
 
@@ -798,7 +801,9 @@ function renderAlerts() {
     });
 
     totalAlerts += alerts.length;
-    const repFrom = wh.key==='us' ? 'Fat Possum WH' : wh.key==='ca' ? 'Orchard US' : wh.key==='uk' ? 'Orchard US' : 'Orchard UK / US';
+
+    const repFrom    = wh.key==='us' ? 'fp' : wh.key==='ca' ? 'us' : wh.key==='uk' ? 'us' : 'uk';
+    const repLabel   = WH_LABELS[repFrom];
 
     const sortTh = (col, label, num=false) => {
       const active = s.col === col;
@@ -807,10 +812,17 @@ function renderAlerts() {
         onclick="sortAlerts('${wh.key}','${col}')">${label}${arrow}</th>`;
     };
 
-    html += `<div class="alert-section">
-      <h3>${wh.label} — ${alerts.length} item${alerts.length>1?'s':''} below ${CONFIG.REORDER_WEEKS} weeks</h3>
-      <div class="table-wrap"><table>
+    html += `<div class="alert-section" id="alert-section-${wh.key}">
+      <h3>${wh.label} — ${alerts.length} item${alerts.length>1?'s':''} below ${CONFIG.REORDER_WEEKS} weeks
+        <span style="font-weight:400;margin-left:12px">
+          <a href="#" onclick="event.preventDefault();selectAllAlerts('${wh.key}')" style="color:var(--accent);font-size:10px">Select all</a>
+          &nbsp;·&nbsp;
+          <a href="#" onclick="event.preventDefault();deselectAllAlerts('${wh.key}')" style="color:var(--text-muted);font-size:10px">Deselect all</a>
+        </span>
+      </h3>
+      <div class="table-wrap"><table id="alert-table-${wh.key}">
         <thead><tr>
+          <th style="width:32px"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
           ${sortTh('artist','Artist')}
           ${sortTh('title','Title')}
           ${sortTh('catalog','Catalog #')}
@@ -827,7 +839,9 @@ function renderAlerts() {
           ${alerts.map(p => {
             const weeks = p.weeksLeft.toFixed(1);
             const cls = p.weeksLeft < 2 ? 'pill-critical' : p.weeksLeft < 4 ? 'pill-urgent' : 'pill-low';
+            const rowKey = `${wh.key}|${p.upc}`;
             return `<tr>
+              <td style="text-align:center"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.suggestQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
               <td>${esc(p.artist)}</td>
               <td>${esc(p.title)}</td>
               <td><code>${esc(p.catalog)}</code></td>
@@ -838,7 +852,7 @@ function renderAlerts() {
               <td class="num" style="font-weight:600">${weeks}</td>
               <td><span class="pill ${cls}">${weeks} wks</span></td>
               <td class="num suggest-qty">${p.suggestQty > 0 ? p.suggestQty : '—'}</td>
-              <td style="color:var(--text-muted);font-size:11px">${repFrom}</td>
+              <td style="color:var(--text-muted);font-size:11px">${repLabel}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -862,6 +876,60 @@ window.sortAlerts = function(whKey, col) {
   if (s.col === col) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
   else { s.col = col; s.dir = 'asc'; }
   renderAlerts();
+};
+
+window.jumpToAlertWarehouse = function(whKey) {
+  if (!whKey) return;
+  const el = document.getElementById(`alert-section-${whKey}`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('alert-jump-wh').value = '';
+};
+
+window.toggleAllAlerts = function(whKey, checked) {
+  document.querySelectorAll(`.alert-check[data-wh="${whKey}"]`).forEach(cb => cb.checked = checked);
+};
+window.selectAllAlerts = function(whKey) {
+  document.querySelectorAll(`.alert-check[data-wh="${whKey}"]`).forEach(cb => cb.checked = true);
+};
+window.deselectAllAlerts = function(whKey) {
+  document.querySelectorAll(`.alert-check[data-wh="${whKey}"]`).forEach(cb => cb.checked = false);
+};
+
+window.applyAlertSelections = function() {
+  const checked = document.querySelectorAll('.alert-check:checked');
+  if (checked.length === 0) { toast('No items selected.', 'error'); return; }
+
+  let added = 0;
+  checked.forEach(cb => {
+    const upc   = cb.dataset.upc;
+    const from  = cb.dataset.from;
+    const to    = cb.dataset.to;
+    const qty   = parseInt(cb.dataset.qty, 10);
+    if (!qty || qty <= 0) return;
+    const prod = State.merged.find(p => p.upc === upc);
+    if (!prod) return;
+    // Avoid duplicates already in queue
+    const exists = State.movements.find(m => m.upc === upc && m.from === from && m.to === to);
+    if (exists) return;
+    State.movements.push({
+      from, to,
+      artist:  prod.artist,
+      title:   prod.title,
+      catalog: prod.catalog,
+      upc:     prod.upc,
+      format:  prod.format,
+      label:   prod.label,
+      qty,
+      notes:   'From Alerts',
+      timestamp: new Date().toISOString(),
+    });
+    added++;
+  });
+
+  if (added === 0) { toast('All selected items already in movement queue.', ''); return; }
+  toast(`${added} movement${added>1?'s':''} added to queue.`, 'success');
+  // Switch to movements view
+  switchView('movements');
 };
 
 // ── MOVEMENTS ──────────────────────────────────────────────────
