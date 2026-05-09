@@ -640,13 +640,15 @@ function renderManufacturing() {
     if (State.hiddenMfgItems.has(p.upc)) return null;
     const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
     const poQty = (State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty || 0;
+    const hasPO = poQty > 0;
     const totalWithInbound = totalStock + (p.fp_inbound||0) + poQty;
     const annual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0);
     const monthly = annual / 12;
-    if (monthly <= 0) return null;
-    const need12mo = Math.ceil(monthly * 12);
-    const monthsLeft = totalWithInbound / monthly;
-    if (monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
+    if (monthly <= 0 && !hasPO) return null;
+    const need12mo = monthly > 0 ? Math.ceil(monthly * 12) : 0;
+    const monthsLeft = monthly > 0 ? totalWithInbound / monthly : Infinity;
+    // Always show items with open POs; otherwise only show within trigger window
+    if (!hasPO && monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
 
     const isLPItem = isVinyl(p.format || '');
     const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
@@ -658,7 +660,6 @@ function renderManufacturing() {
     else if (daysToDeadline < 30) urgency = 'urgent';
     else if (daysToDeadline < 90) urgency = 'soon';
 
-    const hasPO = poQty > 0;
     return { ...p, totalStock, poQty, totalWithInbound, monthly, need12mo, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem, hasPO };
   }).filter(Boolean);
 
