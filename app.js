@@ -175,7 +175,8 @@ async function loadPackiyo() {
       const lastPage = data.meta?.page?.lastPage || 1; if (page >= lastPage) break;
       page++;
     }
-    State.packiyoProducts = allProducts;
+    // Flatten JSON:API attributes
+    State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${allProducts.length} items`);
     mergeData();
@@ -268,18 +269,20 @@ function mergeData() {
 
   // First: process Packiyo products
   for (const p of State.packiyoProducts) {
-    const upc = normalizeUPC(p.upc || p.barcode || '');
+    const upc = normalizeUPC(p.barcode || '');
     if (!upc) continue;
     const isLP = isVinyl(p.name || p.title || '');
     products.set(upc, {
       upc,
-      catalog:    p.sku || p.catalog_number || '',
-      title:      p.name || p.title || p.description || '',
+      catalog:    p.sku || '',
+      title:      p.name || '',
       artist:     '',       // filled from orchard
       format:     p.name ? guessFormat(p.name) : '',
       fromPackiyo: true,
-      fp_available: safeNum(p.quantity_available ?? p.available_quantity ?? p.stock ?? 0),
-      fp_onhand:    safeNum(p.quantity_on_hand ?? p.on_hand_quantity ?? 0),
+      fp_available: safeNum(p.quantity_available ?? 0),
+      fp_onhand:    safeNum(p.quantity_on_hand ?? 0),
+      fp_inbound:   safeNum(p.quantity_inbound ?? 0),
+      fp_allocated: safeNum(p.quantity_allocated ?? 0),
       // Orchard fields filled below
       us_avail: 0, us_mtd: 0, us_3ms: 0, us_12ms: 0,
       ca_avail: 0, ca_mtd: 0, ca_3ms: 0, ca_12ms: 0,
@@ -402,7 +405,7 @@ function renderInventory() {
       <td><code>${esc(p.catalog)}</code></td>
       <td><code style="font-size:11px">${esc(p.upc)}</code></td>
       <td><span class="pill pill-plan" style="font-size:9px">${esc(p.format)}</span></td>
-      <td class="num">${numCell(p.fp_available)}</td>
+      <td class="num" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(p.fp_available)}</td>
       <td class="num">${numCell(p.us_avail)}</td>
       <td class="num">${numCell(p.us_mtd)}</td>
       <td class="num">${numCell(p.us_3ms)}</td>
