@@ -145,6 +145,7 @@ th {
   border-bottom: 2px solid var(--border);
   border-right: 1px solid var(--border);
   white-space: nowrap; text-align: left; user-select: none;
+  overflow: hidden;
 }
 th.num { text-align: right; }
 th.sortable { cursor: pointer; }
@@ -174,8 +175,10 @@ td {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
   border-right: 1px solid #e4e0d8;
-  color: var(--text); vertical-align: middle;
-  white-space: nowrap; background: var(--surface);
+  color: var(--text); vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  background: var(--surface);
 }
 td.num { text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; }
 tr:hover td { background: #ede9e1; }
@@ -331,5 +334,5 @@ th { position: relative; overflow: visible !important; }
 .pin-btn:hover { opacity: 0.8; }
 th.is-pinned .pin-btn { opacity: 1; }
 
-/* Prevent text overflow in fixed-width cols */
-td { overflow: hidden; text-overflow: ellipsis; }
+/* Allow columns to clip but show full text on hover via title; no ellipsis clipping */
+td { overflow: hidden; }
