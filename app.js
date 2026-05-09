@@ -6,7 +6,7 @@
 // ── CONFIG ──────────────────────────────────────────────────
 const CONFIG = {
   GOOGLE_CLIENT_ID: '955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com',
-  ALLOWED_DOMAIN:   'fatpossumrecords.com', // set to null to allow any Google account
+  ALLOWED_DOMAIN:   'fatpossum.com', // set to null to allow any Google account
   PACKIYO_BASE:     'https://fatpossum.app.packiyo.com/api/v1',
   PACKIYO_TOKEN:    '314|AJSEnucp8nigZM7YEkgEvWfNgH4JdTuraKYBkLp2',
   REORDER_WEEKS:    8,
