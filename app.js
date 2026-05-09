@@ -31,6 +31,10 @@ const State = {
   expanded: { fp: false, us: false, ca: false, uk: false, eu: false },
   // pinned column ids
   pinnedCols: new Set(),
+  // hidden manufacturing items (by upc)
+  hiddenMfgItems: new Set(),
+  // purchase orders from packiyo, keyed by sku
+  packiyoPOs: {},
   // manual column widths: { colId: px }
   colWidths: {},
 };
@@ -119,6 +123,7 @@ async function packiyoFetch(endpoint, params = {}) {
 async function loadPackiyo() {
   setStatus('packiyo', 'loading', 'Loading…');
   try {
+    // Load all products paginated
     let page = 1, allProducts = [];
     while (true) {
       const data = await packiyoFetch('/products', { 'page[number]': page, 'page[size]': 100 });
@@ -129,16 +134,61 @@ async function loadPackiyo() {
       if (page >= lastPage) break;
       page++;
     }
-    // Flatten JSON:API attributes
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
+
+    // Load purchase orders in parallel
+    await loadPackiyoPOs();
+
     mergeData();
   } catch (err) {
     setStatus('packiyo', 'error', 'Error');
     toast('Packiyo load failed: ' + err.message, 'error');
     console.error('Packiyo error:', err);
     mergeData();
+  }
+}
+
+async function loadPackiyoPOs() {
+  try {
+    // Fetch all open POs, paginated
+    let page = 1, allPOs = [];
+    while (true) {
+      const data = await packiyoFetch('/purchase-orders', { 'page[number]': page, 'page[size]': 100 });
+      const items = data.data || [];
+      if (!Array.isArray(items) || items.length === 0) break;
+      allPOs = allPOs.concat(items);
+      const lastPage = data.meta?.page?.lastPage || 1;
+      if (page >= lastPage) break;
+      page++;
+    }
+    // Build a map of sku -> PO info (only open/pending POs)
+    const poMap = {};
+    for (const po of allPOs) {
+      const attrs = po.attributes || po;
+      const status = (attrs.status || '').toLowerCase();
+      if (status === 'closed' || status === 'cancelled' || status === 'canceled') continue;
+      // Each PO has line items with sku
+      const lines = attrs.lines || attrs.purchase_order_lines || attrs.items || [];
+      for (const line of lines) {
+        const lineAttrs = line.attributes || line;
+        const sku = lineAttrs.sku || lineAttrs.product_sku || '';
+        const qty = safeNum(lineAttrs.quantity || lineAttrs.qty || 0);
+        const qtyReceived = safeNum(lineAttrs.quantity_received || lineAttrs.qty_received || 0);
+        const qtyPending = qty - qtyReceived;
+        if (sku && qtyPending > 0) {
+          if (!poMap[sku]) poMap[sku] = { qty: 0, pos: [] };
+          poMap[sku].qty += qtyPending;
+          poMap[sku].pos.push({ poId: attrs.number || attrs.id || po.id, qty: qtyPending, status: attrs.status });
+        }
+      }
+    }
+    State.packiyoPOs = poMap;
+    console.log('POs loaded:', Object.keys(poMap).length, 'SKUs with open orders');
+  } catch(e) {
+    console.warn('Could not load POs:', e.message);
+    State.packiyoPOs = {};
   }
 }
 
@@ -552,32 +602,23 @@ function statusPill(status) {
 }
 
 // ── MANUFACTURING VIEW ────────────────────────────────────────
-async function loadPackiyoInbound() {
-  // Fetch purchase orders from Packiyo to show inbound quantities
-  try {
-    const data = await packiyoFetch('/purchase-orders', { 'page[number]': 1, 'page[size]': 100, 'filter[status]': 'open' });
-    return data.data || [];
-  } catch(e) {
-    console.warn('Could not load POs:', e.message);
-    return [];
-  }
-}
-
 function renderManufacturing() {
-  const filter = document.getElementById('mfg-filter').value;
+  const urgFilter = document.getElementById('mfg-filter').value;
   const today  = new Date();
 
   let items = State.merged.map(p => {
+    if (State.hiddenMfgItems.has(p.upc)) return null;
     const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
-    // Include FP inbound in total for manufacturing calculation
-    const totalWithInbound = totalStock + (p.fp_inbound||0);
+    const poQty = State.packiyoPOs[p.catalog]?.qty || 0;
+    const totalWithInbound = totalStock + (p.fp_inbound||0) + poQty;
     const annual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0);
     const monthly = annual / 12;
     if (monthly <= 0) return null;
+    const need12mo = Math.ceil(monthly * 12);
     const monthsLeft = totalWithInbound / monthly;
     if (monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
 
-    const isLPItem = isVinyl(p.format || p.title || '');
+    const isLPItem = isVinyl(p.format || '');
     const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
     const poDeadlineDate = new Date(today.getTime() + (monthsLeft - leadTime) * 30 * 24 * 3600 * 1000);
     const daysToDeadline = Math.round((poDeadlineDate - today) / (24 * 3600 * 1000));
@@ -587,12 +628,17 @@ function renderManufacturing() {
     else if (daysToDeadline < 30) urgency = 'urgent';
     else if (daysToDeadline < 90) urgency = 'soon';
 
-    return { ...p, totalStock, totalWithInbound, monthly, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem };
+    const hasPO = poQty > 0;
+    return { ...p, totalStock, poQty, totalWithInbound, monthly, need12mo, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem, hasPO };
   }).filter(Boolean);
 
-  if (filter === 'urgent') items = items.filter(i => i.urgency === 'urgent' || i.urgency === 'overdue');
-  if (filter === 'lp')     items = items.filter(i => i.isLP);
-  if (filter === 'cd')     items = items.filter(i => !i.isLP);
+  // Urgency filter
+  if (urgFilter === 'urgent')  items = items.filter(i => i.urgency === 'urgent' || i.urgency === 'overdue');
+  if (urgFilter === 'soon')    items = items.filter(i => i.urgency === 'soon');
+  if (urgFilter === 'plan')    items = items.filter(i => i.urgency === 'plan');
+  if (urgFilter === 'has_po')  items = items.filter(i => i.hasPO);
+  if (urgFilter === 'lp')      items = items.filter(i => i.isLP);
+  if (urgFilter === 'cd')      items = items.filter(i => !i.isLP);
 
   items.sort((a, b) => {
     let av = a[State.mfgSortCol], bv = b[State.mfgSortCol];
@@ -603,13 +649,13 @@ function renderManufacturing() {
     return 0;
   });
 
-  // Wire up mfg sort headers
+  // Wire up sort headers
   document.querySelectorAll('#mfg-table th.sortable').forEach(th => {
     th.onclick = () => {
       const col = th.dataset.col;
       if (State.mfgSortCol === col) State.mfgSortDir = State.mfgSortDir === 'asc' ? 'desc' : 'asc';
       else { State.mfgSortCol = col; State.mfgSortDir = 'asc'; }
-      document.querySelectorAll('#mfg-table th.sortable').forEach(t => { t.classList.remove('sort-asc','sort-desc'); });
+      document.querySelectorAll('#mfg-table th.sortable').forEach(t => t.classList.remove('sort-asc','sort-desc'));
       th.classList.add(State.mfgSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
       renderManufacturing();
     };
@@ -617,34 +663,59 @@ function renderManufacturing() {
 
   const tbody = document.getElementById('mfg-tbody');
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="13" class="empty-cell">No items require manufacturing attention right now.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" class="empty-cell">No items match current filters.</td></tr>`;
     return;
   }
 
+  const hiddenCount = State.hiddenMfgItems.size;
+
   tbody.innerHTML = items.map(p => {
-    const urgPill = { overdue:`<span class="pill pill-critical">Overdue</span>`, urgent:`<span class="pill pill-urgent">Urgent</span>`, soon:`<span class="pill pill-soon">Soon</span>`, plan:`<span class="pill pill-plan">Plan</span>` }[p.urgency] || '';
+    const urgPill = {
+      overdue: `<span class="pill pill-critical">Overdue</span>`,
+      urgent:  `<span class="pill pill-urgent">Urgent</span>`,
+      soon:    `<span class="pill pill-soon">Soon</span>`,
+      plan:    `<span class="pill pill-plan">Plan</span>`,
+    }[p.urgency] || '';
+
     const dl = p.daysToDeadline < 0
       ? `<span style="color:var(--red);font-weight:600">PAST DUE</span>`
       : formatDate(p.poDeadlineDate);
+
     const inboundCell = p.fp_inbound > 0
       ? `<span style="color:var(--green);font-weight:500">${p.fp_inbound}</span>`
       : `<span class="num-zero">0</span>`;
-    return `<tr>
+
+    const poCell = p.poQty > 0
+      ? `<span style="color:var(--blue);font-weight:600" title="${State.packiyoPOs[p.catalog]?.pos?.map(x=>x.poId+': '+x.qty).join(', ')}">${p.poQty}</span>`
+      : `<span class="num-zero">—</span>`;
+
+    const rowStyle = p.hasPO ? 'background:#fffbe6;' : '';
+    const rowHoverClass = p.hasPO ? 'class="row-has-po"' : '';
+
+    return `<tr style="${rowStyle}" ${rowHoverClass}>
       <td>${esc(p.artist)}</td>
       <td>${esc(p.title)}</td>
       <td><code>${esc(p.catalog)}</code></td>
       <td>${esc(p.format)}</td>
       <td class="num">${numCell(p.totalStock)}</td>
       <td class="num">${inboundCell}</td>
+      <td class="num">${poCell}</td>
       <td class="num" style="font-style:italic;color:var(--text-muted)">${numCell(p.totalWithInbound)}</td>
       <td class="num">${p.monthly.toFixed(1)}</td>
+      <td class="num" style="font-weight:600;color:var(--accent)">${p.need12mo}</td>
       <td class="num" style="font-weight:600">${p.monthsLeft.toFixed(1)}</td>
       <td>${dl}</td>
       <td>${urgPill}</td>
-      <td style="font-size:11px;color:var(--text-muted)">FP WH / Orchard US</td>
+      <td><button class="btn-ghost" style="font-size:11px;color:var(--text-dim)" onclick="hideMfgItem('${p.upc}')">Hide</button></td>
     </tr>`;
-  }).join('');
+  }).join('') + (hiddenCount > 0 ? `<tr><td colspan="14" style="text-align:center;padding:10px;color:var(--text-muted);font-size:11px;background:var(--surface2)">${hiddenCount} item${hiddenCount>1?'s':''} hidden. <a href="#" onclick="event.preventDefault();State.hiddenMfgItems.clear();renderManufacturing()" style="color:var(--accent)">Show all</a></td></tr>` : '');
 }
+
+window.hideMfgItem = function(upc) {
+  State.hiddenMfgItems.add(upc);
+  renderManufacturing();
+  toast('Item hidden. Use "Show all" to restore.', '');
+};
 
 // ── ALERTS VIEW ───────────────────────────────────────────────
 const WAREHOUSES = [
