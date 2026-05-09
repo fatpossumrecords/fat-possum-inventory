@@ -7,34 +7,29 @@
 
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 
+/* Update your CSS file with these values */
 :root {
-  --bg:         #0f0f0f;
-  --surface:    #1a1a1a;
-  --surface2:   #222222;
-  --border:     #2e2e2e;
-  --border2:    #3a3a3a;
-  --text:       #e8e8e8;
-  --text-muted: #7a7a7a;
-  --text-dim:   #4a4a4a;
-  --accent:     #d42b2b;
-  --accent-dim: #7a1818;
-  --green:      #2aad5a;
-  --yellow:     #e0a020;
-  --red:        #d42b2b;
-  --blue:       #3a7bd5;
-  --sidebar-w:  220px;
-  --header-h:   60px;
+  --bg-color: #fcfcfc;
+  --card-bg: #ffffff;
+  --text-main: #1a1a1a;
+  --text-muted: #666666;
+  --border-color: #e0e0e0;
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+}
 
-html, body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'IBM Plex Sans', sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
+/* Ensure tables look clean in light mode */
+table {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
+th {
+  background-color: #f1f3f5;
+  color: #333;
 }
 
 .hidden { display: none !important; }
