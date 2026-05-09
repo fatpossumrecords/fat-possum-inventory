@@ -300,3 +300,36 @@ select { cursor: pointer; }
 
 @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ── RESIZABLE + PINNABLE COLUMNS ── */
+.resize-handle {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+  border-right: 2px solid transparent;
+  transition: border-color 0.15s;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  border-right-color: var(--accent);
+}
+th { position: relative; overflow: visible !important; }
+
+.pin-btn {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.3;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  vertical-align: middle;
+  line-height: 1;
+  user-select: none;
+}
+.pin-btn:hover { opacity: 0.8; }
+th.is-pinned .pin-btn { opacity: 1; }
+
+/* Prevent text overflow in fixed-width cols */
+td { overflow: hidden; text-overflow: ellipsis; }
