@@ -172,7 +172,7 @@ async function loadPackiyo() {
       const items = data.data || data.products || [];
       if (!Array.isArray(items) || items.length === 0) break;
       allProducts = allProducts.concat(items);
-      const lastPage = data.meta?.last_page || data.meta?.page_count || data.meta?.total_pages || 1; if (page >= lastPage) break;
+      const lastPage = data.meta?.page?.lastPage || 1; if (page >= lastPage) break;
       page++;
     }
     State.packiyoProducts = allProducts;
