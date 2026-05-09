@@ -216,7 +216,7 @@ function mergeData() {
       title:        p.name || '',
       artist:       '',
       label:        '',
-      format:       p.name ? guessFormat(p.name) : '',
+      format:       '', // format only from Orchard CSV, never Packiyo
       fromPackiyo:  true,
       fp_available: safeNum(p.quantity_available),
       fp_onhand:    safeNum(p.quantity_on_hand),
