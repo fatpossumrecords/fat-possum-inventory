@@ -178,27 +178,26 @@ async function loadPackiyoPOs() {
       if (inc.type === 'products') productById[inc.id] = inc.attributes || {};
     }
 
-    // Build sku -> PO map from open POs only
+    // Build sku -> PO map — use quantity_pending > 0 as the only gate (don't rely on closed_at)
     const poMap = {};
     for (const po of allPOs) {
       const attrs = po.attributes || {};
-      if (attrs.closed_at) continue; // skip closed POs
       const poNumber = attrs.number || po.id;
       const itemRefs = po.relationships?.purchase_order_items?.data || [];
       for (const ref of itemRefs) {
         const lineItem = lineItemById[ref.id];
         if (!lineItem) continue;
         const lineAttrs = lineItem.attributes || {};
-        // Get SKU from the related product via the line item's relationship
+        const qtyPending = safeNum(lineAttrs.quantity_pending);
+        if (qtyPending <= 0) continue; // only care about items still pending
+        // Get SKU from the related product
         const productRef = lineItem.relationships?.product?.data;
         const product = productRef ? productById[productRef.id] : null;
-        const sku = product?.sku || lineAttrs.sku || lineAttrs.product_sku || '';
-        const qtyPending = safeNum(lineAttrs.quantity_pending ?? Math.max(0, safeNum(lineAttrs.quantity) - safeNum(lineAttrs.quantity_received)));
-        if (sku && qtyPending > 0) {
-          if (!poMap[sku]) poMap[sku] = { qty: 0, pos: [] };
-          poMap[sku].qty += qtyPending;
-          poMap[sku].pos.push({ poId: poNumber, qty: qtyPending });
-        }
+        const sku = product?.sku || '';
+        if (!sku) continue;
+        if (!poMap[sku]) poMap[sku] = { qty: 0, pos: [] };
+        poMap[sku].qty += qtyPending;
+        poMap[sku].pos.push({ poId: poNumber, qty: qtyPending });
       }
     }
 
