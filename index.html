@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -114,33 +115,7 @@
       <div class="table-wrap">
         <table id="inventory-table">
           <thead>
-            <tr>
-              <th class="sortable" data-col="artist">Artist</th>
-              <th class="sortable" data-col="title">Title</th>
-              <th class="sortable" data-col="catalog">Catalog #</th>
-              <th>UPC</th>
-              <th>Format</th>
-              <th class="num sortable" data-col="fp_avail">FP WH</th>
-              <th class="num sortable" data-col="us_avail">US Avail</th>
-              <th class="num">US MTD</th>
-              <th class="num">US 3MS</th>
-              <th class="num">US 12MS</th>
-              <th class="num sortable" data-col="ca_avail">CA Avail</th>
-              <th class="num">CA MTD</th>
-              <th class="num">CA 3MS</th>
-              <th class="num">CA 12MS</th>
-              <th class="num sortable" data-col="uk_avail">UK Avail</th>
-              <th class="num">UK Open Ord</th>
-              <th class="num">UK Last Mo</th>
-              <th class="num">UK This Yr</th>
-              <th class="num">UK Last Yr</th>
-              <th class="num sortable" data-col="eu_avail">EU Avail</th>
-              <th class="num">EU MTD</th>
-              <th class="num">EU Last Mo</th>
-              <th class="num">EU This Yr</th>
-              <th class="num sortable" data-col="total">Total Stock</th>
-              <th>Status</th>
-            </tr>
+
           </thead>
           <tbody id="inventory-tbody">
             <tr><td colspan="25" class="loading-cell">Loading data…</td></tr>
@@ -218,6 +193,7 @@
                   <th>To</th>
                   <th>Artist</th>
                   <th>Title</th>
+                  <th>Label</th>
                   <th>Catalog #</th>
                   <th>UPC</th>
                   <th>Format</th>
@@ -259,12 +235,13 @@
               <th class="sortable" data-col="artist">Artist</th>
               <th class="sortable" data-col="title">Title</th>
               <th>Catalog #</th>
-              <th>UPC</th>
               <th>Format</th>
-              <th class="num">Total Stock</th>
-              <th class="num">Global Velocity/mo</th>
-              <th class="num sortable" data-col="months_left">Months Left</th>
-              <th class="num">PO Deadline</th>
+              <th class="num sortable" data-col="totalStock">Total Stock</th>
+              <th class="num">FP Inbound</th>
+              <th class="num">Total w/ Inbound</th>
+              <th class="num">Mo. Velocity</th>
+              <th class="num sortable" data-col="monthsLeft">Months Left</th>
+              <th>PO Deadline</th>
               <th>Urgency</th>
               <th>Ship To</th>
             </tr>
