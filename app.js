@@ -933,8 +933,9 @@ window.applyAlertSelections = function() {
     const upc   = cb.dataset.upc;
     const from  = cb.dataset.from;
     const to    = cb.dataset.to;
-    const qty   = parseInt(cb.dataset.qty, 10);
-    if (!qty || qty <= 0) return;
+    let qty = parseInt(cb.dataset.qty, 10);
+    if (isNaN(qty) || qty < 0) return;
+    if (qty === 0) qty = 1; // no stock at source, add as placeholder so user can see it
     const prod = State.merged.find(p => p.upc === upc);
     if (!prod) return;
     // Avoid duplicates already in queue
@@ -955,10 +956,12 @@ window.applyAlertSelections = function() {
     added++;
   });
 
-  if (added === 0) { toast('All selected items already in movement queue.', ''); return; }
+  if (added === 0) { toast('All selected items already in movement queue or have 0 transferable stock.', ''); return; }
+  renderMovementsTable();
   toast(`${added} movement${added>1?'s':''} added to queue.`, 'success');
-  // Switch to movements view
   switchView('movements');
+  // Re-render after switch to ensure table is visible
+  setTimeout(renderMovementsTable, 50);
 };
 
 // ── MOVEMENTS ──────────────────────────────────────────────────
@@ -1042,12 +1045,23 @@ function renderMovementsTable() {
     <td><code>${esc(m.catalog)}</code></td>
     <td><code style="font-size:10px">${esc(m.upc)}</code></td>
     <td>${esc(m.format)}</td>
-    <td class="num">${m.qty}</td>
-    <td style="color:var(--text-muted)">${esc(m.notes)}</td>
+    <td class="num"><input type="number" min="1" value="${m.qty}" 
+      style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+      onchange="updateMovementQty(${i}, this.value)" /></td>
+    <td><input type="text" value="${esc(m.notes)}"
+      style="width:140px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+      onchange="updateMovementNotes(${i}, this.value)" placeholder="Notes…" /></td>
     <td><button class="btn-danger" onclick="removeMovement(${i})">×</button></td>
   </tr>`).join('');
 }
 window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); };
+window.updateMovementQty = function(i, val) {
+  const n = parseInt(val, 10);
+  if (!isNaN(n) && n > 0) State.movements[i].qty = n;
+};
+window.updateMovementNotes = function(i, val) {
+  State.movements[i].notes = val;
+};
 
 // ── EXPORTS ───────────────────────────────────────────────────
 function exportMovements() {
