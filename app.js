@@ -29,6 +29,10 @@ const State = {
   alertSort: { us: { col: 'weeksLeft', dir: 'asc' }, ca: { col: 'weeksLeft', dir: 'asc' }, uk: { col: 'weeksLeft', dir: 'asc' }, eu: { col: 'weeksLeft', dir: 'asc' } },
   // which warehouse sales panels are expanded
   expanded: { fp: false, us: false, ca: false, uk: false, eu: false },
+  // pinned column ids
+  pinnedCols: new Set(),
+  // manual column widths: { colId: px }
+  colWidths: {},
 };
 
 // ── BOOT ──────────────────────────────────────────────────────
@@ -47,6 +51,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('search-input').addEventListener('input', renderInventory);
+  document.getElementById('filter-status').addEventListener('change', renderInventory);
   document.getElementById('filter-config').addEventListener('change', renderInventory);
   document.getElementById('filter-warehouse').addEventListener('change', renderInventory);
   document.getElementById('export-inventory-btn').addEventListener('click', exportInventory);
@@ -317,38 +322,111 @@ function visibleCols() {
 
 function buildInventoryHeader() {
   const thead = document.querySelector('#inventory-table thead');
+  const cols = visibleCols();
 
   // Row 1: group headers
   const groups = ['meta','fp','us','ca','uk','eu'];
   let row1 = '<tr>';
   for (const g of groups) {
-    const cols = INV_COLS.filter(c => c.group === g);
-    const visCols = cols.filter(c => c.always || State.expanded[g]);
+    const allCols = INV_COLS.filter(c => c.group === g);
+    const visCols = allCols.filter(c => c.always || State.expanded[g]);
     if (visCols.length === 0) continue;
     if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="background:transparent;border-right:2px solid var(--border2);"></th>`;
+      row1 += `<th colspan="${visCols.length}" style="background:transparent;border-right:2px solid var(--border2);padding:4px 10px;font-size:9px;color:var(--text-dim);">📌 click pin icon to freeze column</th>`;
     } else {
-      const hasSales = cols.some(c => !c.always);
+      const hasSales = allCols.some(c => !c.always);
       const expandBtn = hasSales
-        ? `<span onclick="toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:11px;opacity:0.6;" title="${State.expanded[g]?'Collapse sales':'Expand sales'}">${State.expanded[g]?'▾':'▸'}</span>`
+        ? `<span onclick="toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:11px;opacity:0.7;" title="${State.expanded[g]?'Collapse sales':'Expand sales'}">${State.expanded[g]?'▾':'▸'}</span>`
         : '';
       row1 += `<th colspan="${visCols.length}" class="group-header" style="text-align:center;border-right:2px solid var(--border2);">${GROUP_LABELS[g]}${expandBtn}</th>`;
     }
   }
   row1 += '</tr>';
 
-  // Row 2: column headers
+  // Row 2: column headers with pin buttons and resize handles
   let row2 = '<tr>';
-  for (const col of visibleCols()) {
-    const isLast = col === visibleCols()[visibleCols().length - 1] || visibleCols()[visibleCols().indexOf(col)+1]?.group !== col.group;
-    const borderStyle = isLast ? 'border-right:2px solid var(--border2);' : '';
+  let leftOffset = 0;
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
+    const nextCol = cols[i+1];
+    const isGroupEnd = !nextCol || nextCol.group !== col.group;
+    const isPinned = State.pinnedCols.has(col.id);
     const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
     const sortCls = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
-    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}" data-col="${col.id}" style="${borderStyle}" onclick="handleInvSort('${col.id}')">${col.label}</th>`;
+    const pinIcon = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin column':'Pin column'}">${isPinned?'📌':'📍'}</span>`;
+    const resizeHandle = `<span class="resize-handle" data-col="${col.id}" onmousedown="startResize(event,'${col.id}')"></span>`;
+
+    const width = State.colWidths[col.id] ? `width:${State.colWidths[col.id]}px;min-width:${State.colWidths[col.id]}px;max-width:${State.colWidths[col.id]}px;` : '';
+    const stickyStyle = isPinned ? `position:sticky;left:${leftOffset}px;z-index:11;background:var(--surface2);box-shadow:3px 0 6px rgba(0,0,0,0.08);` : '';
+    const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
+
+    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}" 
+      data-col="${col.id}" 
+      style="${width}${stickyStyle}${borderRight}position:relative;overflow:visible;"
+      onclick="handleInvSort('${col.id}')"
+    >${col.label}${pinIcon}${resizeHandle}</th>`;
+
+    if (isPinned) leftOffset += State.colWidths[col.id] || getDefaultWidth(col);
   }
   row2 += '</tr>';
 
   thead.innerHTML = row1 + row2;
+  // Apply col widths to colgroup
+  applyColWidths();
+}
+
+function getDefaultWidth(col) {
+  if (col.id === 'artist') return 160;
+  if (col.id === 'title')  return 200;
+  if (col.id === 'label')  return 120;
+  if (col.id === 'catalog') return 90;
+  if (col.id === 'upc')    return 110;
+  if (col.id === 'format') return 80;
+  if (col.num)             return 72;
+  return 100;
+}
+
+function applyColWidths() {
+  const table = document.getElementById('inventory-table');
+  let cg = table.querySelector('colgroup');
+  if (!cg) { cg = document.createElement('colgroup'); table.prepend(cg); }
+  const cols = visibleCols();
+  cg.innerHTML = cols.map(col => {
+    const w = State.colWidths[col.id] || getDefaultWidth(col);
+    return `<col style="width:${w}px;min-width:${w}px">`;
+  }).join('');
+}
+
+window.togglePin = function(colId) {
+  if (State.pinnedCols.has(colId)) State.pinnedCols.delete(colId);
+  else State.pinnedCols.add(colId);
+  renderInventory();
+};
+
+// Resize logic
+let _resizing = null;
+window.startResize = function(e, colId) {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = State.colWidths[colId] || getDefaultWidth(INV_COLS.find(c=>c.id===colId));
+  _resizing = { colId, startX, startW };
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', onResizeUp);
+};
+function onResizeMove(e) {
+  if (!_resizing) return;
+  const newW = Math.max(40, _resizing.startW + (e.clientX - _resizing.startX));
+  State.colWidths[_resizing.colId] = newW;
+  applyColWidths();
+  // Update the th width live without full re-render
+  const th = document.querySelector(`#inventory-table th[data-col="${_resizing.colId}"]`);
+  if (th) { th.style.width = newW+'px'; th.style.minWidth = newW+'px'; th.style.maxWidth = newW+'px'; }
+}
+function onResizeUp() {
+  _resizing = null;
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', onResizeUp);
+  buildInventoryHeader(); // re-sync sticky offsets
 }
 
 window.toggleExpand = function(group) {
@@ -373,6 +451,8 @@ function renderInventory() {
   const search    = (document.getElementById('search-input').value || '').toLowerCase();
   const cfgFilter = document.getElementById('filter-config').value.toLowerCase();
   const whFilter  = document.getElementById('filter-warehouse').value;
+  const statusFilter = (document.getElementById('filter-status')?.value || '');
+
 
   let rows = State.merged.filter(p => {
     if (search) {
@@ -387,6 +467,7 @@ function renderInventory() {
       const avail = { fp:p.fp_available, us:p.us_avail, ca:p.ca_avail, uk:p.uk_avail, eu:p.eu_avail };
       if ((avail[whFilter]||0) <= 0) return false;
     }
+    if (statusFilter && stockStatus(p) !== statusFilter) return false;
     return true;
   });
 
@@ -412,22 +493,34 @@ function renderInventory() {
     return;
   }
 
-  // Track group boundaries for right-border styling
+  // Precompute pinned left offsets
+  let leftOff = 0;
+  const pinOffsets = {};
+  for (const col of cols) {
+    if (State.pinnedCols.has(col.id)) {
+      pinOffsets[col.id] = leftOff;
+      leftOff += State.colWidths[col.id] || getDefaultWidth(col);
+    }
+  }
+
   tbody.innerHTML = rows.map(p => {
     return '<tr>' + cols.map((col, i) => {
       const nextCol = cols[i+1];
       const isGroupEnd = !nextCol || nextCol.group !== col.group;
-      const borderStyle = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
+      const isPinned = State.pinnedCols.has(col.id);
+      const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
+      const stickyStyle = isPinned ? `position:sticky;left:${pinOffsets[col.id]}px;z-index:3;box-shadow:3px 0 6px rgba(0,0,0,0.06);` : '';
+      const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
-      if (col.id === 'status') return `<td style="${borderStyle}">${statusPill(v)}</td>`;
-      if (col.id === 'total')  return `<td class="num" style="font-weight:600;${borderStyle}">${numCell(v)}</td>`;
-      if (col.id === 'catalog') return `<td style="${borderStyle}"><code>${esc(v)}</code></td>`;
-      if (col.id === 'upc')    return `<td style="${borderStyle}"><code style="font-size:10px">${esc(v)}</code></td>`;
-      if (col.id === 'format') return `<td style="${borderStyle}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
-      if (col.id === 'fp_available') return `<td class="num" style="${borderStyle}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
-      if (col.num) return `<td class="num" style="${borderStyle}">${numCell(v)}</td>`;
-      return `<td style="${borderStyle}">${esc(v)}</td>`;
+      if (col.id === 'status') return `<td style="${style}">${statusPill(v)}</td>`;
+      if (col.id === 'total')  return `<td class="num" style="font-weight:600;${style}">${numCell(v)}</td>`;
+      if (col.id === 'catalog') return `<td style="${style}"><code>${esc(v)}</code></td>`;
+      if (col.id === 'upc')    return `<td style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
+      if (col.id === 'format') return `<td style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
+      if (col.id === 'fp_available') return `<td class="num" style="${style}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
+      if (col.num) return `<td class="num" style="${style}">${numCell(v)}</td>`;
+      return `<td style="${style}">${esc(v)}</td>`;
     }).join('') + '</tr>';
   }).join('');
 }
