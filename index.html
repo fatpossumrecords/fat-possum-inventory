@@ -280,7 +280,13 @@
             <option value="uk">Orchard UK</option>
             <option value="eu">Orchard EU</option>
           </select>
-          <input type="text" id="alert-filter-label" placeholder="Filter by label…" class="select-sm" style="width:150px" oninput="renderAlerts()" />
+          <select id="alert-filter-label" class="select-sm">
+            <option value="">All labels</option>
+            <option value="Fat Possum">Fat Possum</option>
+            <option value="Grand Jury">Grand Jury</option>
+            <option value="House Arrest">House Arrest</option>
+            <option value="UK Fat Possum Records [PHYSICAL ONLY]">UK Fat Possum</option>
+          </select>
           <button id="apply-alert-selections-btn" class="btn-primary btn-sm" onclick="applyAlertSelections()">Apply Selected → Movements</button>
           <button id="export-alerts-btn" class="btn-secondary btn-sm">Export CSV</button>
         </div>
