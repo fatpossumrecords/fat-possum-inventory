@@ -292,6 +292,7 @@ function mergeData() {
     products.set(upc, {
       upc,
       catalog:      p.sku || '',
+      packiyo_sku:  p.sku || '',  // keep original packiyo SKU for PO lookup
       title:        p.name || '',
       artist:       '',
       label:        '',
@@ -638,7 +639,7 @@ function renderManufacturing() {
   let items = State.merged.map(p => {
     if (State.hiddenMfgItems.has(p.upc)) return null;
     const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
-    const poQty = State.packiyoPOs[p.catalog]?.qty || 0;
+    const poQty = (State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty || 0;
     const totalWithInbound = totalStock + (p.fp_inbound||0) + poQty;
     const annual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0);
     const monthly = annual / 12;
@@ -715,7 +716,7 @@ function renderManufacturing() {
       : `<span class="num-zero">0</span>`;
 
     const poCell = p.poQty > 0
-      ? `<span style="color:var(--blue);font-weight:600" title="${State.packiyoPOs[p.catalog]?.pos?.map(x=>x.poId+': '+x.qty).join(', ')}">${p.poQty}</span>`
+      ? `<span style="color:var(--blue);font-weight:600" title="${(State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.pos?.map(x=>x.poId+': '+x.qty).join(', ')}">${p.poQty}</span>`
       : `<span class="num-zero">—</span>`;
 
     const rowStyle = p.hasPO ? 'background:#fffbe6;' : '';
