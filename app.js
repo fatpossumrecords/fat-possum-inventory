@@ -956,11 +956,13 @@ window.applyAlertSelections = function() {
     added++;
   });
 
-  if (added === 0) { toast('All selected items already in movement queue or have 0 transferable stock.', ''); return; }
   renderMovementsTable();
-  toast(`${added} movement${added>1?'s':''} added to queue.`, 'success');
+  if (added === 0) {
+    toast('Already in queue — switching to Movements.', '');
+  } else {
+    toast(`${added} movement${added>1?'s':''} added to queue.`, 'success');
+  }
   switchView('movements');
-  // Re-render after switch to ensure table is visible
   setTimeout(renderMovementsTable, 50);
 };
 
