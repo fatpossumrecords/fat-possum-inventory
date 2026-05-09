@@ -155,7 +155,6 @@ async function packiyoFetch(endpoint, params = {}) {
     headers: {
       'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`,
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
     }
   });
   if (!res.ok) throw new Error(`Packiyo ${res.status}: ${res.statusText}`);
