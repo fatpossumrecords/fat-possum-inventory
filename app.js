@@ -669,20 +669,21 @@ function renderInventory() {
       const isGroupEnd = !nextCol || nextCol.group !== col.group;
       const isPinned = State.pinnedCols.has(col.id);
       const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-      const stickyStyle = isPinned ? `position:sticky;left:${pinOffsets[col.id]}px;z-index:3;background:var(--surface);box-shadow:2px 0 4px rgba(0,0,0,0.07);` : '';
+      const stickyStyle = isPinned ? `position:sticky;left:${pinOffsets[col.id]}px;z-index:3;box-shadow:2px 0 4px rgba(0,0,0,0.07);` : '';
+      const pinnedClass = isPinned ? ' is-pinned' : '';
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
-      if (col.id === 'artist')  return `<td class="mob-artist" style="${style}">${esc(v)}</td>`;
-      if (col.id === 'title')   return `<td class="mob-title" style="${style}">${esc(v)}</td>`;
-      if (col.id === 'status')  return `<td class="mob-status" style="${style}">${statusPill(v)}</td>`;
-      if (col.id === 'total')   return `<td class="num mob-total" style="font-weight:600;${style}">${numCell(v)}</td>`;
-      if (col.id === 'catalog') return `<td class="mob-catalog" style="${style}"><code>${esc(v)}</code></td>`;
-      if (col.id === 'upc')     return `<td style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
-      if (col.id === 'format')  return `<td class="mob-format" style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
-      if (col.id === 'fp_available') return `<td class="num" style="${style}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
-      if (col.num) return `<td class="num" style="${style}">${numCell(v)}</td>`;
-      return `<td style="${style}">${esc(v)}</td>`;
+      if (col.id === 'artist')  return `<td class="mob-artist${pinnedClass}" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
+      if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
+      if (col.id === 'catalog') return `<td class="mob-catalog${pinnedClass}" style="${style}"><code>${esc(v)}</code></td>`;
+      if (col.id === 'upc')     return `<td class="${pinnedClass}" style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
+      if (col.id === 'format')  return `<td class="mob-format${pinnedClass}" style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
+      if (col.id === 'fp_available') return `<td class="num${pinnedClass}" style="${style}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
+      if (col.num) return `<td class="num${pinnedClass}" style="${style}">${numCell(v)}</td>`;
+      return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
     }).join('') + '</tr>';
   }).join('');
 }
