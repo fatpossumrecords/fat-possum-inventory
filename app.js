@@ -429,9 +429,9 @@ const INV_COLS = [
   { id:'title',      label:'Title',       num:false, group:'meta',  always:true  },
   { id:'label',      label:'Label',       num:false, group:'meta',  always:true  },
   { id:'catalog',    label:'Catalog #',   num:false, group:'meta',  always:true  },
+  { id:'total',      label:'Total Stock', num:true,  group:'meta',  always:true  },
   { id:'upc',        label:'UPC',         num:false, group:'meta',  always:true  },
   { id:'format',     label:'Format',      num:false, group:'meta',  always:true  },
-  { id:'total',      label:'Total Stock', num:true,  group:'meta',  always:true  },
   { id:'status',     label:'Status',      num:false, group:'meta',  always:true  },
   // FP WH
   { id:'fp_available', label:'FP Avail',  num:true,  group:'fp',    always:true  },
@@ -466,8 +466,8 @@ function visibleCols() {
 }
 
 // Fixed sticky columns - always frozen, no pin UI needed
-const STICKY_COLS = ['artist', 'title', 'catalog'];
-const STICKY_WIDTHS = { artist: 140, title: 240, catalog: 100 };
+const STICKY_COLS = ['artist', 'title', 'catalog', 'total'];
+const STICKY_WIDTHS = { artist: 140, title: 240, catalog: 100, total: 80 };
 // Precompute sticky left offsets
 const STICKY_OFFSETS = {};
 let _stickyLeft = 0;
