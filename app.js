@@ -568,12 +568,16 @@ function loadShopifyCSV(file) {
         const vendors = {};
         let currentVendor = '';
         for (const row of rows) {
+          const sku = (row['Variant SKU'] || '').trim();
+          const upc = normalizeUPC(row['Variant Barcode'] || '');
+          // Only process rows that have a real variant SKU or barcode
+          if (!sku && !upc) continue;
           const vendor = (row['Vendor'] || '').trim();
-          if (vendor && !vendor.startsWith('g::') && !vendor.includes('shopify') && vendor.length < 80) {
+          // Only update vendor if this row has one AND it looks like a real artist name
+          // Valid: "Soccer Mommy", "Al Green" — Invalid: "g::Folk", long HTML strings
+          if (vendor && !vendor.startsWith('g::') && !vendor.includes('<') && !vendor.includes('shopify') && vendor.length < 80) {
             currentVendor = vendor;
           }
-          const upc = normalizeUPC(row['Variant Barcode'] || '');
-          const sku = (row['Variant SKU'] || '').trim();
           if (currentVendor && upc) vendors[upc] = currentVendor;
           if (currentVendor && sku) vendors['sku:' + sku] = currentVendor;
         }
