@@ -238,9 +238,21 @@ function renderSuppressedLog() {
   const el = document.getElementById('suppressed-log');
   if (!el) return;
   const suppressed = [...State.suppressedUpcs].map(upc => {
-    const p = State.merged.find(x => x.upc === upc) ||
-              { upc, artist: '—', title: '(not in current CSV)', catalog: '' };
-    return p;
+    // Look in merged first, then raw orchard data, then packiyo products
+    const fromMerged = State.merged.find(x => x.upc === upc);
+    if (fromMerged) return fromMerged;
+    // Check orchard data (raw, before suppression filter)
+    const orchardRow = State.orchardData.find(r => normalizeUPC(r['Display UPC']||'') === upc);
+    if (orchardRow) return {
+      upc,
+      artist: orchardRow['Artist Name'] || '—',
+      title: orchardRow['Release Name'] || '—',
+      catalog: orchardRow['Product Code'] || '',
+    };
+    // Check packiyo products
+    const pkProd = State.packiyoProducts.find(p => normalizeUPC(p.barcode||'') === upc);
+    if (pkProd) return { upc, artist: '—', title: pkProd.name || '—', catalog: pkProd.sku || '' };
+    return { upc, artist: '—', title: '—', catalog: '' };
   });
   if (!suppressed.length) {
     el.innerHTML = '<p style="color:var(--text-muted);font-size:12px">No suppressed titles.</p>';
@@ -645,7 +657,6 @@ function mergeData() {
   renderManufacturing();
   renderAlerts();
   renderDashboard();
-  renderSuppressedLog();
 }
 
 function populateLabelDropdown() {
@@ -1720,7 +1731,8 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
-  if (viewName === 'dashboard') { renderDashboard(); renderSuppressedLog(); }
+  if (viewName === 'dashboard') renderDashboard();
+  if (viewName === 'suppressed') renderSuppressedLog();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
