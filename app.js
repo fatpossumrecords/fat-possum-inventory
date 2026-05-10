@@ -26,7 +26,7 @@ const State = {
   // mfg sort
   mfgSortCol: 'months_left', mfgSortDir: 'asc',
   // alerts sort per warehouse
-  alertSort: { us: { col: 'weeksLeft', dir: 'asc' }, ca: { col: 'weeksLeft', dir: 'asc' }, uk: { col: 'weeksLeft', dir: 'asc' }, eu: { col: 'weeksLeft', dir: 'asc' } },
+  alertSort: { fp: { col: 'weeksLeft', dir: 'asc' }, us: { col: 'weeksLeft', dir: 'asc' }, ca: { col: 'weeksLeft', dir: 'asc' }, uk: { col: 'weeksLeft', dir: 'asc' }, eu: { col: 'weeksLeft', dir: 'asc' } },
   // which warehouse sales panels are expanded
   expanded: { fp: false, us: false, ca: false, uk: false, eu: false },
   // pinned column ids
@@ -191,8 +191,8 @@ async function loadPackiyo() {
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
     renderDashboard();
 
-    // Load purchase orders in parallel
-    await loadPackiyoPOs();
+    // Load purchase orders and sales velocity in parallel
+    await Promise.all([loadPackiyoPOs(), loadFPVelocity()]);
 
     mergeData();
   } catch (err) {
@@ -273,6 +273,57 @@ async function loadPackiyoPOs() {
   } catch(e) {
     console.warn('Could not load POs:', e.message);
     State.packiyoPOs = {};
+  }
+}
+
+// ── FP SALES VELOCITY ────────────────────────────────────────
+async function loadFPVelocity() {
+  try {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const cutoff = oneYearAgo.toISOString().slice(0, 10);
+
+    let page = 1, allIncluded = [];
+    while (true) {
+      const data = await packiyoFetch('/orders', {
+        'page[number]': page,
+        'page[size]': 100,
+        'include': 'order_items',
+        'filter[status]': 'fulfilled',
+        'filter[ordered_at_from]': cutoff,
+      });
+      const orders = data.data || [];
+      if (!orders.length) break;
+      if (Array.isArray(data.included)) allIncluded = allIncluded.concat(data.included);
+      const lastPage = data.meta?.page?.lastPage || 1;
+      if (page >= lastPage) break;
+      page++;
+    }
+
+    // Sum quantity_shipped per SKU
+    const skuVelocity = {};
+    for (const inc of allIncluded) {
+      if (inc.type !== 'order-items') continue;
+      const a = inc.attributes || {};
+      const sku = a.sku || '';
+      const qty = safeNum(a.quantity_shipped);
+      if (sku && qty > 0) {
+        skuVelocity[sku] = (skuVelocity[sku] || 0) + qty;
+      }
+    }
+
+    // Apply to merged products
+    for (const p of State.merged) {
+      p.fp_12ms = skuVelocity[p.packiyo_sku] || skuVelocity[p.catalog] || 0;
+    }
+    // Also apply to packiyoProducts for use before merge
+    State.fp_velocity = skuVelocity;
+    console.log('FP velocity loaded:', Object.keys(skuVelocity).length, 'SKUs with sales');
+    // Re-render now that we have velocity
+    renderAlerts();
+    renderDashboard();
+  } catch(e) {
+    console.warn('FP velocity load failed:', e.message);
   }
 }
 
@@ -357,6 +408,7 @@ function mergeData() {
       fp_onhand:    safeNum(p.quantity_on_hand),
       fp_inbound:   safeNum(p.quantity_inbound),
       fp_allocated: safeNum(p.quantity_allocated),
+      fp_12ms: 0, // filled after loading order history
       us_avail: 0, us_mtd: 0, us_3ms: 0, us_12ms: 0,
       ca_avail: 0, ca_mtd: 0, ca_3ms: 0, ca_12ms: 0,
       uk_avail: 0, uk_open: 0, uk_last_mo: 0, uk_this_yr: 0, uk_last_yr: 0,
@@ -401,8 +453,10 @@ function mergeData() {
     } else {
       products.set(upc, {
         upc, catalog: o.orchard_catalog, title: o.orchard_title,
+        packiyo_sku: '',
         artist: o.artist, label: o.label, format: o.format,
         fromPackiyo: false, fp_available: 0, fp_onhand: 0, fp_inbound: 0, fp_allocated: 0,
+        fp_12ms: 0,
         ...o,
       });
     }
@@ -834,10 +888,11 @@ window.hideMfgItem = function(upc) {
 
 // ── ALERTS VIEW ───────────────────────────────────────────────
 const WAREHOUSES = [
-  { key:'us', label:'Orchard US',     avail:'us_avail', vel:'us_12ms',   velDiv:12 },
-  { key:'ca', label:'Orchard Canada', avail:'ca_avail', vel:'ca_12ms',   velDiv:12 },
-  { key:'uk', label:'Orchard UK',     avail:'uk_avail', vel:'uk_last_yr',velDiv:12 },
-  { key:'eu', label:'Orchard EU',     avail:'eu_avail', vel:'eu_this_yr',velDiv:12 },
+  { key:'fp', label:'Fat Possum WH',  avail:'fp_available', vel:'fp_12ms',   velDiv:12, repFrom: null },
+  { key:'us', label:'Orchard US',     avail:'us_avail',     vel:'us_12ms',   velDiv:12, repFrom: 'fp' },
+  { key:'ca', label:'Orchard Canada', avail:'ca_avail',     vel:'ca_12ms',   velDiv:12, repFrom: 'us' },
+  { key:'uk', label:'Orchard UK',     avail:'uk_avail',     vel:'uk_last_yr',velDiv:12, repFrom: 'us' },
+  { key:'eu', label:'Orchard EU',     avail:'eu_avail',     vel:'eu_this_yr',velDiv:12, repFrom: 'uk' },
 ];
 
 function renderAlerts() {
@@ -856,7 +911,8 @@ function renderAlerts() {
       if (weeksLeft >= CONFIG.REORDER_WEEKS) return null;
       const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
       // Cap transfer at what the source warehouse actually has available
-      const sourceAvail = wh.key === 'us' ? (p.fp_available||0)
+      const sourceAvail = wh.key === 'fp' ? Infinity  // FP sources from manufacturing, not transfer
+                        : wh.key === 'us' ? (p.fp_available||0)
                         : wh.key === 'ca' ? (p.us_avail||0)
                         : wh.key === 'uk' ? (p.us_avail||0)
                         : wh.key === 'eu' ? (p.uk_avail||0) + (p.us_avail||0)
@@ -884,8 +940,8 @@ function renderAlerts() {
 
     totalAlerts += alerts.length;
 
-    const repFrom    = wh.key==='us' ? 'fp' : wh.key==='ca' ? 'us' : wh.key==='uk' ? 'us' : 'uk';
-    const repLabel   = WH_LABELS[repFrom];
+    const repFrom    = wh.repFrom;
+    const repLabel   = repFrom ? WH_LABELS[repFrom] : '—';
 
     const sortTh = (col, label, num=false) => {
       const active = s.col === col;
@@ -1169,7 +1225,7 @@ function exportAlerts() {
       const weeksLeft = (avail / monthly) * 4.33;
       if (weeksLeft < CONFIG.REORDER_WEEKS) {
         const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
-        const sourceAvail2 = wh.key==='us' ? (p.fp_available||0) : wh.key==='ca' ? (p.us_avail||0) : wh.key==='uk' ? (p.us_avail||0) : (p.uk_avail||0)+(p.us_avail||0);
+        const sourceAvail2 = wh.key==='fp' ? Infinity : wh.key==='us' ? (p.fp_available||0) : wh.key==='ca' ? (p.us_avail||0) : wh.key==='uk' ? (p.us_avail||0) : (p.uk_avail||0)+(p.us_avail||0);
         const transferQty2 = Math.min(suggestQty, sourceAvail2);
         const shortfall2   = Math.max(0, suggestQty - sourceAvail2);
         rows.push([wh.label,p.artist,p.title,p.label,p.catalog,p.upc,p.format,avail,monthly.toFixed(1),weeksLeft.toFixed(1),suggestQty,transferQty2,shortfall2]);
@@ -1203,10 +1259,11 @@ function renderDashboard() {
 
   // Alerts count
   const WAREHOUSES_D = [
-    { key:'us', avail:'us_avail', vel:'us_12ms',   velDiv:12 },
-    { key:'ca', avail:'ca_avail', vel:'ca_12ms',   velDiv:12 },
-    { key:'uk', avail:'uk_avail', vel:'uk_last_yr',velDiv:12 },
-    { key:'eu', avail:'eu_avail', vel:'eu_this_yr',velDiv:12 },
+    { key:'fp', avail:'fp_available', vel:'fp_12ms',   velDiv:12 },
+    { key:'us', avail:'us_avail',     vel:'us_12ms',   velDiv:12 },
+    { key:'ca', avail:'ca_avail',     vel:'ca_12ms',   velDiv:12 },
+    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr',velDiv:12 },
+    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr',velDiv:12 },
   ];
   let alertCount = 0, criticalCount = 0;
   WAREHOUSES_D.forEach(wh => {
@@ -1273,7 +1330,7 @@ function renderDashboard() {
           <thead><tr><th>Warehouse</th><th class="num">Available</th><th class="num">Alerts</th></tr></thead>
           <tbody>
             ${[
-              { label:'Fat Possum WH', avail: State.merged.reduce((s,p)=>s+(p.fp_available||0),0), alerts: 0 },
+              { label:'Fat Possum WH', avail: State.merged.reduce((s,p)=>s+(p.fp_available||0),0), alerts: State.merged.filter(p=>{ const m=(p.fp_12ms||0)/12; return m>0 && ((p.fp_available||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
               { label:'Orchard US',    avail: State.merged.reduce((s,p)=>s+(p.us_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.us_12ms||0)/12; return m>0 && ((p.us_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
               { label:'Orchard Canada',avail: State.merged.reduce((s,p)=>s+(p.ca_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.ca_12ms||0)/12; return m>0 && ((p.ca_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
               { label:'Orchard UK',    avail: State.merged.reduce((s,p)=>s+(p.uk_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.uk_last_yr||0)/12; return m>0 && ((p.uk_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
