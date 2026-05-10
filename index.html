@@ -136,14 +136,21 @@
           <button id="export-inventory-btn" class="btn-secondary btn-sm">Export CSV</button>
         </div>
       </div>
-      <div class="table-wrap">
-        <table id="inventory-table">
-          <thead>
-
-          </thead>
-          <tbody id="inventory-tbody">
-            <tr><td colspan="25" class="loading-cell">Loading data…</td></tr>
-          </tbody>
+      <div class="inv-table-container">
+        <div class="inv-header-wrap">
+          <table id="inventory-header-table">
+            <thead id="inventory-thead"></thead>
+          </table>
+        </div>
+        <div class="inv-body-wrap">
+          <table id="inventory-table">
+            <colgroup id="inventory-colgroup"></colgroup>
+            <tbody id="inventory-tbody">
+              <tr><td colspan="25" class="loading-cell">Loading data…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
         </table>
       </div>
     </div>
