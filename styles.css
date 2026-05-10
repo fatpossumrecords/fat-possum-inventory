@@ -134,10 +134,14 @@ nav { padding: 8px 0; flex: 1; }
 .view-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── TABLE ── */
-.table-wrap { overflow: auto; flex: 1; }
+.table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  position: relative;
+}
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 thead { position: sticky; top: 0; z-index: 20; }
-thead tr th { position: relative; }
 th {
   background: var(--surface2); color: var(--text-muted);
   font-weight: 600; text-transform: uppercase;
@@ -324,7 +328,7 @@ select { cursor: pointer; }
 .resize-handle:active {
   border-right-color: var(--accent);
 }
-th { position: relative; overflow: visible !important; }
+/* th position handled inline in JS */
 
 /* pin buttons removed - artist/title/catalog always frozen */
 
