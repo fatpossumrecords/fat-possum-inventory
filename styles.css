@@ -136,7 +136,8 @@ nav { padding: 8px 0; flex: 1; }
 /* ── TABLE ── */
 .table-wrap { overflow: auto; flex: 1; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
-thead { position: sticky; top: 0; z-index: 10; }
+thead { position: sticky; top: 0; z-index: 20; }
+thead tr th { position: relative; }
 th {
   background: var(--surface2); color: var(--text-muted);
   font-weight: 600; text-transform: uppercase;
@@ -146,6 +147,11 @@ th {
   border-right: 1px solid var(--border);
   white-space: nowrap; text-align: left; user-select: none;
   overflow: hidden;
+}
+/* Pinned th must have solid background and high z-index */
+th.is-pinned {
+  background: var(--surface2) !important;
+  z-index: 21 !important;
 }
 th.num { text-align: right; }
 th.sortable { cursor: pointer; }
@@ -182,7 +188,8 @@ td {
 }
 td.num { text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; }
 tr:hover td { background: #ede9e1; }
-tr:hover td[style*="sticky"] { background: #e8e4dc !important; }
+td.is-pinned { background: var(--surface) !important; }
+tr:hover td.is-pinned { background: #e8e4dc !important; }
 .loading-cell, .empty-cell {
   text-align: center; color: var(--text-muted);
   padding: 40px !important; font-size: 13px;
