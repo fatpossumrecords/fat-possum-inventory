@@ -61,6 +61,10 @@
         <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
         Manufacturing
       </a>
+      <a href="#" class="nav-item" data-view="suppressed">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+        Suppressed
+      </a>
       <a href="#" class="nav-item" data-view="alerts">
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
         Alerts
@@ -103,12 +107,7 @@
       <div id="dashboard-body" style="overflow-y:auto;flex:1;padding:24px;display:flex;flex-direction:column;gap:20px">
         <div class="loading-cell">Loading dashboard…</div>
       </div>
-      <div style="padding:0 24px 24px;border-top:1px solid var(--border);margin-top:0;">
-        <div class="dash-section" style="margin-top:16px">
-          <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:14px;">Suppressed Titles <span style="font-weight:400;font-size:10px">(hidden from all views — click Restore to bring back)</span></h3>
-          <div id="suppressed-log"><p style="color:var(--text-muted);font-size:12px">No suppressed titles.</p></div>
-        </div>
-      </div>
+
     </div>
 
     <!-- INVENTORY VIEW -->
@@ -328,6 +327,19 @@
         </div>
       </div><!-- end mfg-tab-queue -->
 
+    </div>
+
+    <!-- SUPPRESSED VIEW -->
+    <div id="view-suppressed" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h2>Suppressed Titles</h2>
+          <p class="view-sub">Hidden from all views permanently — restore to bring back</p>
+        </div>
+      </div>
+      <div style="padding:24px;overflow-y:auto;flex:1;">
+        <div id="suppressed-log"><p style="color:var(--text-muted);font-size:13px">No suppressed titles.</p></div>
+      </div>
     </div>
 
     <!-- ALERTS VIEW -->
