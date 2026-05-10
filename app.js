@@ -483,48 +483,43 @@ function buildInventoryHeader() {
   // Apply colgroup first so column widths are set before header renders
   applyColWidths();
 
-  // Two header rows: group row + column row
-  // With table-layout:fixed, colspan cells need explicit width = sum of child col widths
-  const groups = ['meta','fp','us','ca','uk','eu'];
-  let row1 = '<tr>';
-  for (const g of groups) {
-    const allCols = INV_COLS.filter(c => c.group === g);
-    const visCols = allCols.filter(c => c.always || State.expanded[g]);
-    if (visCols.length === 0) continue;
-    const isGroupEnd = 'border-right:2px solid var(--border2);';
-    // Calculate total width for this group's visible columns
-    const groupW = visCols.reduce((s,c) => s + (STICKY_COLS.includes(c.id) ? STICKY_WIDTHS[c.id] : (State.colWidths[c.id] || getDefaultWidth(c))), 0);
-    if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="width:${groupW}px;min-width:${groupW}px;position:sticky;left:0;top:0;z-index:22;background:var(--surface2);${isGroupEnd}"></th>`;
-    } else {
-      const hasSales = allCols.some(c => !c.always);
-      const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:12px;color:var(--accent);font-weight:600;" title="${State.expanded[g]?'Collapse sales columns':'Expand sales columns'}">${State.expanded[g]?'▾ hide':'▸ sales'}</span>` : '';
-      row1 += `<th colspan="${visCols.length}" style="width:${groupW}px;min-width:${groupW}px;position:sticky;top:0;z-index:10;text-align:center;background:var(--surface2);${isGroupEnd}white-space:nowrap;overflow:hidden;padding:4px 8px;">${GROUP_LABELS[g]}${btn}</th>`;
-    }
-  }
-  row1 += '</tr>';
-
-  let row2 = '<tr>';
+  // Single header row with warehouse labels embedded in first avail column
+  let row = '<tr>';
   for (let i = 0; i < cols.length; i++) {
     const col = cols[i];
     const next = cols[i+1];
     const isGroupEnd = !next || next.group !== col.group;
+    const isGroupStart = i === 0 || cols[i-1].group !== col.group;
     const isSticky = STICKY_COLS.includes(col.id);
     const w = isSticky ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
     const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
     const sortCls = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
     const resizeHandle = !isSticky ? `<span class="resize-handle" onmousedown="startResize(event,'${col.id}')"></span>` : '';
-    const stickyStyle = isSticky ? `position:sticky;left:${STICKY_OFFSETS[col.id]}px;z-index:21;background:var(--surface2);box-shadow:${isGroupEnd?'2px 0 5px rgba(0,0,0,0.08)':'none'};` : '';
+    const stickyStyle = isSticky ? `position:sticky;left:${STICKY_OFFSETS[col.id]}px;z-index:11;background:var(--surface2);` : '';
     const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isSticky?' is-pinned':''}"
-      data-col="${col.id}"
-      style="width:${w}px;min-width:${w}px;max-width:${w}px;position:sticky;top:26px;${stickyStyle}${borderRight}overflow:hidden;white-space:nowrap;"
-      onclick="handleInvSort('${col.id}')"
-    >${col.label}${resizeHandle}</th>`;
-  }
-  row2 += '</tr>';
 
-  thead.innerHTML = row1 + row2;
+    // For the first column of each warehouse group, add the group label + expand btn above the col label
+    let topLabel = '';
+    if (col.group !== 'meta' && isGroupStart) {
+      const allGroupCols = INV_COLS.filter(c => c.group === col.group);
+      const hasSales = allGroupCols.some(c => !c.always);
+      const expandBtn = hasSales
+        ? `<button onclick="event.stopPropagation();toggleExpand('${col.group}')" style="display:inline-block;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:1px 5px;font-size:9px;font-weight:600;cursor:pointer;margin-left:4px;vertical-align:middle;">${State.expanded[col.group] ? '▾ less' : '▸ more'}</button>`
+        : '';
+      topLabel = `<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:2px;line-height:1.2;">${GROUP_LABELS[col.group]}${expandBtn}</div>`;
+    } else if (col.group !== 'meta') {
+      topLabel = `<div style="margin-bottom:2px;height:14px;"></div>`;
+    }
+
+    row += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isSticky?' is-pinned':''}"
+      data-col="${col.id}"
+      style="width:${w}px;min-width:${w}px;max-width:${w}px;position:sticky;top:0;${stickyStyle}${borderRight}overflow:hidden;vertical-align:bottom;padding-bottom:6px;"
+      onclick="handleInvSort('${col.id}')"
+    >${topLabel}${col.label}${resizeHandle}</th>`;
+  }
+  row += '</tr>';
+
+  thead.innerHTML = row;
 }
 
 function getDefaultWidth(col) {
