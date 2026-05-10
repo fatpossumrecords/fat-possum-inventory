@@ -168,14 +168,26 @@ function resetColumnLayout() {
 }
 
 // ── PACKIYO API ───────────────────────────────────────────────
-async function packiyoFetch(endpoint, params = {}) {
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function packiyoFetch(endpoint, params = {}, retries = 3) {
   const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const url = CONFIG.PACKIYO_BASE + endpoint + (qs ? '?' + qs : '');
-  const res = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`, 'Accept': '*/*' }
-  });
-  if (!res.ok) throw new Error(`Packiyo ${res.status}: ${res.statusText}`);
-  return res.json();
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`, 'Accept': '*/*' }
+    });
+    if (res.status === 429) {
+      // Rate limited — wait and retry
+      const wait = (attempt + 1) * 2000;
+      console.warn(`Packiyo rate limited, retrying in ${wait}ms…`);
+      await sleep(wait);
+      continue;
+    }
+    if (!res.ok) throw new Error(`Packiyo ${res.status}: ${res.statusText}`);
+    return res.json();
+  }
+  throw new Error('Packiyo rate limit exceeded after retries');
 }
 
 async function loadPackiyo() {
@@ -191,14 +203,18 @@ async function loadPackiyo() {
       const lastPage = data.meta?.page?.lastPage || 1;
       if (page >= lastPage) break;
       page++;
+      await sleep(150); // avoid rate limit
     }
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
     renderDashboard();
 
-    // Load purchase orders and sales velocity in parallel
-    await Promise.all([loadPackiyoPOs(), loadFPVelocity()]);
+    // Load POs then velocity sequentially to avoid rate limiting
+    await sleep(500);
+    await loadPackiyoPOs();
+    await sleep(500);
+    await loadFPVelocity();
 
     mergeData();
   } catch (err) {
@@ -227,6 +243,7 @@ async function loadPackiyoPOs() {
       const lastPage = data.meta?.page?.lastPage || 1;
       if (page >= lastPage) break;
       page++;
+      await sleep(200);
     }
 
     // Build lookups for line items and products from included
@@ -371,6 +388,7 @@ async function loadFPVelocity() {
       const lastPage = data.meta?.page?.lastPage || 1;
       if (page >= lastPage) break;
       page++;
+      await sleep(200);
     }
 
     State.fp_velocity = skuVelocity;
