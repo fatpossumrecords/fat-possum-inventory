@@ -44,7 +44,11 @@
       <span class="sidebar-title">Inventory</span>
     </div>
     <nav>
-      <a href="#" class="nav-item active" data-view="inventory">
+      <a href="#" class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 4l3 3 5-5"/></svg>
+        Dashboard
+      </a>
+      <a href="#" class="nav-item" data-view="inventory">
         <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg>
         Inventory
       </a>
@@ -75,6 +79,7 @@
           <span id="orchard-status-text" class="status-label">—</span>
         </div>
       </div>
+      <div id="orchard-last-upload" style="font-size:10px;color:var(--text-dim);margin-top:-4px"></div>
       <button id="upload-csv-btn" class="btn-secondary btn-sm">Upload Orchard CSV</button>
       <input type="file" id="csv-file-input" accept=".csv" class="hidden" />
       <button id="refresh-packiyo-btn" class="btn-secondary btn-sm">Refresh Packiyo</button>
@@ -85,6 +90,19 @@
 
   <!-- MAIN CONTENT -->
   <main id="main-content">
+
+    <!-- DASHBOARD VIEW -->
+    <div id="view-dashboard" class="view active">
+      <div class="view-header">
+        <div>
+          <h2>Dashboard</h2>
+          <p class="view-sub">Global inventory overview</p>
+        </div>
+      </div>
+      <div id="dashboard-body" style="overflow-y:auto;flex:1;padding:24px;display:flex;flex-direction:column;gap:20px">
+        <div class="loading-cell">Loading dashboard…</div>
+      </div>
+    </div>
 
     <!-- INVENTORY VIEW -->
     <div id="view-inventory" class="view active">
