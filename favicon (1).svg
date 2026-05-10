@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="white" rx="3"/>
+
+  <style>
+    .lift {
+      animation: lift 2.5s ease-in-out infinite;
+    }
+    @keyframes lift {
+      0%   { transform: translateY(0); }
+      45%  { transform: translateY(-14px); }
+      65%  { transform: translateY(-14px); }
+      100% { transform: translateY(0); }
+    }
+  </style>
+
+  <!-- forklift body (static) -->
+  <rect x="4" y="14" width="14" height="10" fill="#E8650A" rx="1"/>
+  <!-- mast - taller to show full lift range -->
+  <rect x="15" y="4" width="4" height="20" fill="#C4540A" rx="1"/>
+  <rect x="16" y="4" width="1" height="20" fill="#a03a00" opacity="0.3"/>
+  <rect x="18" y="4" width="1" height="20" fill="#a03a00" opacity="0.3"/>
+  <!-- counterweight -->
+  <rect x="18" y="17" width="4" height="7" fill="#E8650A" rx="1"/>
+  <!-- wheels (static) -->
+  <circle cx="8" cy="25" r="3" fill="#333"/>
+  <circle cx="8" cy="25" r="1.5" fill="#666"/>
+  <circle cx="17" cy="25" r="2.5" fill="#333"/>
+  <circle cx="17" cy="25" r="1.2" fill="#666"/>
+
+  <!-- animated group: forks + pallet -->
+  <g class="lift">
+    <!-- forks -->
+    <rect x="2" y="22" width="13" height="2" fill="#C4540A"/>
+    <rect x="2" y="25" width="13" height="2" fill="#C4540A"/>
+    <!-- pallet boards -->
+    <rect x="3" y="17" width="10" height="5" fill="#f5d090" rx="1"/>
+    <rect x="3" y="18.5" width="10" height="1" fill="#d4a850" opacity="0.7"/>
+    <rect x="3" y="20.5" width="10" height="1" fill="#d4a850" opacity="0.7"/>
+  </g>
+</svg>
