@@ -144,6 +144,8 @@ nav { padding: 8px 0; flex: 1; }
 .inv-body-wrap table {
   border-collapse: collapse;
   table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
 }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 thead th {
