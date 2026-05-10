@@ -134,27 +134,28 @@ nav { padding: 8px 0; flex: 1; }
 .view-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── TABLE ── */
-.table-wrap { overflow: auto; flex: 1; position: relative; }
+.table-wrap { overflow: auto; flex: 1; }
 
-/* Inventory split header/body layout */
-.inv-table-container {
-  display: flex; flex-direction: column; flex: 1; overflow: hidden;
-}
-.inv-header-wrap {
-  overflow: hidden; flex-shrink: 0;
-  border-bottom: 2px solid var(--border);
-}
-.inv-header-wrap table {
-  table-layout: fixed; width: max-content; border-collapse: collapse;
-}
+/* Inventory single-table scrolling container */
 .inv-body-wrap {
-  overflow: auto; flex: 1;
+  overflow: auto;
+  flex: 1;
 }
 .inv-body-wrap table {
-  table-layout: fixed; width: max-content; border-collapse: collapse;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
-thead { z-index: 20; }
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface2);
+}
+thead th.is-pinned {
+  z-index: 20 !important;
+  background: var(--surface2) !important;
+}
 th {
   background: var(--surface2); color: var(--text-muted);
   font-weight: 600; text-transform: uppercase;
