@@ -495,7 +495,7 @@ function buildInventoryHeader() {
     // Calculate total width for this group's visible columns
     const groupW = visCols.reduce((s,c) => s + (STICKY_COLS.includes(c.id) ? STICKY_WIDTHS[c.id] : (State.colWidths[c.id] || getDefaultWidth(c))), 0);
     if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="width:${groupW}px;min-width:${groupW}px;position:sticky;left:0;top:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;white-space:nowrap;overflow:hidden;">Artist · Title · Catalog # always frozen</th>`;
+      row1 += `<th colspan="${visCols.length}" style="width:${groupW}px;min-width:${groupW}px;position:sticky;left:0;top:0;z-index:22;background:var(--surface2);${isGroupEnd}"></th>`;
     } else {
       const hasSales = allCols.some(c => !c.always);
       const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:12px;color:var(--accent);font-weight:600;" title="${State.expanded[g]?'Collapse sales columns':'Expand sales columns'}">${State.expanded[g]?'▾ hide':'▸ sales'}</span>` : '';
@@ -518,7 +518,7 @@ function buildInventoryHeader() {
     const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
     row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isSticky?' is-pinned':''}"
       data-col="${col.id}"
-      style="width:${w}px;min-width:${w}px;max-width:${w}px;position:sticky;top:28px;${stickyStyle}${borderRight}overflow:hidden;white-space:nowrap;"
+      style="width:${w}px;min-width:${w}px;max-width:${w}px;position:sticky;top:26px;${stickyStyle}${borderRight}overflow:hidden;white-space:nowrap;"
       onclick="handleInvSort('${col.id}')"
     >${col.label}${resizeHandle}</th>`;
   }
