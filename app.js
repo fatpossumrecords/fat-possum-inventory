@@ -1185,7 +1185,22 @@ function renderAlerts() {
           <a href="#" onclick="event.preventDefault();deselectAllAlerts('${wh.key}')" style="color:var(--text-muted);font-size:10px">Deselect all</a>
         </span>
       </h3>
-      <div class="table-wrap"><table id="alert-table-${wh.key}">
+      <div class="table-wrap"><table id="alert-table-${wh.key}" style="table-layout:fixed;min-width:1100px;">
+        <colgroup>
+          <col style="width:32px">
+          <col style="width:160px">
+          <col style="width:220px">
+          <col style="width:100px">
+          <col style="width:120px">
+          <col style="width:80px">
+          <col style="width:70px">
+          <col style="width:70px">
+          <col style="width:70px">
+          <col style="width:70px">
+          <col style="width:100px">
+          <col style="width:90px">
+          <col style="width:100px">
+        </colgroup>
         <thead><tr>
           <th style="position:sticky;left:0;z-index:11;background:var(--surface2);width:32px;min-width:32px;text-align:center;"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
           <th style="position:sticky;left:32px;z-index:11;background:var(--surface2);width:160px;min-width:160px;cursor:pointer;" onclick="sortAlerts('${wh.key}','artist')">Artist${s.col==='artist'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
