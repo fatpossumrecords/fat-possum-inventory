@@ -181,9 +181,10 @@ td {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
   border-right: 1px solid #e4e0d8;
-  color: var(--text); vertical-align: top;
-  white-space: normal;
-  word-break: break-word;
+  color: var(--text); vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background: var(--surface);
 }
 td.num { text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; }
@@ -344,9 +345,7 @@ th.is-pinned .pin-btn { opacity: 1; }
 
 /* Allow columns to clip but show full text on hover via title; no ellipsis clipping */
 td { overflow: hidden; }
-/* Prevent label/title columns from making rows too tall before user resizes */
-#inventory-table td:nth-child(3) { max-width: 140px; }   /* label */
-#inventory-table td:nth-child(2) { max-width: 240px; }   /* title */
+
 
 /* ── DASHBOARD ── */
 .dash-grid {
