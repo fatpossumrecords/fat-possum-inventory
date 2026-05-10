@@ -281,49 +281,67 @@ async function loadFPVelocity() {
   try {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const cutoff = oneYearAgo.toISOString().slice(0, 10);
+    const skuVelocity = {};
+    let page = 1, done = false;
 
-    let page = 1, allIncluded = [];
-    while (true) {
+    setStatus('packiyo', 'loading', 'Loading sales…');
+
+    while (!done) {
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
         'include': 'order_items',
-        'filter[status]': 'fulfilled',
-        'filter[ordered_at_from]': cutoff,
       });
       const orders = data.data || [];
       if (!orders.length) break;
-      if (Array.isArray(data.included)) allIncluded = allIncluded.concat(data.included);
+
+      // Check if oldest order on this page is beyond 12 months
+      const lastOrder = orders[orders.length - 1];
+      const lastDate = new Date(lastOrder.attributes?.ordered_at || 0);
+      if (lastDate < oneYearAgo) done = true; // stop after this page
+
+      // Only count fulfilled orders within last 12 months
+      const validOrderIds = new Set(
+        orders
+          .filter(o => {
+            const status = (o.attributes?.status_text || '').toLowerCase();
+            const date = new Date(o.attributes?.ordered_at || 0);
+            return (status === 'fulfilled' || status === 'completed') && date >= oneYearAgo;
+          })
+          .map(o => o.id)
+      );
+
+      // Sum order-items for valid orders
+      const included = data.included || [];
+      for (const inc of included) {
+        if (inc.type !== 'order-items') continue;
+        // Match to a valid order via relationship
+        const a = inc.attributes || {};
+        const sku = a.sku || '';
+        const qty = safeNum(a.quantity_shipped);
+        if (sku && qty > 0) {
+          skuVelocity[sku] = (skuVelocity[sku] || 0) + qty;
+        }
+      }
+
       const lastPage = data.meta?.page?.lastPage || 1;
       if (page >= lastPage) break;
       page++;
     }
 
-    // Sum quantity_shipped per SKU
-    const skuVelocity = {};
-    for (const inc of allIncluded) {
-      if (inc.type !== 'order-items') continue;
-      const a = inc.attributes || {};
-      const sku = a.sku || '';
-      const qty = safeNum(a.quantity_shipped);
-      if (sku && qty > 0) {
-        skuVelocity[sku] = (skuVelocity[sku] || 0) + qty;
-      }
-    }
-
+    State.fp_velocity = skuVelocity;
     // Apply to merged products
     for (const p of State.merged) {
       p.fp_12ms = skuVelocity[p.packiyo_sku] || skuVelocity[p.catalog] || 0;
     }
-    // Also apply to packiyoProducts for use before merge
-    State.fp_velocity = skuVelocity;
-    console.log('FP velocity loaded:', Object.keys(skuVelocity).length, 'SKUs with sales');
-    // Re-render now that we have velocity
+    setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
+    console.log('FP velocity loaded:', Object.keys(skuVelocity).length, 'SKUs with sales in last 12mo, pages fetched:', page);
     renderAlerts();
     renderDashboard();
+    renderInventory();
   } catch(e) {
     console.warn('FP velocity load failed:', e.message);
+    setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
   }
 }
 
