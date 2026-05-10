@@ -303,21 +303,35 @@ async function loadFPVelocity() {
       if (lastDate < oneYearAgo) done = true; // stop after this page
 
       // Only count fulfilled orders within last 12 months
+      // Exclude "PO#:" orders — those are Orchard replenishments, not real sales
       const validOrderIds = new Set(
         orders
           .filter(o => {
-            const status = (o.attributes?.status_text || '').toLowerCase();
-            const date = new Date(o.attributes?.ordered_at || 0);
-            return (status === 'fulfilled' || status === 'completed') && date >= oneYearAgo;
+            const attrs = o.attributes || {};
+            const status = (attrs.status_text || '').toLowerCase();
+            const date = new Date(attrs.ordered_at || 0);
+            const num = attrs.number || '';
+            const isOrchardReplenishment = num.startsWith('PO#:') || num.startsWith('PO:');
+            return (status === 'fulfilled' || status === 'completed')
+              && date >= oneYearAgo
+              && !isOrchardReplenishment;
           })
           .map(o => o.id)
       );
 
-      // Sum order-items for valid orders
+      // Build set of order-item IDs that belong to valid (real sale) orders
+      const validItemIds = new Set();
+      for (const o of orders) {
+        if (!validOrderIds.has(o.id)) continue;
+        const itemRefs = o.relationships?.order_items?.data || [];
+        for (const ref of itemRefs) validItemIds.add(ref.id);
+      }
+
+      // Sum order-items for valid real-sales orders only
       const included = data.included || [];
       for (const inc of included) {
         if (inc.type !== 'order-items') continue;
-        // Match to a valid order via relationship
+        if (!validItemIds.has(inc.id)) continue;
         const a = inc.attributes || {};
         const sku = a.sku || '';
         const qty = safeNum(a.quantity_shipped);
@@ -914,7 +928,7 @@ window.hideMfgItem = function(upc) {
 
 // ── ALERTS VIEW ───────────────────────────────────────────────
 const WAREHOUSES = [
-  { key:'fp', label:'Fat Possum WH',  avail:'fp_available', vel:'fp_12ms',   velDiv:12, repFrom: null },
+  { key:'fp', label:'Fat Possum WH',  avail:'fp_available', vel:'fp_12ms',   velDiv:12, repFrom: 'us' },
   { key:'us', label:'Orchard US',     avail:'us_avail',     vel:'us_12ms',   velDiv:12, repFrom: 'fp' },
   { key:'ca', label:'Orchard Canada', avail:'ca_avail',     vel:'ca_12ms',   velDiv:12, repFrom: 'us' },
   { key:'uk', label:'Orchard UK',     avail:'uk_avail',     vel:'uk_last_yr',velDiv:12, repFrom: 'us' },
