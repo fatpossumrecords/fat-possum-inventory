@@ -81,7 +81,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('add-movement-btn').addEventListener('click', addMovement);
   document.getElementById('export-movements-btn').addEventListener('click', exportMovements);
-  document.getElementById('clear-movements-btn').addEventListener('click', () => { State.movements = []; renderMovementsTable(); toast('Movement queue cleared.'); });
+  document.getElementById('clear-movements-btn').addEventListener('click', () => { State.movements = []; renderMovementsTable(); saveGistData(); toast('Movement queue cleared.'); });
   document.getElementById('mov-product-search').addEventListener('input', debounce(updateMovementDropdown, 200));
   document.getElementById('mov-from').addEventListener('change', validateRoute);
   document.getElementById('mov-to').addEventListener('change', validateRoute);
@@ -127,6 +127,7 @@ function bootApp() {
   // Load Gist FIRST (suppressed titles, manual artists, shopify vendors)
   // then load Packiyo so mergeData has the suppression list ready
   loadGistData().then(() => {
+    if (State.movements.length) renderMovementsTable();
     loadPackiyo();
   });
   // Also restore from localStorage cache while Packiyo loads
@@ -218,6 +219,9 @@ async function loadGistData() {
     if (parsed.manualArtists) {
       State.manualArtists = parsed.manualArtists;
     }
+    if (parsed.movements) {
+      State.movements = parsed.movements;
+    }
     console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify,', Object.keys(State.manualArtists||{}).length, 'manual artists');
   } catch(e) {
     console.warn('Gist load failed:', e.message);
@@ -230,6 +234,7 @@ async function saveGistData() {
       suppressed: [...State.suppressedUpcs],
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
+      movements: State.movements || [],
     };
     await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
@@ -1515,12 +1520,17 @@ window.applyAlertSelections = function() {
       label:   prod.label,
       qty,
       notes:   leaveNote,
+      status:  'draft',
+      poNumber: '',
+      confirmedAt: null,
+      processedAt: null,
       timestamp: new Date().toISOString(),
     });
     added++;
   });
 
   renderMovementsTable();
+  saveGistData();
   if (added === 0) {
     toast('Already in queue — switching to Movements.', '');
   } else {
@@ -1587,13 +1597,14 @@ function addMovement() {
   if (from === to) { toast('Origin and destination cannot be the same.', 'error'); return; }
   const prod = State.merged.find(p => p.upc === upc);
   if (!prod) { toast('Product not found.', 'error'); return; }
-  State.movements.push({ from, to, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, timestamp: new Date().toISOString() });
+  State.movements.push({ from, to, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, status:'draft', poNumber:'', confirmedAt:null, processedAt:null, timestamp: new Date().toISOString() });
   document.getElementById('mov-product-search').value = '';
   document.getElementById('mov-product-upc').value = '';
   document.getElementById('mov-selected-product').classList.add('hidden');
   document.getElementById('mov-qty').value = 1;
   document.getElementById('mov-notes').value = '';
   renderMovementsTable();
+  saveGistData();
   toast('Movement added to queue.', 'success');
 }
 
@@ -1620,6 +1631,97 @@ function renderMovementsTable() {
     <td><button class="btn-danger" onclick="removeMovement(${i})">×</button></td>
   </tr>`).join('');
 }
+// ── MOVEMENT STATUS ──────────────────────────────────────────
+window.confirmMovement = function(i) {
+  const m = State.movements[i];
+  if (!m) return;
+  if (m.from === 'fp' && m.to === 'us') {
+    // FP→US: need Orchard PO number to match against Packiyo
+    const po = prompt('Enter the Orchard PO# (e.g. "PO# 7200026997"):');
+    if (!po) return;
+    m.poNumber = po.trim();
+    m.status = 'confirmed';
+    m.confirmedAt = new Date().toISOString();
+    toast(`Movement confirmed with ${m.poNumber}. Watching Packiyo for shipment.`, 'success');
+  } else {
+    // Orchard→Orchard: just confirm
+    m.status = 'confirmed';
+    m.confirmedAt = new Date().toISOString();
+    toast('Movement confirmed. Click "Mark Processed" when stock arrives.', 'success');
+  }
+  saveGistData();
+  renderMovementsTable();
+};
+
+window.processMovement = function(i) {
+  const m = State.movements[i];
+  if (!m) return;
+  m.status = 'processed';
+  m.processedAt = new Date().toISOString();
+  saveGistData();
+  renderMovementsTable();
+  toast('Movement marked as processed. Will auto-remove in 30 days.', 'success');
+};
+
+// Check if any FP→US movements with PO# have shipped in Packiyo
+function checkMovementStatuses() {
+  let changed = false;
+  const now = new Date();
+  State.movements = State.movements.filter(m => {
+    // Auto-remove processed Orchard→Orchard after 30 days
+    if (m.status === 'processed' && m.processedAt) {
+      const days = (now - new Date(m.processedAt)) / (24*3600*1000);
+      if (days > 30) { changed = true; return false; }
+    }
+    // Auto-remove shipped FP→US after 7 days
+    if (m.status === 'shipped' && m.shippedAt) {
+      const days = (now - new Date(m.shippedAt)) / (24*3600*1000);
+      if (days > 7) { changed = true; return false; }
+    }
+    return true;
+  });
+
+  // Check Packiyo orders for PO# matches
+  if (State.fp_poOrders) {
+    for (const m of State.movements) {
+      if (m.status === 'confirmed' && m.poNumber && m.from === 'fp' && m.to === 'us') {
+        const match = State.fp_poOrders.find(o =>
+          (o.number || '').trim().toLowerCase() === m.poNumber.trim().toLowerCase()
+        );
+        if (match && (match.status_text === 'Fulfilled' || match.status_text === 'fulfilled')) {
+          m.status = 'shipped';
+          m.shippedAt = match.fulfilled_at || new Date().toISOString();
+          changed = true;
+          toast(`PO ${m.poNumber} shipped! Movement will clear in 7 days.`, 'success');
+        }
+      }
+    }
+  }
+  if (changed) { saveGistData(); renderMovementsTable(); }
+}
+
+// Store PO orders for status checking
+function storeFPPoOrders(orders) {
+  State.fp_poOrders = orders
+    .filter(o => (o.attributes?.number || '').startsWith('PO#'))
+    .map(o => ({
+      number: o.attributes.number,
+      status_text: o.attributes.status_text,
+      fulfilled_at: o.attributes.fulfilled_at,
+    }));
+}
+
+// Get confirmed inbound quantities per warehouse from movements
+function getConfirmedInbound() {
+  const inbound = { fp:0, us:0, ca:0, uk:0, eu:0 };
+  for (const m of State.movements) {
+    if (m.status === 'confirmed' || m.status === 'shipped') {
+      inbound[m.to] = (inbound[m.to] || 0) + (m.qty || 0);
+    }
+  }
+  return inbound;
+}
+
 window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); };
 window.updateMovementQty = function(i, val) {
   const n = parseInt(val, 10);
