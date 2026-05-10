@@ -37,6 +37,10 @@ const State = {
   packiyoPOs: {},
   // FP sales velocity by sku (last 12 months)
   fp_velocity: {},
+  // Full open PO list for queue view
+  packiyoPOList: [],
+  // Locally stored PO notes/amounts keyed by PO number
+  poAnnotations: JSON.parse(localStorage.getItem('fp_po_annotations') || '{}'),
   // manufacturing queue - persisted to localStorage
   mfgQueue: JSON.parse(localStorage.getItem('fp_mfg_queue') || '[]'),
   // manual column widths: { colId: px }
@@ -255,10 +259,38 @@ async function loadPackiyoPOs() {
         if (!poMap[sku]) poMap[sku] = { qty: 0, pos: [] };
         poMap[sku].qty += qtyPending;
         poMap[sku].pos.push({ poId: poNumber, qty: qtyPending });
+
+        // Store line data on PO object for queue view
+        if (!po._lines) po._lines = [];
+        const prod = productById[productRef?.id] || {};
+        po._lines.push({
+          sku, qty: safeNum(lineAttrs.quantity),
+          qtyPending, qtyReceived: safeNum(lineAttrs.quantity_received),
+          artist: prod.name ? '' : '',  // filled from merged data below
+          title: prod.name || '',
+          catalog: prod.sku || sku,
+          format: '',
+        });
       }
     }
 
     State.packiyoPOs = poMap;
+    State.packiyoPOList = allPOs.filter(po => !po.attributes?.closed_at);
+
+    // Enrich PO lines with artist/format from merged products
+    setTimeout(() => {
+      for (const po of State.packiyoPOList) {
+        for (const line of (po._lines || [])) {
+          const merged = State.merged.find(p => p.packiyo_sku === line.sku || p.catalog === line.sku);
+          if (merged) {
+            line.artist = merged.artist;
+            line.title = line.title || merged.title;
+            line.catalog = merged.orchard_catalog || merged.catalog;
+            line.format = merged.format;
+          }
+        }
+      }
+    }, 2000);
     const poCount = Object.keys(poMap).length;
     console.log(`POs loaded: ${poCount} SKUs with open orders | allPOs: ${allPOs.length} | openPOs: ${allPOs.filter(p=>!p.attributes?.closed_at).length} | included: ${allIncluded.length} | lineItems: ${Object.keys(lineItemById).length} | products: ${Object.keys(productById).length}`);
     if (poCount > 0) console.log('Sample PO data:', JSON.stringify(Object.entries(poMap).slice(0,3)));
@@ -1410,7 +1442,7 @@ function renderDashboard() {
   `;
 }
 
-// ── MANUFACTURING QUEUE ──────────────────────────────────────
+// ── MANUFACTURING QUEUE (Packiyo PO-driven) ──────────────────
 window.switchMfgTab = function(tab) {
   document.querySelectorAll('.mfg-tab').forEach(t => { t.classList.add('hidden'); t.classList.remove('active'); });
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1420,173 +1452,115 @@ window.switchMfgTab = function(tab) {
   if (tab === 'queue') renderMfgQueue();
 };
 
-window.showAddMfgQueueForm = function() {
-  document.getElementById('mfg-queue-form').classList.remove('hidden');
-  // Populate manufacturer datalist from existing queue entries
-  const manufacturers = [...new Set(State.mfgQueue.map(i => i.manufacturer).filter(Boolean))];
-  document.getElementById('manufacturer-list').innerHTML = manufacturers.map(m => `<option value="${esc(m)}">`).join('');
-};
-
-// Product search in queue form
-document.addEventListener('DOMContentLoaded', () => {
-  const searchEl = document.getElementById('mfq-product-search');
-  if (searchEl) {
-    searchEl.addEventListener('input', debounce(() => {
-      const q = searchEl.value.toLowerCase().trim();
-      const dd = document.getElementById('mfq-product-dropdown');
-      if (q.length < 2) { dd.classList.add('hidden'); return; }
-      const matches = State.merged.filter(p => `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)).slice(0, 12);
-      if (!matches.length) { dd.classList.add('hidden'); return; }
-      dd.innerHTML = matches.map(p =>
-        `<div class="product-dropdown-item" data-upc="${esc(p.upc)}">
-          <strong>${esc(p.artist)} — ${esc(p.title)}</strong>
-          <div class="dd-sub">${esc(p.catalog)} · ${esc(p.format)}</div>
-        </div>`
-      ).join('');
-      dd.classList.remove('hidden');
-      dd.querySelectorAll('.product-dropdown-item').forEach(item => {
-        item.addEventListener('click', () => {
-          const prod = State.merged.find(p => p.upc === item.dataset.upc);
-          if (!prod) return;
-          searchEl.value = `${prod.artist} — ${prod.title}`;
-          document.getElementById('mfq-product-upc').value = prod.upc;
-          dd.classList.add('hidden');
-          const sel = document.getElementById('mfq-selected');
-          sel.innerHTML = `<strong>${esc(prod.artist)} — ${esc(prod.title)}</strong><span>${esc(prod.catalog)} · ${esc(prod.format)}</span>`;
-          sel.classList.remove('hidden');
-        });
-      });
-    }, 200));
-  }
-});
-
-window.saveMfgQueueItem = function() {
-  const upc = document.getElementById('mfq-product-upc').value;
-  const manufacturer = document.getElementById('mfq-manufacturer').value.trim();
-  const qty = safeNum(document.getElementById('mfq-qty').value);
-  const amount = safeNum(document.getElementById('mfq-amount').value);
-  const expectedDate = document.getElementById('mfq-expected-date').value;
-  const actualDate = document.getElementById('mfq-actual-date').value;
-  const notes = document.getElementById('mfq-notes').value.trim();
-  const shipTo = document.getElementById('mfq-ship-to').value;
-
-  if (!upc) { toast('Please select a product.', 'error'); return; }
-  if (!qty) { toast('Please enter a quantity.', 'error'); return; }
-
-  const prod = State.merged.find(p => p.upc === upc);
-  if (!prod) { toast('Product not found.', 'error'); return; }
-
-  const item = {
-    id: Date.now(),
-    upc, manufacturer,
-    artist: prod.artist,
-    title: prod.title,
-    catalog: prod.orchard_catalog || prod.catalog,
-    format: prod.format,
-    qty, amount, expectedDate, actualDate, notes, shipTo,
-    addedAt: new Date().toISOString(),
-  };
-
-  State.mfgQueue.push(item);
-  localStorage.setItem('fp_mfg_queue', JSON.stringify(State.mfgQueue));
-
-  // Reset form
-  document.getElementById('mfq-product-search').value = '';
-  document.getElementById('mfq-product-upc').value = '';
-  document.getElementById('mfq-manufacturer').value = '';
-  document.getElementById('mfq-qty').value = '';
-  document.getElementById('mfq-amount').value = '';
-  document.getElementById('mfq-expected-date').value = '';
-  document.getElementById('mfq-actual-date').value = '';
-  document.getElementById('mfq-notes').value = '';
-  document.getElementById('mfq-selected').classList.add('hidden');
-  document.getElementById('mfg-queue-form').classList.add('hidden');
-
-  renderMfgQueue();
-  updateMfgQueueBadge();
-  toast('Added to manufacturing queue.', 'success');
-};
-
 window.addSelectedToMfgQueue = function() {
-  // Pre-populate queue form with items checked in predictions (future enhancement)
-  // For now just switch to queue tab and open form
   switchMfgTab('queue');
-  showAddMfgQueueForm();
-};
-
-window.removeMfgQueueItem = function(id) {
-  State.mfgQueue = State.mfgQueue.filter(i => i.id !== id);
-  localStorage.setItem('fp_mfg_queue', JSON.stringify(State.mfgQueue));
-  renderMfgQueue();
-  updateMfgQueueBadge();
-};
-
-window.updateMfgQueueItem = function(id, field, value) {
-  const item = State.mfgQueue.find(i => i.id === id);
-  if (!item) return;
-  item[field] = value;
-  localStorage.setItem('fp_mfg_queue', JSON.stringify(State.mfgQueue));
 };
 
 function updateMfgQueueBadge() {
   const badge = document.getElementById('mfg-queue-badge');
   if (!badge) return;
-  const count = State.mfgQueue.length;
+  const count = State.packiyoPOList.length;
   badge.textContent = count;
   count > 0 ? badge.classList.remove('hidden') : badge.classList.add('hidden');
-  // Summary
   const sum = document.getElementById('mfg-queue-summary');
   if (sum) {
-    const totalQty = State.mfgQueue.reduce((s,i) => s+i.qty, 0);
-    const totalAmt = State.mfgQueue.reduce((s,i) => s+i.amount, 0);
-    sum.textContent = `${count} item${count!==1?'s':''} · ${totalQty.toLocaleString()} units · $${totalAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} quoted`;
+    const totalQty = State.packiyoPOList.reduce((s, po) => {
+      const lines = po._lines || [];
+      return s + lines.reduce((ls, l) => ls + safeNum(l.qty), 0);
+    }, 0);
+    sum.textContent = `${count} open PO${count!==1?'s':''} · ${totalQty.toLocaleString()} units pending`;
   }
 }
+
+window.updatePOAnnotation = function(poNumber, field, value) {
+  if (!State.poAnnotations[poNumber]) State.poAnnotations[poNumber] = {};
+  State.poAnnotations[poNumber][field] = value;
+  localStorage.setItem('fp_po_annotations', JSON.stringify(State.poAnnotations));
+};
 
 function renderMfgQueue() {
   const tbody = document.getElementById('mfg-queue-tbody');
   if (!tbody) return;
   updateMfgQueueBadge();
-  if (State.mfgQueue.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="13" class="empty-cell">No items in manufacturing queue. Click + Add Item to get started.</td></tr>`;
+
+  if (!State.packiyoPOList.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-cell">No open purchase orders in Packiyo. Click Refresh Packiyo to reload.</td></tr>`;
     return;
   }
-  const WH = { fp: 'Fat Possum WH', us: 'Orchard US (Dropship)' };
+
   const today = new Date();
-  tbody.innerHTML = State.mfgQueue.map(item => {
-    const expDate = item.expectedDate ? new Date(item.expectedDate) : null;
-    const actDate = item.actualDate ? new Date(item.actualDate+'T00:00:00') : null;
-    const status = actDate ? '<span class="pill pill-ok">Shipped</span>'
-      : !expDate ? '<span class="pill" style="background:var(--surface2);color:var(--text-muted)">No date</span>'
-      : expDate < today ? '<span class="pill pill-critical">Overdue</span>'
-      : (expDate - today) < 14*24*3600*1000 ? '<span class="pill pill-soon">Due soon</span>'
-      : '<span class="pill pill-plan">On track</span>';
+  // Flatten POs into rows — one row per PO line item
+  const rows = [];
+  for (const po of State.packiyoPOList) {
+    const attrs = po.attributes || {};
+    const poNumber = attrs.number || po.id;
+    const expectedDate = attrs.expected_at ? new Date(attrs.expected_at) : null;
+    const notes_ann = State.poAnnotations[poNumber]?.notes || '';
+    const amount_ann = State.poAnnotations[poNumber]?.amount || '';
+
+    // Get line items from included data stored during PO load
+    const lines = po._lines || [];
+    if (!lines.length) {
+      // PO with no line items resolved yet — show PO header only
+      rows.push({ poNumber, expectedDate, notes_ann, amount_ann, today,
+        sku: '—', artist: '', title: '', catalog: '—', format: '', qty: 0, qtyPending: 0 });
+    } else {
+      for (const line of lines) {
+        rows.push({ poNumber, expectedDate, notes_ann, amount_ann, today,
+          sku: line.sku, artist: line.artist, title: line.title,
+          catalog: line.catalog, format: line.format,
+          qty: line.qty, qtyPending: line.qtyPending });
+      }
+    }
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const status = !r.expectedDate
+      ? '<span class="pill" style="background:var(--surface2);color:var(--text-muted)">No date</span>'
+      : r.expectedDate < r.today
+        ? '<span class="pill pill-critical">Overdue</span>'
+        : (r.expectedDate - r.today) < 14*24*3600*1000
+          ? '<span class="pill pill-soon">Due soon</span>'
+          : '<span class="pill pill-plan">On track</span>';
+    const expStr = r.expectedDate ? formatDate(r.expectedDate) : '—';
     return `<tr>
-      <td>${esc(item.artist)}</td>
-      <td>${esc(item.title)}</td>
-      <td><code>${esc(item.catalog)}</code></td>
-      <td>${esc(item.format)}</td>
-      <td><input type="text" value="${esc(item.manufacturer)}" style="width:120px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'manufacturer',this.value)" /></td>
-      <td class="num"><input type="number" value="${item.qty}" style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'qty',+this.value)" /></td>
-      <td class="num"><input type="number" value="${item.amount||''}" step="0.01" placeholder="0.00" style="width:90px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'amount',+this.value)" /></td>
-      <td><input type="date" value="${item.expectedDate||''}" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'expectedDate',this.value)" /></td>
-      <td><input type="date" value="${item.actualDate||''}" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'actualDate',this.value)" /></td>
-      <td style="font-size:11px;color:var(--text-muted)">${WH[item.shipTo]||item.shipTo}</td>
+      <td><code style="font-size:11px">${esc(r.poNumber)}</code></td>
+      <td>${esc(r.artist)}</td>
+      <td>${esc(r.title)}</td>
+      <td><code>${esc(r.catalog)}</code></td>
+      <td>${esc(r.format)}</td>
+      <td class="num" style="font-weight:600">${r.qtyPending > 0 ? r.qtyPending.toLocaleString() : numCell(r.qty)}</td>
+      <td>${expStr}</td>
       <td>${status}</td>
-      <td><input type="text" value="${esc(item.notes||'')}" placeholder="Notes…" style="width:120px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'notes',this.value)" /></td>
-      <td><button class="btn-danger" onclick="removeMfgQueueItem(${item.id})">×</button></td>
+      <td><input type="number" value="${r.amount_ann}" step="0.01" placeholder="0.00"
+        style="width:90px;text-align:right;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+        onchange="updatePOAnnotation('${esc(r.poNumber)}','amount',this.value)" /></td>
+      <td><input type="text" value="${esc(r.notes_ann)}" placeholder="Notes…"
+        style="width:140px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+        onchange="updatePOAnnotation('${esc(r.poNumber)}','notes',this.value)" /></td>
     </tr>`;
   }).join('');
 }
 
 window.exportMfgQueue = function() {
-  if (State.mfgQueue.length === 0) { toast('Queue is empty.', 'error'); return; }
-  const WH = { fp: 'Fat Possum WH', us: 'Orchard US (Dropship)' };
-  downloadCSV('fp_mfg_queue_'+dateStr()+'.csv',
-    ['Artist','Title','Catalog #','Format','Manufacturer','Qty Ordered','Quoted Amount','Expected Ship Date','Actual Ship Date','Ship To','Notes'],
-    State.mfgQueue.map(i => [i.artist,i.title,i.catalog,i.format,i.manufacturer,i.qty,i.amount||'',i.expectedDate||'',i.actualDate||'',WH[i.shipTo]||i.shipTo,i.notes||''])
+  if (!State.packiyoPOList.length) { toast('No open POs to export.', 'error'); return; }
+  const rows = [];
+  for (const po of State.packiyoPOList) {
+    const attrs = po.attributes || {};
+    const poNumber = attrs.number || po.id;
+    const expectedDate = attrs.expected_at ? formatDate(new Date(attrs.expected_at)) : '';
+    const ann = State.poAnnotations[poNumber] || {};
+    const lines = po._lines || [{ sku:'—', artist:'', title:'', catalog:'', format:'', qty:0, qtyPending:0 }];
+    for (const line of lines) {
+      rows.push([poNumber, line.artist, line.title, line.catalog, line.format,
+        line.qty, line.qtyPending, expectedDate, ann.amount||'', ann.notes||'']);
+    }
+  }
+  downloadCSV('fp_open_pos_'+dateStr()+'.csv',
+    ['PO Number','Artist','Title','Catalog #','Format','Qty Ordered','Qty Pending','Expected Ship','Quoted Amount','Notes'],
+    rows
   );
-  toast('Manufacturing queue exported.', 'success');
+  toast('Open POs exported.', 'success');
 };
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
