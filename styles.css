@@ -148,18 +148,23 @@ nav { padding: 8px 0; flex: 1; }
   min-width: 100%;
 }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
-/* Row 1 group headers */
+/* Row 1: group headers */
 thead tr:first-child th {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 10px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.8px !important;
+  color: var(--text-muted) !important;
   background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  overflow: visible !important;
+  white-space: nowrap;
 }
-/* Row 2 column headers - offset by group row height (~28px) */
+/* Row 2: column headers sit 26px below top */
 thead tr:last-child th {
-  position: sticky;
-  top: 28px;
-  z-index: 10;
   background: var(--surface2);
 }
 thead tr:last-child th.is-pinned {
