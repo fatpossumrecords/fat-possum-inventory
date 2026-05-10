@@ -1612,24 +1612,54 @@ function renderMovementsTable() {
   const tbody = document.getElementById('movements-tbody');
   document.getElementById('mov-queue-count').textContent = `${State.movements.length} item${State.movements.length!==1?'s':''}`;
   if (State.movements.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty-cell">No movements queued yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-cell">No movements queued yet.</td></tr>`;
     return;
   }
-  tbody.innerHTML = State.movements.map((m, i) => `<tr>
-    <td>${WH_LABELS[m.from]}</td><td>${WH_LABELS[m.to]}</td>
-    <td>${esc(m.artist)}</td><td>${esc(m.title)}</td>
-    <td style="color:var(--text-muted);font-size:11px">${esc(m.label)}</td>
-    <td><code>${esc(m.catalog)}</code></td>
-    <td><code style="font-size:10px">${esc(m.upc)}</code></td>
-    <td>${esc(m.format)}</td>
-    <td class="num"><input type="number" min="1" value="${m.qty}" 
-      style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
-      onchange="updateMovementQty(${i}, this.value)" /></td>
-    <td><input type="text" value="${esc(m.notes)}"
-      style="width:140px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
-      onchange="updateMovementNotes(${i}, this.value)" placeholder="Notes…" /></td>
-    <td><button class="btn-danger" onclick="removeMovement(${i})">×</button></td>
-  </tr>`).join('');
+  // Migrate old movements without status
+  State.movements.forEach(m => { if (!m.status) m.status = 'draft'; });
+
+  const STATUS_PILL = {
+    draft:     '<span class="pill" style="background:#eee;color:#555;font-size:10px">Draft</span>',
+    confirmed: '<span class="pill pill-plan" style="font-size:10px">Confirmed</span>',
+    shipped:   '<span class="pill pill-soon" style="font-size:10px">Shipped</span>',
+    processed: '<span class="pill pill-ok" style="font-size:10px">Processed</span>',
+  };
+
+  tbody.innerHTML = State.movements.map((m, i) => {
+    const isFPtoUS = m.from === 'fp' && m.to === 'us';
+    const isDraft = m.status === 'draft';
+    const isConfirmed = m.status === 'confirmed';
+    const isShipped = m.status === 'shipped';
+    const isProcessed = m.status === 'processed';
+    const pill = STATUS_PILL[m.status] || STATUS_PILL.draft;
+    const poLabel = m.poNumber ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">${esc(m.poNumber)}</div>` : '';
+    const actionBtn = isDraft
+      ? `<button class="btn-primary btn-sm" onclick="confirmMovement(${i})">Confirm</button>`
+      : isConfirmed && !isFPtoUS
+        ? `<button class="btn-secondary btn-sm" onclick="processMovement(${i})">Mark Processed</button>`
+        : isShipped
+          ? `<span style="font-size:10px;color:var(--text-muted)">Clears in 7d</span>`
+          : isProcessed
+            ? `<span style="font-size:10px;color:var(--text-muted)">Clears in 30d</span>`
+            : '';
+    return `<tr>
+      <td style="white-space:nowrap">${WH_LABELS[m.from]}<span style="color:var(--text-dim);margin:0 4px">→</span>${WH_LABELS[m.to]}</td>
+      <td>${esc(m.artist)}<br><small style="color:var(--text-muted)">${esc(m.title)}</small></td>
+      <td style="color:var(--text-muted);font-size:11px">${esc(m.label)}</td>
+      <td><code>${esc(m.catalog)}</code></td>
+      <td style="font-size:10px;color:var(--text-dim)">${esc(m.upc)}</td>
+      <td>${esc(m.format)}</td>
+      <td class="num"><input type="number" min="1" value="${m.qty}"
+        style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+        onchange="updateMovementQty(${i}, this.value)" /></td>
+      <td><input type="text" value="${esc(m.notes)}"
+        style="width:150px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+        onchange="updateMovementNotes(${i}, this.value)" placeholder="Notes…" /></td>
+      <td>${pill}${poLabel}</td>
+      <td>${actionBtn}</td>
+      <td><button class="btn-danger" onclick="removeMovement(${i})">×</button></td>
+    </tr>`;
+  }).join('');
 }
 // ── MOVEMENT STATUS ──────────────────────────────────────────
 window.confirmMovement = function(i) {
