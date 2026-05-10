@@ -98,16 +98,68 @@ function bootApp() {
   document.getElementById('app').classList.remove('hidden');
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
+  loadColumnLayout();
   loadPackiyo();
-  const saved = sessionStorage.getItem('fp_orchard');
+  const saved = localStorage.getItem('fp_orchard');
   if (saved) {
     try {
       State.orchardData = JSON.parse(saved);
       State.orchardLoaded = true;
-      setStatus('orchard', 'ok', `${State.orchardData.length} items`);
+      State.orchardLoaded = true;
+      updateOrchardStatus();
       mergeData();
     } catch(e) {}
   }
+}
+
+// ── ORCHARD STATUS + UPLOAD HISTORY ─────────────────────────
+function updateOrchardStatus() {
+  const ts = localStorage.getItem('fp_orchard_ts');
+  const label = ts ? 'Updated ' + formatRelativeDate(new Date(ts)) : `${State.orchardData.length} items`;
+  setStatus('orchard', 'ok', label);
+  // Update last upload line in sidebar
+  const el = document.getElementById('orchard-last-upload');
+  if (el && ts) el.textContent = 'Last upload: ' + new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function getUploadHistory() {
+  const existing = JSON.parse(localStorage.getItem('fp_orchard_uploads') || '[]');
+  const entry = { date: new Date().toISOString(), count: State.orchardData.length };
+  return [entry, ...existing].slice(0, 10); // keep last 10
+}
+
+function formatRelativeDate(date) {
+  const diff = Math.floor((Date.now() - date) / 86400000);
+  if (diff === 0) return 'today';
+  if (diff === 1) return 'yesterday';
+  return diff + 'd ago';
+}
+
+// ── COLUMN LAYOUT PERSISTENCE ─────────────────────────────────
+function saveColumnLayout() {
+  localStorage.setItem('fp_col_widths', JSON.stringify(State.colWidths));
+  localStorage.setItem('fp_col_pinned', JSON.stringify([...State.pinnedCols]));
+  localStorage.setItem('fp_col_expanded', JSON.stringify(State.expanded));
+  toast('Column layout saved.', 'success');
+}
+function loadColumnLayout() {
+  try {
+    const w = localStorage.getItem('fp_col_widths');
+    const p = localStorage.getItem('fp_col_pinned');
+    const e = localStorage.getItem('fp_col_expanded');
+    if (w) State.colWidths = JSON.parse(w);
+    if (p) State.pinnedCols = new Set(JSON.parse(p));
+    if (e) State.expanded = { ...State.expanded, ...JSON.parse(e) };
+  } catch(err) { console.warn('Could not load column layout:', err); }
+}
+function resetColumnLayout() {
+  State.colWidths = {}; State.pinnedCols = new Set();
+  State.expanded = { fp:false, us:false, ca:false, uk:false, eu:false };
+  localStorage.removeItem('fp_col_widths');
+  localStorage.removeItem('fp_col_pinned');
+  localStorage.removeItem('fp_col_expanded');
+  renderInventory();
+  toast('Column layout reset.', '');
 }
 
 // ── PACKIYO API ───────────────────────────────────────────────
@@ -138,6 +190,7 @@ async function loadPackiyo() {
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
+    renderDashboard();
 
     // Load purchase orders in parallel
     await loadPackiyoPOs();
@@ -232,8 +285,8 @@ function loadOrchardCSV(file) {
     try {
       State.orchardData = deduplicateOrchard(parseCSV(e.target.result));
       State.orchardLoaded = true;
-      sessionStorage.setItem('fp_orchard', JSON.stringify(State.orchardData));
-      setStatus('orchard', 'ok', `${State.orchardData.length} items`);
+      localStorage.setItem('fp_orchard', JSON.stringify(State.orchardData)); localStorage.setItem('fp_orchard_ts', new Date().toISOString()); localStorage.setItem('fp_orchard_uploads', JSON.stringify(getUploadHistory()));
+      updateOrchardStatus();
       mergeData();
       toast(`Orchard CSV loaded: ${State.orchardData.length} products`, 'success');
     } catch (err) {
@@ -361,6 +414,7 @@ function mergeData() {
   renderInventory();
   renderManufacturing();
   renderAlerts();
+  renderDashboard();
 }
 
 function populateLabelDropdown() {
@@ -608,11 +662,13 @@ function renderInventory() {
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
-      if (col.id === 'status') return `<td style="${style}">${statusPill(v)}</td>`;
-      if (col.id === 'total')  return `<td class="num" style="font-weight:600;${style}">${numCell(v)}</td>`;
-      if (col.id === 'catalog') return `<td style="${style}"><code>${esc(v)}</code></td>`;
-      if (col.id === 'upc')    return `<td style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
-      if (col.id === 'format') return `<td style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
+      if (col.id === 'artist')  return `<td class="mob-artist" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'title')   return `<td class="mob-title" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'status')  return `<td class="mob-status" style="${style}">${statusPill(v)}</td>`;
+      if (col.id === 'total')   return `<td class="num mob-total" style="font-weight:600;${style}">${numCell(v)}</td>`;
+      if (col.id === 'catalog') return `<td class="mob-catalog" style="${style}"><code>${esc(v)}</code></td>`;
+      if (col.id === 'upc')     return `<td style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
+      if (col.id === 'format')  return `<td class="mob-format" style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
       if (col.id === 'fp_available') return `<td class="num" style="${style}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
       if (col.num) return `<td class="num" style="${style}">${numCell(v)}</td>`;
       return `<td style="${style}">${esc(v)}</td>`;
@@ -1139,6 +1195,131 @@ function downloadCSV(filename, headers, rows) {
   a.download = filename; a.click();
 }
 
+// ── DASHBOARD ────────────────────────────────────────────────
+function renderDashboard() {
+  const el = document.getElementById('dashboard-body');
+  if (!el) return;
+
+  const totalProducts = State.merged.length;
+  const totalStock    = State.merged.reduce((s,p) => s+(p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0), 0);
+  const fpStock       = State.merged.reduce((s,p) => s+(p.fp_available||0), 0);
+
+  // Alerts count
+  const WAREHOUSES_D = [
+    { key:'us', avail:'us_avail', vel:'us_12ms',   velDiv:12 },
+    { key:'ca', avail:'ca_avail', vel:'ca_12ms',   velDiv:12 },
+    { key:'uk', avail:'uk_avail', vel:'uk_last_yr',velDiv:12 },
+    { key:'eu', avail:'eu_avail', vel:'eu_this_yr',velDiv:12 },
+  ];
+  let alertCount = 0, criticalCount = 0;
+  WAREHOUSES_D.forEach(wh => {
+    State.merged.forEach(p => {
+      const avail = p[wh.avail]||0, monthly = (p[wh.vel]||0)/wh.velDiv;
+      if (monthly <= 0) return;
+      const weeks = (avail/monthly)*4.33;
+      if (weeks < CONFIG.REORDER_WEEKS) { alertCount++; if (weeks < 4) criticalCount++; }
+    });
+  });
+
+  // Mfg items
+  const today = new Date();
+  let mfgUrgent = 0, mfgSoon = 0, mfgWithPO = 0;
+  State.merged.forEach(p => {
+    const total = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
+    const poQty = (State.packiyoPOs[p.packiyo_sku]||State.packiyoPOs[p.catalog])?.qty||0;
+    const monthly = ((p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0))/12;
+    if (monthly <= 0 && !poQty) return;
+    const totalWithAll = total+(p.fp_inbound||0)+poQty;
+    const monthsLeft = monthly > 0 ? totalWithAll/monthly : Infinity;
+    if (!isFinite(monthsLeft) && !poQty) return;
+    const isLPItem = isVinyl(p.format||'');
+    const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
+    if (!isFinite(monthsLeft) || monthsLeft > CONFIG.MFG_TRIGGER_MONTHS+3) { if (poQty) mfgWithPO++; return; }
+    const days = isFinite(monthsLeft) ? Math.round(((today.getTime()+(monthsLeft-leadTime)*30*24*3600*1000)-today.getTime())/(24*3600*1000)) : Infinity;
+    if (poQty) mfgWithPO++;
+    if (days < 30) mfgUrgent++;
+    else if (days < 90) mfgSoon++;
+  });
+
+  // Upload history
+  const history = JSON.parse(localStorage.getItem('fp_orchard_uploads') || '[]');
+  const ts = localStorage.getItem('fp_orchard_ts');
+
+  el.innerHTML = `
+    <div class="dash-grid">
+      <div class="dash-card" onclick="switchView('inventory')" style="cursor:pointer">
+        <div class="dash-label">Total Products</div>
+        <div class="dash-num">${totalProducts.toLocaleString()}</div>
+        <div class="dash-sub">across all warehouses</div>
+      </div>
+      <div class="dash-card" onclick="switchView('inventory')" style="cursor:pointer">
+        <div class="dash-label">Global Stock</div>
+        <div class="dash-num">${totalStock.toLocaleString()}</div>
+        <div class="dash-sub">FP WH: ${fpStock.toLocaleString()} units</div>
+      </div>
+      <div class="dash-card ${criticalCount > 0 ? 'dash-card-red' : alertCount > 0 ? 'dash-card-yellow' : 'dash-card-green'}" onclick="switchView('alerts')" style="cursor:pointer">
+        <div class="dash-label">Reorder Alerts</div>
+        <div class="dash-num">${alertCount}</div>
+        <div class="dash-sub">${criticalCount > 0 ? criticalCount+' critical' : 'across all warehouses'}</div>
+      </div>
+      <div class="dash-card ${mfgUrgent > 0 ? 'dash-card-red' : mfgSoon > 0 ? 'dash-card-yellow' : ''}" onclick="switchView('manufacturing')" style="cursor:pointer">
+        <div class="dash-label">Manufacturing Flags</div>
+        <div class="dash-num">${mfgUrgent + mfgSoon}</div>
+        <div class="dash-sub">${mfgUrgent > 0 ? mfgUrgent+' urgent · ' : ''}${mfgWithPO} with open PO</div>
+      </div>
+    </div>
+
+    <div class="dash-row">
+      <div class="dash-section">
+        <h3>Warehouse Snapshot</h3>
+        <table class="dash-table">
+          <thead><tr><th>Warehouse</th><th class="num">Available</th><th class="num">Alerts</th></tr></thead>
+          <tbody>
+            ${[
+              { label:'Fat Possum WH', avail: State.merged.reduce((s,p)=>s+(p.fp_available||0),0), alerts: 0 },
+              { label:'Orchard US',    avail: State.merged.reduce((s,p)=>s+(p.us_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.us_12ms||0)/12; return m>0 && ((p.us_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
+              { label:'Orchard Canada',avail: State.merged.reduce((s,p)=>s+(p.ca_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.ca_12ms||0)/12; return m>0 && ((p.ca_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
+              { label:'Orchard UK',    avail: State.merged.reduce((s,p)=>s+(p.uk_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.uk_last_yr||0)/12; return m>0 && ((p.uk_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
+              { label:'Orchard EU',    avail: State.merged.reduce((s,p)=>s+(p.eu_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.eu_this_yr||0)/12; return m>0 && ((p.eu_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
+            ].map(w => `<tr>
+              <td>${w.label}</td>
+              <td class="num">${w.avail.toLocaleString()}</td>
+              <td class="num">${w.alerts > 0 ? `<span style="color:var(--red);font-weight:600">${w.alerts}</span>` : '<span style="color:var(--green)">✓</span>'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="dash-section">
+        <h3>CSV Upload History</h3>
+        ${ts ? `<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Last upload: <strong>${new Date(ts).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</strong></p>` : '<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px">No CSV uploaded yet.</p>'}
+        <table class="dash-table">
+          <thead><tr><th>Date</th><th class="num">Products</th></tr></thead>
+          <tbody>
+            ${history.length === 0 ? '<tr><td colspan="2" class="empty-cell" style="padding:16px">No upload history yet.</td></tr>' :
+              history.map(h => `<tr>
+                <td>${new Date(h.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+                <td class="num">${h.count.toLocaleString()}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <div style="margin-top:12px">
+          <button class="btn-secondary btn-sm" onclick="document.getElementById('csv-file-input').click()">Upload New CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-section" style="margin-top:0">
+      <h3>Column Layout</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="saveColumnLayout()">Save Current Layout</button>
+        <button class="btn-secondary btn-sm" onclick="resetColumnLayout()">Reset to Default</button>
+        <span style="font-size:11px;color:var(--text-muted)">${State.pinnedCols.size} pinned · ${Object.keys(State.colWidths).length} resized</span>
+      </div>
+    </div>
+  `;
+}
+
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
   document.querySelectorAll('.view').forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
@@ -1146,6 +1327,7 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
+  if (viewName === 'dashboard') renderDashboard();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
