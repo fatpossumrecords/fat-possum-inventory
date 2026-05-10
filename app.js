@@ -138,25 +138,21 @@ function formatRelativeDate(date) {
 // ── COLUMN LAYOUT PERSISTENCE ─────────────────────────────────
 function saveColumnLayout() {
   localStorage.setItem('fp_col_widths', JSON.stringify(State.colWidths));
-  localStorage.setItem('fp_col_pinned', JSON.stringify([...State.pinnedCols]));
   localStorage.setItem('fp_col_expanded', JSON.stringify(State.expanded));
   toast('Column layout saved.', 'success');
 }
 function loadColumnLayout() {
   try {
     const w = localStorage.getItem('fp_col_widths');
-    const p = localStorage.getItem('fp_col_pinned');
     const e = localStorage.getItem('fp_col_expanded');
     if (w) State.colWidths = JSON.parse(w);
-    if (p) State.pinnedCols = new Set(JSON.parse(p));
     if (e) State.expanded = { ...State.expanded, ...JSON.parse(e) };
   } catch(err) { console.warn('Could not load column layout:', err); }
 }
 function resetColumnLayout() {
-  State.colWidths = {}; State.pinnedCols = new Set();
+  State.colWidths = {};
   State.expanded = { fp:false, us:false, ca:false, uk:false, eu:false };
   localStorage.removeItem('fp_col_widths');
-  localStorage.removeItem('fp_col_pinned');
   localStorage.removeItem('fp_col_expanded');
   renderInventory();
   toast('Column layout reset.', '');
@@ -469,69 +465,62 @@ function visibleCols() {
   return INV_COLS.filter(c => c.always || State.expanded[c.group]);
 }
 
+// Fixed sticky columns - always frozen, no pin UI needed
+const STICKY_COLS = ['artist', 'title', 'catalog'];
+const STICKY_WIDTHS = { artist: 160, title: 220, catalog: 90 };
+// Precompute sticky left offsets
+const STICKY_OFFSETS = {};
+let _stickyLeft = 0;
+for (const id of STICKY_COLS) {
+  STICKY_OFFSETS[id] = _stickyLeft;
+  _stickyLeft += STICKY_WIDTHS[id];
+}
+
 function buildInventoryHeader() {
   const thead = document.querySelector('#inventory-table thead');
   const cols = visibleCols();
 
-  // Compute pinned left offsets
-  let runningLeft = 0;
-  const pinnedOffsets = {};
-  for (const col of cols) {
-    if (State.pinnedCols.has(col.id)) {
-      pinnedOffsets[col.id] = runningLeft;
-      runningLeft += State.colWidths[col.id] || getDefaultWidth(col);
+  // Two header rows: group row + column row
+  const groups = ['meta','fp','us','ca','uk','eu'];
+  let row1 = '<tr>';
+  for (const g of groups) {
+    const allCols = INV_COLS.filter(c => c.group === g);
+    const visCols = allCols.filter(c => c.always || State.expanded[g]);
+    if (visCols.length === 0) continue;
+    const isGroupEnd = 'border-right:2px solid var(--border2);';
+    if (g === 'meta') {
+      // Sticky group header for meta — spans all meta cols
+      const metaW = visCols.reduce((s,c) => s + (STICKY_COLS.includes(c.id) ? STICKY_WIDTHS[c.id] : (State.colWidths[c.id]||getDefaultWidth(c))), 0);
+      row1 += `<th colspan="${visCols.length}" style="position:sticky;left:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;">Artist · Title · Catalog # always frozen</th>`;
+    } else {
+      const hasSales = allCols.some(c => !c.always);
+      const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:5px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>` : '';
+      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);${isGroupEnd}">${GROUP_LABELS[g]}${btn}</th>`;
     }
   }
+  row1 += '</tr>';
 
-  // Single header row — group label shown as sub-label inside each th
-  // This avoids all colspan/sticky sync issues with two-row headers
-  const GROUP_COLORS = {
-    meta: '', fp: '#f5f0e8', us: '#eef4fb', ca: '#eef4fb',
-    uk: '#f0f5ee', eu: '#f0f5ee'
-  };
-
-  let row = '<tr>';
+  let row2 = '<tr>';
   for (let i = 0; i < cols.length; i++) {
     const col = cols[i];
-    const next = cols[i + 1];
+    const next = cols[i+1];
     const isGroupEnd = !next || next.group !== col.group;
-    const isGroupStart = i === 0 || cols[i-1].group !== col.group;
-    const isPinned = State.pinnedCols.has(col.id);
-    const w = State.colWidths[col.id] || getDefaultWidth(col);
+    const isSticky = STICKY_COLS.includes(col.id);
+    const w = isSticky ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
     const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
     const sortCls = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
-    const pinIcon = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin':'Pin'}">${isPinned?'📌':'📍'}</span>`;
-    const resizeHandle = `<span class="resize-handle" onmousedown="startResize(event,'${col.id}')"></span>`;
-    const stickyStyle = isPinned
-      ? `position:sticky;left:${pinnedOffsets[col.id]}px;z-index:11;`
-      : '';
+    const resizeHandle = !isSticky ? `<span class="resize-handle" onmousedown="startResize(event,'${col.id}')"></span>` : '';
+    const stickyStyle = isSticky ? `position:sticky;left:${STICKY_OFFSETS[col.id]}px;z-index:21;background:var(--surface2);box-shadow:${isGroupEnd?'2px 0 5px rgba(0,0,0,0.08)':'none'};` : '';
     const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-    const borderLeft = isGroupStart && col.group !== 'meta' ? 'border-left:2px solid var(--border2);' : '';
-    const bgColor = GROUP_COLORS[col.group] || '';
-    const bgStyle = bgColor ? `background:${bgColor};` : 'background:var(--surface2);';
-
-    // Show group label + expand button on first col of each non-meta group
-    let groupLabel = '';
-    if (col.group !== 'meta' && isGroupStart) {
-      const allCols = INV_COLS.filter(c => c.group === col.group);
-      const hasSales = allCols.some(c => !c.always);
-      const btn = hasSales
-        ? `<span onclick="event.stopPropagation();toggleExpand('${col.group}')" style="cursor:pointer;font-size:10px;opacity:0.6;margin-left:3px;">${State.expanded[col.group]?'▾':'▸'}</span>`
-        : '';
-      groupLabel = `<div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:2px;line-height:1;">${GROUP_LABELS[col.group]}${btn}</div>`;
-    } else if (col.group !== 'meta') {
-      groupLabel = `<div style="font-size:8px;margin-bottom:2px;line-height:1;">&nbsp;</div>`;
-    }
-
-    row += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}"
+    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isSticky?' is-pinned':''}"
       data-col="${col.id}"
-      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${bgStyle}${borderRight}${borderLeft}position:relative;overflow:visible;vertical-align:bottom;padding-bottom:7px;"
+      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${borderRight}position:relative;overflow:hidden;"
       onclick="handleInvSort('${col.id}')"
-    >${groupLabel}${col.label}${pinIcon}${resizeHandle}</th>`;
+    >${col.label}${resizeHandle}</th>`;
   }
-  row += '</tr>';
+  row2 += '</tr>';
 
-  thead.innerHTML = row;
+  thead.innerHTML = row1 + row2;
   applyColWidths();
 }
 
@@ -552,16 +541,12 @@ function applyColWidths() {
   if (!cg) { cg = document.createElement('colgroup'); table.prepend(cg); }
   const cols = visibleCols();
   cg.innerHTML = cols.map(col => {
-    const w = State.colWidths[col.id] || getDefaultWidth(col);
+    const w = STICKY_COLS.includes(col.id) ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
     return `<col style="width:${w}px;min-width:${w}px">`;
   }).join('');
 }
 
-window.togglePin = function(colId) {
-  if (State.pinnedCols.has(colId)) State.pinnedCols.delete(colId);
-  else State.pinnedCols.add(colId);
-  renderInventory();
-};
+// Pin logic removed - artist/title/catalog always frozen
 
 // Resize logic
 let _resizing = null;
@@ -669,8 +654,9 @@ function renderInventory() {
       const isGroupEnd = !nextCol || nextCol.group !== col.group;
       const isPinned = State.pinnedCols.has(col.id);
       const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-      const stickyStyle = isPinned ? `position:sticky;left:${pinOffsets[col.id]}px;z-index:3;box-shadow:2px 0 4px rgba(0,0,0,0.07);` : '';
-      const pinnedClass = isPinned ? ' is-pinned' : '';
+      const isSticky = STICKY_COLS.includes(col.id);
+      const stickyStyle = isSticky ? `position:sticky;left:${STICKY_OFFSETS[col.id]}px;z-index:3;box-shadow:${!nextCol||nextCol.group!==col.group?'2px 0 5px rgba(0,0,0,0.08)':'none'};` : '';
+      const pinnedClass = isSticky ? ' is-pinned' : '';
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
@@ -1326,7 +1312,7 @@ function renderDashboard() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn-primary btn-sm" onclick="saveColumnLayout()">Save Current Layout</button>
         <button class="btn-secondary btn-sm" onclick="resetColumnLayout()">Reset to Default</button>
-        <span style="font-size:11px;color:var(--text-muted)">${State.pinnedCols.size} pinned · ${Object.keys(State.colWidths).length} resized</span>
+        <span style="font-size:11px;color:var(--text-muted)">Artist · Title · Catalog # always frozen · ${Object.keys(State.colWidths).length} columns resized</span>
       </div>
     </div>
   `;
