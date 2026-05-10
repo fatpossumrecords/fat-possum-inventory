@@ -50,6 +50,8 @@ const State = {
   mfgQueue: JSON.parse(localStorage.getItem('fp_mfg_queue') || '[]'),
   // Shopify vendor/artist lookup by UPC and SKU
   shopifyVendors: {},
+  // Manually entered artists by UPC
+  manualArtists: {},
   // manual column widths: { colId: px }
   colWidths: {},
 };
@@ -118,7 +120,7 @@ function bootApp() {
   loadColumnLayout();
   loadGistData().then(() => {
     if (State.merged.length) {
-      applyShopifyVendors();
+      applyShopifyVendors(); // applies both shopify and manual
       renderInventory();
       renderAlerts();
     }
@@ -204,11 +206,13 @@ async function loadGistData() {
       State.shopifyVendors = parsed.shopifyVendors;
       const count = Object.keys(State.shopifyVendors).length;
       setStatus('shopify', 'ok', count + ' artists');
-      console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', count, 'shopify vendors');
     } else {
       setStatus('shopify', 'ok', 'No data');
-      console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed titles');
     }
+    if (parsed.manualArtists) {
+      State.manualArtists = parsed.manualArtists;
+    }
+    console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify,', Object.keys(State.manualArtists||{}).length, 'manual artists');
   } catch(e) {
     console.warn('Gist load failed:', e.message);
   }
@@ -219,6 +223,7 @@ async function saveGistData() {
     const payload = {
       suppressed: [...State.suppressedUpcs],
       shopifyVendors: State.shopifyVendors,
+      manualArtists: State.manualArtists || {},
     };
     await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
@@ -598,14 +603,27 @@ function loadShopifyCSV(file) {
 }
 
 function applyShopifyVendors() {
-  if (!Object.keys(State.shopifyVendors).length) return;
   for (const p of State.merged) {
-    if (p.artist) continue; // already has artist from Orchard
+    if (p.artist) continue; // already has artist from Orchard CSV
+    // Check manual entries first (highest priority after Orchard)
+    if (State.manualArtists[p.upc]) { p.artist = State.manualArtists[p.upc]; continue; }
+    // Then Shopify vendor
     const byUpc = State.shopifyVendors[p.upc];
     const bySku = State.shopifyVendors['sku:' + p.packiyo_sku] || State.shopifyVendors['sku:' + p.catalog];
     if (byUpc || bySku) p.artist = byUpc || bySku;
   }
 }
+
+window.saveManualArtist = async function(upc, value) {
+  if (!value.trim()) return;
+  State.manualArtists[upc] = value.trim();
+  await saveGistData();
+  // Apply to the product in State.merged
+  const p = State.merged.find(x => x.upc === upc);
+  if (p) p.artist = value.trim();
+  renderInventory();
+  toast('Artist saved.', 'success');
+};
 
 function parseCSVRobust(text) {
   // Handles multiline quoted fields (e.g. Shopify HTML body)
@@ -1023,7 +1041,11 @@ function renderInventory() {
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
-      if (col.id === 'artist')  return `<td class="mob-artist${pinnedClass}" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'artist') {
+        if (v) return `<td class="mob-artist${pinnedClass}" style="${style}">${esc(v)}</td>`;
+        // Blank artist — show editable input
+        return `<td class="mob-artist${pinnedClass}" style="${style}"><input type="text" placeholder="Add artist…" style="border:none;background:transparent;font-family:inherit;font-size:inherit;color:var(--text);width:100%;outline:none;border-bottom:1px dashed var(--border2);" onblur="if(this.value)saveManualArtist('${esc(p.upc)}',this.value)" onkeydown="if(event.key==='Enter')this.blur()" /></td>`;
+      }
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
       if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
