@@ -209,6 +209,13 @@ async function saveGistData() {
   }
 }
 
+window.handleSuppress = function(btn) {
+  const upc = btn.dataset.upc;
+  const artist = btn.dataset.artist;
+  const title = btn.dataset.title;
+  suppressTitle(upc, artist, title);
+};
+
 window.suppressTitle = async function(upc, artist, title) {
   if (!confirm(`Suppress "${artist} — ${title}"?
 
@@ -904,7 +911,7 @@ function renderInventory() {
         return `<td class="num${pinnedClass}" style="${style}${alertStyle}">${numCell(v)}</td>`;
       }
       return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
-    }).join('') + `<td style="text-align:center;width:32px;"><button class="suppress-btn" onclick="suppressTitle('${p.upc}','${esc(p.artist).replace(/'/g,"\'")}','${esc(p.title).replace(/'/g,"\'")}'" title="Suppress this title permanently">×</button></td>` + '</tr>';
+    }).join('') + `<td style="text-align:center;width:32px;border-left:1px solid var(--border);"><button class="suppress-btn" data-upc="${esc(p.upc)}" data-artist="${esc(p.artist)}" data-title="${esc(p.title)}" title="Suppress this title permanently" onclick="handleSuppress(this)">×</button></td>` + '</tr>';
   }).join('');
 }
 
