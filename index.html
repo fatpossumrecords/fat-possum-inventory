@@ -14,7 +14,7 @@
 <div id="login-screen" class="login-screen hidden">
   <div class="login-box">
     <div class="login-logo">
-      <img src="FP-Logo_Submark-Black.jpg" alt="Fat Possum Records" style="width:80px;height:80px;object-fit:contain;margin-bottom:12px;filter:none;" />
+      <img src="fp-logo.png" alt="Fat Possum Records" style="width:80px;height:80px;object-fit:contain;margin-bottom:12px;filter:none;" />
       <h1>Fat Possum Records</h1>
       <p>Global Inventory System</p>
     </div>
@@ -41,7 +41,7 @@
   <!-- SIDEBAR -->
   <aside id="sidebar">
     <div class="sidebar-header">
-      <img src="FP-Logo_Submark-Black.jpg" alt="FP" style="width:28px;height:28px;object-fit:contain;" />
+      <img src="fp-logo.png" alt="FP" style="width:28px;height:28px;object-fit:contain;" />
       <span class="sidebar-title">Inventory</span>
     </div>
     <nav>
@@ -102,6 +102,12 @@
       </div>
       <div id="dashboard-body" style="overflow-y:auto;flex:1;padding:24px;display:flex;flex-direction:column;gap:20px">
         <div class="loading-cell">Loading dashboard…</div>
+      </div>
+      <div style="padding:0 24px 24px;border-top:1px solid var(--border);margin-top:0;">
+        <div class="dash-section" style="margin-top:16px">
+          <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:14px;">Suppressed Titles <span style="font-weight:400;font-size:10px">(hidden from all views — click Restore to bring back)</span></h3>
+          <div id="suppressed-log"><p style="color:var(--text-muted);font-size:12px">No suppressed titles.</p></div>
+        </div>
       </div>
     </div>
 
