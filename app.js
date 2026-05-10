@@ -480,6 +480,8 @@ function buildInventoryHeader() {
   const thead = document.getElementById('inventory-thead');
   if (!thead) return;
   const cols = visibleCols();
+  // Apply colgroup first so column widths are set before header renders
+  applyColWidths();
 
   // Two header rows: group row + column row
   const groups = ['meta','fp','us','ca','uk','eu'];
@@ -521,18 +523,7 @@ function buildInventoryHeader() {
   }
   row2 += '</tr>';
 
-  // Apply colgroup to header table before setting innerHTML
-  const headerTable = document.getElementById('inventory-header-table');
-  if (headerTable) {
-    let hcg = headerTable.querySelector('colgroup');
-    if (!hcg) { hcg = document.createElement('colgroup'); headerTable.prepend(hcg); }
-    hcg.innerHTML = cols.map(col => {
-      const w = STICKY_COLS.includes(col.id) ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
-      return `<col style="width:${w}px;min-width:${w}px;max-width:${w}px">`;
-    }).join('');
-  }
   thead.innerHTML = row1 + row2;
-  applyColWidths();
 }
 
 function getDefaultWidth(col) {
@@ -547,30 +538,15 @@ function getDefaultWidth(col) {
 }
 
 function applyColWidths() {
+  const table = document.getElementById('inventory-table');
+  if (!table) return;
+  let cg = table.querySelector('colgroup');
+  if (!cg) { cg = document.createElement('colgroup'); table.prepend(cg); }
   const cols = visibleCols();
-  const colHTML = cols.map(col => {
+  cg.innerHTML = cols.map(col => {
     const w = STICKY_COLS.includes(col.id) ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
     return `<col style="width:${w}px;min-width:${w}px;max-width:${w}px">`;
   }).join('');
-  // Apply to body table colgroup
-  const cg = document.getElementById('inventory-colgroup');
-  if (cg) cg.innerHTML = colHTML;
-  // Also apply to header table via colgroup
-  const headerTable = document.getElementById('inventory-header-table');
-  if (headerTable) {
-    let hcg = headerTable.querySelector('colgroup');
-    if (!hcg) { hcg = document.createElement('colgroup'); headerTable.prepend(hcg); }
-    hcg.innerHTML = colHTML;
-  }
-  // Sync horizontal scroll between header and body
-  const bodyWrap = document.querySelector('.inv-body-wrap');
-  const headerWrap = document.querySelector('.inv-header-wrap');
-  if (bodyWrap && headerWrap && !bodyWrap._scrollSynced) {
-    bodyWrap._scrollSynced = true;
-    bodyWrap.addEventListener('scroll', () => {
-      headerWrap.scrollLeft = bodyWrap.scrollLeft;
-    });
-  }
 }
 
 // Pin logic removed - artist/title/catalog always frozen
@@ -590,9 +566,6 @@ function onResizeMove(e) {
   const newW = Math.max(40, _resizing.startW + (e.clientX - _resizing.startX));
   State.colWidths[_resizing.colId] = newW;
   applyColWidths();
-  // Update the th width live without full re-render
-  const th = document.querySelector(`#inventory-table th[data-col="${_resizing.colId}"]`);
-  if (th) { th.style.width = newW+'px'; th.style.minWidth = newW+'px'; th.style.maxWidth = newW+'px'; }
 }
 function onResizeUp() {
   _resizing = null;
