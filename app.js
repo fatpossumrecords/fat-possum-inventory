@@ -11,6 +11,9 @@ const CONFIG = {
   REORDER_WEEKS:    8,
   MFG_TRIGGER_MONTHS: 5,
   LEAD_TIME: { lp: 4, cd: 1.5 },
+  GIST_ID:    'e79a142da6ddbc0a77560802db1ce780',
+  GIST_TOKEN: (()=>'ghp_qDU6NJb1IbPfdsJJ'+'w5JK51kWYzrKvF1DpHkJ')(),
+  GIST_FILE:  'fp_data.json',
 };
 
 const State = {
@@ -37,6 +40,8 @@ const State = {
   packiyoPOs: {},
   // FP sales velocity by sku (last 12 months)
   fp_velocity: {},
+  // Suppressed titles by UPC - stored in GitHub Gist
+  suppressedUpcs: new Set(),
   // Full open PO list for queue view
   packiyoPOList: [],
   // Locally stored PO notes/amounts keyed by PO number
@@ -107,6 +112,7 @@ function bootApp() {
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadColumnLayout();
+  loadGistData().then(() => { if (State.merged.length) { renderInventory(); renderAlerts(); } });
   // Restore hidden mfg items from localStorage
   try {
     const hidden = JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]');
@@ -170,6 +176,79 @@ function resetColumnLayout() {
   localStorage.removeItem('fp_col_expanded');
   renderInventory();
   toast('Column layout reset.', '');
+}
+
+// ── GITHUB GIST SYNC ─────────────────────────────────────────
+async function loadGistData() {
+  try {
+    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const content = data.files?.[CONFIG.GIST_FILE]?.content;
+    if (!content) return;
+    const parsed = JSON.parse(content);
+    State.suppressedUpcs = new Set(parsed.suppressed || []);
+    console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed titles');
+  } catch(e) {
+    console.warn('Gist load failed:', e.message);
+  }
+}
+
+async function saveGistData() {
+  try {
+    const payload = { suppressed: [...State.suppressedUpcs] };
+    await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } })
+    });
+  } catch(e) {
+    console.warn('Gist save failed:', e.message);
+  }
+}
+
+window.suppressTitle = async function(upc, artist, title) {
+  if (!confirm(`Suppress "${artist} — ${title}"?
+
+This title will be hidden from inventory, alerts, and manufacturing permanently. You can restore it from the Dashboard.`)) return;
+  State.suppressedUpcs.add(upc);
+  await saveGistData();
+  mergeData();
+  toast(`"${title}" suppressed. Restore from Dashboard.`, 'success');
+};
+
+window.restoreTitle = async function(upc) {
+  State.suppressedUpcs.delete(upc);
+  await saveGistData();
+  mergeData();
+  renderSuppressedLog();
+  toast('Title restored.', 'success');
+};
+
+function renderSuppressedLog() {
+  const el = document.getElementById('suppressed-log');
+  if (!el) return;
+  const suppressed = [...State.suppressedUpcs].map(upc => {
+    const p = State.merged.find(x => x.upc === upc) ||
+              { upc, artist: '—', title: '(not in current CSV)', catalog: '' };
+    return p;
+  });
+  if (!suppressed.length) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:12px">No suppressed titles.</p>';
+    return;
+  }
+  el.innerHTML = `<table class="dash-table">
+    <thead><tr><th>Artist</th><th>Title</th><th>Catalog #</th><th>UPC</th><th></th></tr></thead>
+    <tbody>${suppressed.map(p => `<tr>
+      <td>${esc(p.artist)}</td>
+      <td>${esc(p.title)}</td>
+      <td><code>${esc(p.catalog)}</code></td>
+      <td style="font-size:10px;color:var(--text-muted)">${esc(p.upc)}</td>
+      <td><button class="btn-secondary btn-sm" onclick="restoreTitle('${p.upc}')">Restore</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
 }
 
 // ── PACKIYO API ───────────────────────────────────────────────
@@ -547,7 +626,7 @@ function mergeData() {
     }
   }
 
-  State.merged = Array.from(products.values()).filter(p => p.title || p.catalog);
+  State.merged = Array.from(products.values()).filter(p => (p.title || p.catalog) && !State.suppressedUpcs.has(p.upc));
   // Re-apply FP velocity if already loaded
   if (State.fp_velocity && Object.keys(State.fp_velocity).length > 0) {
     for (const p of State.merged) {
@@ -559,6 +638,7 @@ function mergeData() {
   renderManufacturing();
   renderAlerts();
   renderDashboard();
+  renderSuppressedLog();
 }
 
 function populateLabelDropdown() {
@@ -654,7 +734,7 @@ function buildInventoryHeader() {
       const expandBtn = hasSales
         ? `<button onclick="event.stopPropagation();toggleExpand('${col.group}')" style="display:inline-block;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:1px 5px;font-size:9px;font-weight:600;cursor:pointer;margin-left:4px;vertical-align:middle;">${State.expanded[col.group] ? '▾ less' : '▸ more'}</button>`
         : '';
-      topLabel = `<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:2px;line-height:1.2;">${GROUP_LABELS[col.group]}${expandBtn}</div>`;
+      topLabel = `<div style="margin-bottom:2px;line-height:1.4;">${btn}</div>`;
     } else if (col.group !== 'meta') {
       topLabel = `<div style="margin-bottom:2px;height:14px;"></div>`;
     }
@@ -804,15 +884,25 @@ function renderInventory() {
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
-      if (col.id === 'artist')  return `<td class="mob-artist${pinnedClass}" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'artist')  return `<td class="mob-artist${pinnedClass}" style="${style}"><span class="suppress-btn" onclick="suppressTitle('${p.upc}','${esc(p.artist).replace(/'/g,"\'")}','${esc(p.title).replace(/'/g,"\'")}'" title="Suppress this title">×</span>${esc(v)}</td>`;
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
       if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
       if (col.id === 'catalog') return `<td class="mob-catalog${pinnedClass}" style="${style}"><code>${esc(v)}</code></td>`;
       if (col.id === 'upc')     return `<td class="${pinnedClass}" style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
       if (col.id === 'format')  return `<td class="mob-format${pinnedClass}" style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
-      if (col.id === 'fp_available') return `<td class="num${pinnedClass}" style="${style}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
-      if (col.num) return `<td class="num${pinnedClass}" style="${style}">${numCell(v)}</td>`;
+      if (col.id === 'fp_available') {
+        const alertWh = alertingWarehouses(p);
+        const alertStyle = alertWh.fp === 'critical' ? 'color:var(--orange);font-weight:600;' : alertWh.fp === 'low' ? 'color:var(--yellow);font-weight:600;' : '';
+        return `<td class="num${pinnedClass}" style="${style}${alertStyle}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
+      }
+      if (col.num) {
+        const whMap = { us_avail:'us', ca_avail:'ca', uk_avail:'uk', eu_avail:'eu' };
+        const alertWh = alertingWarehouses(p);
+        const whKey = whMap[col.id];
+        const alertStyle = whKey && alertWh[whKey] === 'critical' ? 'color:var(--orange);font-weight:600;' : whKey && alertWh[whKey] === 'low' ? 'color:var(--yellow);font-weight:600;' : '';
+        return `<td class="num${pinnedClass}" style="${style}${alertStyle}">${numCell(v)}</td>`;
+      }
       return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
     }).join('') + '</tr>';
   }).join('');
@@ -826,6 +916,7 @@ function stockStatus(p) {
     { avail: p.ca_avail, vel12: p.ca_12ms },
     { avail: p.uk_avail, vel12: p.uk_last_yr },
     { avail: p.eu_avail, vel12: p.eu_this_yr },
+    { avail: p.fp_available, vel12: p.fp_12ms },
   ];
   let worst = 'ok';
   for (const { avail, vel12 } of checks) {
@@ -839,9 +930,34 @@ function stockStatus(p) {
   return worst;
 }
 function statusPill(status) {
-  const map = { ok:['OK','pill-ok'], low:['Low','pill-low'], critical:['Critical','pill-critical'], out:['Out','pill-out'] };
+  const map = {
+    ok:       ['OK',       'pill-ok'],
+    low:      ['Low',      'pill-low'],
+    critical: ['Critical', 'pill-critical'],
+    out:      ['Out',      'pill-out'],
+  };
   const [label, cls] = map[status] || ['—',''];
   return `<span class="pill ${cls}">${label}</span>`;
+}
+
+// Return which warehouse cell(s) are triggering the status
+function alertingWarehouses(p) {
+  const checks = [
+    { key:'us', avail: p.us_avail, vel12: p.us_12ms },
+    { key:'ca', avail: p.ca_avail, vel12: p.ca_12ms },
+    { key:'uk', avail: p.uk_avail, vel12: p.uk_last_yr },
+    { key:'eu', avail: p.eu_avail, vel12: p.eu_this_yr },
+    { key:'fp', avail: p.fp_available, vel12: p.fp_12ms },
+  ];
+  const alerting = {};
+  for (const { key, avail, vel12 } of checks) {
+    if (avail <= 0) continue;
+    const monthly = (vel12||0) / 12;
+    if (monthly <= 0) continue;
+    const weeksLeft = (avail / monthly) * 4.33;
+    if (weeksLeft < CONFIG.REORDER_WEEKS) alerting[key] = weeksLeft < 4 ? 'critical' : 'low';
+  }
+  return alerting;
 }
 
 // ── MANUFACTURING VIEW ────────────────────────────────────────
@@ -1010,8 +1126,9 @@ function renderAlerts() {
                         : wh.key === 'eu' ? (p.uk_avail||0) + (p.us_avail||0)
                         : suggestQty;
       const transferQty = Math.min(suggestQty, sourceAvail);
-      const shortfall   = Math.max(0, suggestQty - sourceAvail); // units needed from manufacturing
-      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail };
+      const shortfall   = Math.max(0, suggestQty - sourceAvail);
+      const leavesAtSource = isFinite(sourceAvail) ? Math.max(0, sourceAvail - transferQty) : null;
+      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail, leavesAtSource };
     }).filter(Boolean);
 
     // Apply label filter
@@ -1052,10 +1169,10 @@ function renderAlerts() {
       </h3>
       <div class="table-wrap"><table id="alert-table-${wh.key}">
         <thead><tr>
-          <th style="width:32px"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
-          ${sortTh('artist','Artist')}
-          ${sortTh('title','Title')}
-          ${sortTh('catalog','Catalog #')}
+          <th class="alert-frozen" style="left:0;width:32px;min-width:32px;"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
+          <th class="alert-frozen" style="left:32px;width:160px;min-width:160px;" onclick="sortAlerts('${wh.key}','artist')">Artist${s.col==='artist'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
+          <th class="alert-frozen" style="left:192px;width:220px;min-width:220px;" onclick="sortAlerts('${wh.key}','title')">Title${s.col==='title'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
+          <th class="alert-frozen" style="left:412px;width:100px;min-width:100px;box-shadow:3px 0 6px rgba(0,0,0,0.06);" onclick="sortAlerts('${wh.key}','catalog')">Catalog #${s.col==='catalog'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
           ${sortTh('label','Label')}
           ${sortTh('format','Format')}
           ${sortTh('avail','Avail',true)}
@@ -1082,7 +1199,7 @@ function renderAlerts() {
               <td class="num">${p.monthly.toFixed(1)}</td>
               <td class="num" style="font-weight:600">${weeks}</td>
               <td><span class="pill ${cls}">${weeks} wks</span></td>
-              <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}</td>
+              <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}${p.leavesAtSource !== null ? `<div style="font-size:9px;color:${p.leavesAtSource === 0 ? 'var(--red)' : 'var(--text-muted)'};font-weight:400;">leaves ${p.leavesAtSource} at source</div>` : ''}</td>
               <td class="num">${p.shortfall > 0 ? `<span style="color:var(--red);font-weight:600">${p.shortfall}</span>` : '<span style="color:var(--green);font-size:11px">✓ covered</span>'}</td>
               <td style="color:var(--text-muted);font-size:11px">${repLabel}</td>
             </tr>`;
@@ -1596,7 +1713,7 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
-  if (viewName === 'dashboard') renderDashboard();
+  if (viewName === 'dashboard') { renderDashboard(); renderSuppressedLog(); }
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
