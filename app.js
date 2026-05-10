@@ -118,20 +118,26 @@ function bootApp() {
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadColumnLayout();
-  loadGistData().then(() => {
-    if (State.merged.length) {
-      applyShopifyVendors(); // applies both shopify and manual
-      renderInventory();
-      renderAlerts();
-    }
-  });
   // Restore hidden mfg items from localStorage
   try {
     const hidden = JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]');
     State.hiddenMfgItems = new Set(hidden);
   } catch(e) {}
   updateMfgQueueBadge();
-  loadPackiyo();
+  // Load Gist FIRST (suppressed titles, manual artists, shopify vendors)
+  // then load Packiyo so mergeData has the suppression list ready
+  loadGistData().then(() => {
+    loadPackiyo();
+  });
+  // Also restore from localStorage cache while Packiyo loads
+  const saved = localStorage.getItem('fp_orchard');
+  if (saved) {
+    try {
+      State.orchardData = JSON.parse(saved);
+      State.orchardLoaded = true;
+      updateOrchardStatus();
+    } catch(e) {}
+  }
   const saved = localStorage.getItem('fp_orchard');
   if (saved) {
     try {
@@ -234,6 +240,35 @@ async function saveGistData() {
     console.warn('Gist save failed:', e.message);
   }
 }
+
+window.toggleAllInventory = function(checked) {
+  document.querySelectorAll('.inv-row-check').forEach(cb => cb.checked = checked);
+  updateInventorySelection();
+};
+
+window.updateInventorySelection = function() {
+  const checked = document.querySelectorAll('.inv-row-check:checked');
+  const bar = document.getElementById('inv-action-bar');
+  if (!bar) return;
+  if (checked.length > 0) {
+    bar.classList.remove('hidden');
+    document.getElementById('inv-selected-count').textContent = checked.length + ' selected';
+  } else {
+    bar.classList.add('hidden');
+  }
+};
+
+window.suppressSelected = async function() {
+  const checked = document.querySelectorAll('.inv-row-check:checked');
+  if (!checked.length) return;
+  const toSuppress = [...checked].map(cb => ({ upc: cb.dataset.upc, artist: cb.dataset.artist, title: cb.dataset.title }));
+  if (!confirm(`Suppress ${toSuppress.length} title${toSuppress.length>1?'s':''}?\n\nThese will be hidden from all views permanently. Restore from the Suppressed page.`)) return;
+  toSuppress.forEach(({ upc }) => State.suppressedUpcs.add(upc));
+  await saveGistData();
+  mergeData();
+  document.getElementById('inv-action-bar')?.classList.add('hidden');
+  toast(`${toSuppress.length} title${toSuppress.length>1?'s':''} suppressed.`, 'success');
+};
 
 window.handleSuppress = function(btn) {
   const upc = btn.dataset.upc;
@@ -1091,7 +1126,7 @@ function renderInventory() {
         return `<td class="num${pinnedClass}" style="${style}${alertStyle}">${numCell(v)}</td>`;
       }
       return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
-    }).join('') + `<td style="text-align:center;width:32px;border-left:1px solid var(--border);"><button class="suppress-btn" data-upc="${esc(p.upc)}" data-artist="${esc(p.artist)}" data-title="${esc(p.title)}" title="Suppress this title permanently" onclick="handleSuppress(this)">×</button></td>` + '</tr>';
+    }).join('') + `<td style="text-align:center;width:32px;border-left:1px solid var(--border);"><input type="checkbox" class="inv-row-check" data-upc="${p.upc}" data-artist="${esc(p.artist)}" data-title="${esc(p.title)}" onchange="updateInventorySelection()" /></td>` + '</tr>';
   }).join('');
 }
 
