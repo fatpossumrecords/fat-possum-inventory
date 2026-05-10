@@ -116,12 +116,13 @@ function bootApp() {
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadColumnLayout();
-  // Restore Shopify vendor data from localStorage
-  try {
-    const sv = localStorage.getItem('fp_shopify_vendors');
-    if (sv) State.shopifyVendors = JSON.parse(sv);
-  } catch(e) {}
-  loadGistData().then(() => { if (State.merged.length) { renderInventory(); renderAlerts(); } });
+  loadGistData().then(() => {
+    if (State.merged.length) {
+      applyShopifyVendors();
+      renderInventory();
+      renderAlerts();
+    }
+  });
   // Restore hidden mfg items from localStorage
   try {
     const hidden = JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]');
@@ -199,7 +200,12 @@ async function loadGistData() {
     if (!content) return;
     const parsed = JSON.parse(content);
     State.suppressedUpcs = new Set(parsed.suppressed || []);
-    console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed titles');
+    if (parsed.shopifyVendors) {
+      State.shopifyVendors = parsed.shopifyVendors;
+      console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify vendors');
+    } else {
+      console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed titles');
+    }
   } catch(e) {
     console.warn('Gist load failed:', e.message);
   }
@@ -207,7 +213,10 @@ async function loadGistData() {
 
 async function saveGistData() {
   try {
-    const payload = { suppressed: [...State.suppressedUpcs] };
+    const payload = {
+      suppressed: [...State.suppressedUpcs],
+      shopifyVendors: State.shopifyVendors,
+    };
     await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
       headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
@@ -541,7 +550,7 @@ function loadOrchardCSV(file) {
 
 function loadShopifyCSV(file) {
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     try {
       const rows = parseCSV(e.target.result);
       const vendors = {};
@@ -553,11 +562,14 @@ function loadShopifyCSV(file) {
         if (vendor && sku) vendors['sku:' + sku] = vendor;
       }
       State.shopifyVendors = vendors;
-      localStorage.setItem('fp_shopify_vendors', JSON.stringify(vendors));
+      // Save to Gist so it persists across devices
+      setStatus('orchard', 'loading', 'Saving…');
+      await saveGistData();
+      setStatus('orchard', 'ok', localStorage.getItem('fp_orchard_ts') ? 'Updated ' + formatRelativeDate(new Date(localStorage.getItem('fp_orchard_ts'))) : 'Ready');
       // Re-apply to merged products
       applyShopifyVendors();
       renderInventory();
-      toast(`Shopify CSV loaded: ${Object.keys(vendors).length} artist mappings`, 'success');
+      toast(`Shopify CSV loaded: ${Object.keys(vendors).length} artist mappings saved to cloud`, 'success');
     } catch(err) {
       toast('Shopify CSV parse error: ' + err.message, 'error');
     }
