@@ -884,7 +884,7 @@ function renderInventory() {
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
-      if (col.id === 'artist')  return `<td class="mob-artist${pinnedClass}" style="${style}"><span class="suppress-btn" onclick="suppressTitle('${p.upc}','${esc(p.artist).replace(/'/g,"\'")}','${esc(p.title).replace(/'/g,"\'")}'" title="Suppress this title">×</span>${esc(v)}</td>`;
+      if (col.id === 'artist')  return `<td class="mob-artist${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
       if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
@@ -904,7 +904,7 @@ function renderInventory() {
         return `<td class="num${pinnedClass}" style="${style}${alertStyle}">${numCell(v)}</td>`;
       }
       return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
-    }).join('') + '</tr>';
+    }).join('') + `<td style="text-align:center;width:32px;"><button class="suppress-btn" onclick="suppressTitle('${p.upc}','${esc(p.artist).replace(/'/g,"\'")}','${esc(p.title).replace(/'/g,"\'")}'" title="Suppress this title permanently">×</button></td>` + '</tr>';
   }).join('');
 }
 
@@ -1169,10 +1169,10 @@ function renderAlerts() {
       </h3>
       <div class="table-wrap"><table id="alert-table-${wh.key}">
         <thead><tr>
-          <th class="alert-frozen" style="left:0;width:32px;min-width:32px;"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
-          <th class="alert-frozen" style="left:32px;width:160px;min-width:160px;" onclick="sortAlerts('${wh.key}','artist')">Artist${s.col==='artist'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
-          <th class="alert-frozen" style="left:192px;width:220px;min-width:220px;" onclick="sortAlerts('${wh.key}','title')">Title${s.col==='title'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
-          <th class="alert-frozen" style="left:412px;width:100px;min-width:100px;box-shadow:3px 0 6px rgba(0,0,0,0.06);" onclick="sortAlerts('${wh.key}','catalog')">Catalog #${s.col==='catalog'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
+          <th style="position:sticky;left:0;z-index:11;background:var(--surface2);width:32px;min-width:32px;text-align:center;"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
+          <th style="position:sticky;left:32px;z-index:11;background:var(--surface2);width:160px;min-width:160px;cursor:pointer;" onclick="sortAlerts('${wh.key}','artist')">Artist${s.col==='artist'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
+          <th style="position:sticky;left:192px;z-index:11;background:var(--surface2);width:220px;min-width:220px;cursor:pointer;" onclick="sortAlerts('${wh.key}','title')">Title${s.col==='title'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
+          <th style="position:sticky;left:412px;z-index:11;background:var(--surface2);width:100px;min-width:100px;box-shadow:3px 0 6px rgba(0,0,0,0.07);cursor:pointer;" onclick="sortAlerts('${wh.key}','catalog')">Catalog #${s.col==='catalog'?(s.dir==='asc'?' ↑':' ↓'):''}</th>
           ${sortTh('label','Label')}
           ${sortTh('format','Format')}
           ${sortTh('avail','Avail',true)}
