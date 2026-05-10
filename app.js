@@ -35,6 +35,8 @@ const State = {
   hiddenMfgItems: new Set(JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]')),
   // purchase orders from packiyo, keyed by sku
   packiyoPOs: {},
+  // manufacturing queue - persisted to localStorage
+  mfgQueue: JSON.parse(localStorage.getItem('fp_mfg_queue') || '[]'),
   // manual column widths: { colId: px }
   colWidths: {},
 };
@@ -99,6 +101,7 @@ function bootApp() {
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadColumnLayout();
+  updateMfgQueueBadge();
   loadPackiyo();
   const saved = localStorage.getItem('fp_orchard');
   if (saved) {
@@ -1313,6 +1316,185 @@ function renderDashboard() {
     </div>
   `;
 }
+
+// ── MANUFACTURING QUEUE ──────────────────────────────────────
+window.switchMfgTab = function(tab) {
+  document.querySelectorAll('.mfg-tab').forEach(t => { t.classList.add('hidden'); t.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`mfg-tab-${tab}`)?.classList.remove('hidden');
+  document.getElementById(`mfg-tab-${tab}`)?.classList.add('active');
+  document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
+  if (tab === 'queue') renderMfgQueue();
+};
+
+window.showAddMfgQueueForm = function() {
+  document.getElementById('mfg-queue-form').classList.remove('hidden');
+  // Populate manufacturer datalist from existing queue entries
+  const manufacturers = [...new Set(State.mfgQueue.map(i => i.manufacturer).filter(Boolean))];
+  document.getElementById('manufacturer-list').innerHTML = manufacturers.map(m => `<option value="${esc(m)}">`).join('');
+};
+
+// Product search in queue form
+document.addEventListener('DOMContentLoaded', () => {
+  const searchEl = document.getElementById('mfq-product-search');
+  if (searchEl) {
+    searchEl.addEventListener('input', debounce(() => {
+      const q = searchEl.value.toLowerCase().trim();
+      const dd = document.getElementById('mfq-product-dropdown');
+      if (q.length < 2) { dd.classList.add('hidden'); return; }
+      const matches = State.merged.filter(p => `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)).slice(0, 12);
+      if (!matches.length) { dd.classList.add('hidden'); return; }
+      dd.innerHTML = matches.map(p =>
+        `<div class="product-dropdown-item" data-upc="${esc(p.upc)}">
+          <strong>${esc(p.artist)} — ${esc(p.title)}</strong>
+          <div class="dd-sub">${esc(p.catalog)} · ${esc(p.format)}</div>
+        </div>`
+      ).join('');
+      dd.classList.remove('hidden');
+      dd.querySelectorAll('.product-dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const prod = State.merged.find(p => p.upc === item.dataset.upc);
+          if (!prod) return;
+          searchEl.value = `${prod.artist} — ${prod.title}`;
+          document.getElementById('mfq-product-upc').value = prod.upc;
+          dd.classList.add('hidden');
+          const sel = document.getElementById('mfq-selected');
+          sel.innerHTML = `<strong>${esc(prod.artist)} — ${esc(prod.title)}</strong><span>${esc(prod.catalog)} · ${esc(prod.format)}</span>`;
+          sel.classList.remove('hidden');
+        });
+      });
+    }, 200));
+  }
+});
+
+window.saveMfgQueueItem = function() {
+  const upc = document.getElementById('mfq-product-upc').value;
+  const manufacturer = document.getElementById('mfq-manufacturer').value.trim();
+  const qty = safeNum(document.getElementById('mfq-qty').value);
+  const amount = safeNum(document.getElementById('mfq-amount').value);
+  const expectedDate = document.getElementById('mfq-expected-date').value;
+  const actualDate = document.getElementById('mfq-actual-date').value;
+  const notes = document.getElementById('mfq-notes').value.trim();
+  const shipTo = document.getElementById('mfq-ship-to').value;
+
+  if (!upc) { toast('Please select a product.', 'error'); return; }
+  if (!qty) { toast('Please enter a quantity.', 'error'); return; }
+
+  const prod = State.merged.find(p => p.upc === upc);
+  if (!prod) { toast('Product not found.', 'error'); return; }
+
+  const item = {
+    id: Date.now(),
+    upc, manufacturer,
+    artist: prod.artist,
+    title: prod.title,
+    catalog: prod.orchard_catalog || prod.catalog,
+    format: prod.format,
+    qty, amount, expectedDate, actualDate, notes, shipTo,
+    addedAt: new Date().toISOString(),
+  };
+
+  State.mfgQueue.push(item);
+  localStorage.setItem('fp_mfg_queue', JSON.stringify(State.mfgQueue));
+
+  // Reset form
+  document.getElementById('mfq-product-search').value = '';
+  document.getElementById('mfq-product-upc').value = '';
+  document.getElementById('mfq-manufacturer').value = '';
+  document.getElementById('mfq-qty').value = '';
+  document.getElementById('mfq-amount').value = '';
+  document.getElementById('mfq-expected-date').value = '';
+  document.getElementById('mfq-actual-date').value = '';
+  document.getElementById('mfq-notes').value = '';
+  document.getElementById('mfq-selected').classList.add('hidden');
+  document.getElementById('mfg-queue-form').classList.add('hidden');
+
+  renderMfgQueue();
+  updateMfgQueueBadge();
+  toast('Added to manufacturing queue.', 'success');
+};
+
+window.addSelectedToMfgQueue = function() {
+  // Pre-populate queue form with items checked in predictions (future enhancement)
+  // For now just switch to queue tab and open form
+  switchMfgTab('queue');
+  showAddMfgQueueForm();
+};
+
+window.removeMfgQueueItem = function(id) {
+  State.mfgQueue = State.mfgQueue.filter(i => i.id !== id);
+  localStorage.setItem('fp_mfg_queue', JSON.stringify(State.mfgQueue));
+  renderMfgQueue();
+  updateMfgQueueBadge();
+};
+
+window.updateMfgQueueItem = function(id, field, value) {
+  const item = State.mfgQueue.find(i => i.id === id);
+  if (!item) return;
+  item[field] = value;
+  localStorage.setItem('fp_mfg_queue', JSON.stringify(State.mfgQueue));
+};
+
+function updateMfgQueueBadge() {
+  const badge = document.getElementById('mfg-queue-badge');
+  if (!badge) return;
+  const count = State.mfgQueue.length;
+  badge.textContent = count;
+  count > 0 ? badge.classList.remove('hidden') : badge.classList.add('hidden');
+  // Summary
+  const sum = document.getElementById('mfg-queue-summary');
+  if (sum) {
+    const totalQty = State.mfgQueue.reduce((s,i) => s+i.qty, 0);
+    const totalAmt = State.mfgQueue.reduce((s,i) => s+i.amount, 0);
+    sum.textContent = `${count} item${count!==1?'s':''} · ${totalQty.toLocaleString()} units · $${totalAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} quoted`;
+  }
+}
+
+function renderMfgQueue() {
+  const tbody = document.getElementById('mfg-queue-tbody');
+  if (!tbody) return;
+  updateMfgQueueBadge();
+  if (State.mfgQueue.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="13" class="empty-cell">No items in manufacturing queue. Click + Add Item to get started.</td></tr>`;
+    return;
+  }
+  const WH = { fp: 'Fat Possum WH', us: 'Orchard US (Dropship)' };
+  const today = new Date();
+  tbody.innerHTML = State.mfgQueue.map(item => {
+    const expDate = item.expectedDate ? new Date(item.expectedDate) : null;
+    const actDate = item.actualDate ? new Date(item.actualDate+'T00:00:00') : null;
+    const status = actDate ? '<span class="pill pill-ok">Shipped</span>'
+      : !expDate ? '<span class="pill" style="background:var(--surface2);color:var(--text-muted)">No date</span>'
+      : expDate < today ? '<span class="pill pill-critical">Overdue</span>'
+      : (expDate - today) < 14*24*3600*1000 ? '<span class="pill pill-soon">Due soon</span>'
+      : '<span class="pill pill-plan">On track</span>';
+    return `<tr>
+      <td>${esc(item.artist)}</td>
+      <td>${esc(item.title)}</td>
+      <td><code>${esc(item.catalog)}</code></td>
+      <td>${esc(item.format)}</td>
+      <td><input type="text" value="${esc(item.manufacturer)}" style="width:120px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'manufacturer',this.value)" /></td>
+      <td class="num"><input type="number" value="${item.qty}" style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'qty',+this.value)" /></td>
+      <td class="num"><input type="number" value="${item.amount||''}" step="0.01" placeholder="0.00" style="width:90px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'amount',+this.value)" /></td>
+      <td><input type="date" value="${item.expectedDate||''}" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'expectedDate',this.value)" /></td>
+      <td><input type="date" value="${item.actualDate||''}" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'actualDate',this.value)" /></td>
+      <td style="font-size:11px;color:var(--text-muted)">${WH[item.shipTo]||item.shipTo}</td>
+      <td>${status}</td>
+      <td><input type="text" value="${esc(item.notes||'')}" placeholder="Notes…" style="width:120px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);" onchange="updateMfgQueueItem(${item.id},'notes',this.value)" /></td>
+      <td><button class="btn-danger" onclick="removeMfgQueueItem(${item.id})">×</button></td>
+    </tr>`;
+  }).join('');
+}
+
+window.exportMfgQueue = function() {
+  if (State.mfgQueue.length === 0) { toast('Queue is empty.', 'error'); return; }
+  const WH = { fp: 'Fat Possum WH', us: 'Orchard US (Dropship)' };
+  downloadCSV('fp_mfg_queue_'+dateStr()+'.csv',
+    ['Artist','Title','Catalog #','Format','Manufacturer','Qty Ordered','Quoted Amount','Expected Ship Date','Actual Ship Date','Ship To','Notes'],
+    State.mfgQueue.map(i => [i.artist,i.title,i.catalog,i.format,i.manufacturer,i.qty,i.amount||'',i.expectedDate||'',i.actualDate||'',WH[i.shipTo]||i.shipTo,i.notes||''])
+  );
+  toast('Manufacturing queue exported.', 'success');
+};
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
