@@ -222,14 +222,16 @@ tr:hover td.is-pinned { background: #e8e3d8 !important; }
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;
 }
-.pill-ok       { background: var(--green-bg);  color: var(--green); }
-.pill-low      { background: var(--yellow-bg); color: var(--yellow); }
-.pill-critical { background: var(--red-bg);    color: var(--red); }
-.pill-out      { background: var(--red-bg);    color: var(--red); border: 1px solid var(--accent-dim); }
-.pill-urgent   { background: var(--red-bg);    color: var(--red); }
-.pill-soon     { background: var(--yellow-bg); color: var(--yellow); }
-.pill-plan     { background: var(--blue-bg);   color: var(--blue); }
+.pill-ok       { background: var(--green-bg);   color: var(--green); }
+.pill-low      { background: var(--yellow-bg);  color: var(--yellow); }
+.pill-critical { background: #fdeede;            color: #c45f00; }
+.pill-out      { background: var(--red-bg);     color: var(--red); border: 1px solid var(--accent-dim); }
+.pill-urgent   { background: var(--red-bg);     color: var(--red); }
+.pill-soon     { background: var(--yellow-bg);  color: var(--yellow); }
+.pill-plan     { background: var(--blue-bg);    color: var(--blue); }
 .num-zero      { color: var(--text-dim); }
+/* orange for critical warehouse cells */
+:root { --orange: #c45f00; --orange-bg: #fdeede; }
 
 /* ── BUTTONS ── */
 .btn-primary {
@@ -477,3 +479,30 @@ td { overflow: hidden; }
 .tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .mfg-tab { display: none; flex: 1; flex-direction: column; overflow: hidden; }
 .mfg-tab.active { display: flex; }
+
+
+/* ── SUPPRESS BUTTON ── */
+.suppress-btn {
+  display: inline-block;
+  margin-right: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  vertical-align: middle;
+  user-select: none;
+}
+tr:hover .suppress-btn { opacity: 1; }
+.suppress-btn:hover { color: var(--red); }
+
+/* ── ALERTS FROZEN COLUMNS ── */
+.alert-frozen {
+  position: sticky;
+  background: var(--surface);
+  z-index: 3;
+}
+tr:nth-child(even) .alert-frozen { background: #f4f1ec; }
+tr:hover .alert-frozen { background: #e8e3d8 !important; }
+thead .alert-frozen { background: var(--surface2) !important; z-index: 11; }
