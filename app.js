@@ -1221,11 +1221,12 @@ function renderAlerts() {
             const weeks = p.weeksLeft.toFixed(1);
             const cls = p.weeksLeft < 2 ? 'pill-critical' : p.weeksLeft < 4 ? 'pill-urgent' : 'pill-low';
             const rowKey = `${wh.key}|${p.upc}`;
+            const bg = 'background:var(--surface)';
             return `<tr>
-              <td style="text-align:center"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.transferQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
-              <td>${esc(p.artist)}</td>
-              <td>${esc(p.title)}</td>
-              <td><code>${esc(p.catalog)}</code></td>
+              <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.transferQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
+              <td style="position:sticky;left:32px;z-index:3;${bg};width:160px;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.artist)}</td>
+              <td style="position:sticky;left:192px;z-index:3;${bg};width:220px;min-width:220px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.title)}</td>
+              <td style="position:sticky;left:412px;z-index:3;${bg};width:100px;min-width:100px;box-shadow:3px 0 5px rgba(0,0,0,0.07);white-space:nowrap;"><code>${esc(p.catalog)}</code></td>
               <td style="color:var(--text-muted);font-size:11px">${esc(p.label)}</td>
               <td>${esc(p.format)}</td>
               <td class="num">${numCell(p.avail)}</td>
