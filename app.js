@@ -552,13 +552,16 @@ function loadShopifyCSV(file) {
   const reader = new FileReader();
   reader.onload = async e => {
     try {
-      const rows = parseCSV(e.target.result);
+      const rows = parseCSVRobust(e.target.result);
       const vendors = {};
       let currentVendor = '';
       for (const row of rows) {
         // Vendor only appears on first row of each product — carry it forward
         const vendor = (row['Vendor'] || '').trim();
-        if (vendor) currentVendor = vendor;
+        // Only update if it looks like a real vendor (not a tag like g::Rock)
+        if (vendor && !vendor.startsWith('g::') && !vendor.includes('shopify') && vendor.length < 100) {
+          currentVendor = vendor;
+        }
         const upc = normalizeUPC(row['Variant Barcode'] || '');
         const sku = (row['Variant SKU'] || '').trim();
         if (currentVendor && upc) vendors[upc] = currentVendor;
@@ -588,6 +591,48 @@ function applyShopifyVendors() {
     const bySku = State.shopifyVendors['sku:' + p.packiyo_sku] || State.shopifyVendors['sku:' + p.catalog];
     if (byUpc || bySku) p.artist = byUpc || bySku;
   }
+}
+
+function parseCSVRobust(text) {
+  // Handles multiline quoted fields (e.g. Shopify HTML body)
+  const rows = [];
+  let headers = null;
+  let i = 0;
+  while (i < text.length) {
+    const fields = [];
+    while (i < text.length) {
+      if (text[i] === '"') {
+        // Quoted field
+        i++;
+        let val = '';
+        while (i < text.length) {
+          if (text[i] === '"' && text[i+1] === '"') { val += '"'; i += 2; }
+          else if (text[i] === '"') { i++; break; }
+          else { val += text[i++]; }
+        }
+        fields.push(val);
+        if (text[i] === ',') i++;
+      } else {
+        // Unquoted field
+        let val = '';
+        while (i < text.length && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
+          val += text[i++];
+        }
+        fields.push(val);
+        if (text[i] === ',') i++;
+      }
+      if (i >= text.length || text[i] === '\n' || text[i] === '\r') break;
+    }
+    // Skip \r\n or \n
+    if (text[i] === '\r') i++;
+    if (text[i] === '\n') i++;
+    if (!headers) { headers = fields; continue; }
+    if (fields.length === 0 || (fields.length === 1 && !fields[0])) continue;
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = fields[idx] || ''; });
+    rows.push(row);
+  }
+  return rows;
 }
 
 function parseCSV(text) {
