@@ -554,12 +554,15 @@ function loadShopifyCSV(file) {
     try {
       const rows = parseCSV(e.target.result);
       const vendors = {};
+      let currentVendor = '';
       for (const row of rows) {
+        // Vendor only appears on first row of each product — carry it forward
         const vendor = (row['Vendor'] || '').trim();
+        if (vendor) currentVendor = vendor;
         const upc = normalizeUPC(row['Variant Barcode'] || '');
         const sku = (row['Variant SKU'] || '').trim();
-        if (vendor && upc) vendors[upc] = vendor;
-        if (vendor && sku) vendors['sku:' + sku] = vendor;
+        if (currentVendor && upc) vendors[upc] = currentVendor;
+        if (currentVendor && sku) vendors['sku:' + sku] = currentVendor;
       }
       State.shopifyVendors = vendors;
       // Save to Gist so it persists across devices
