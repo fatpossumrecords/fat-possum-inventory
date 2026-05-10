@@ -473,7 +473,7 @@ function buildInventoryHeader() {
   const thead = document.querySelector('#inventory-table thead');
   const cols = visibleCols();
 
-  // Compute exact pixel left offset for every pinned column
+  // Compute pinned left offsets
   let runningLeft = 0;
   const pinnedOffsets = {};
   for (const col of cols) {
@@ -483,41 +483,19 @@ function buildInventoryHeader() {
     }
   }
 
-  // Row 1: group headers
-  // For each group, figure out sticky left by summing widths of all prior pinned cols
-  const groups = ['meta','fp','us','ca','uk','eu'];
-  let row1 = '<tr>';
-  for (const g of groups) {
-    const allCols = INV_COLS.filter(c => c.group === g);
-    const visCols = allCols.filter(c => c.always || State.expanded[g]);
-    if (visCols.length === 0) continue;
+  // Single header row — group label shown as sub-label inside each th
+  // This avoids all colspan/sticky sync issues with two-row headers
+  const GROUP_COLORS = {
+    meta: '', fp: '#f5f0e8', us: '#eef4fb', ca: '#eef4fb',
+    uk: '#f0f5ee', eu: '#f0f5ee'
+  };
 
-    // A group header is sticky only if ALL its visible cols are pinned
-    const allPinned = visCols.every(c => State.pinnedCols.has(c.id));
-    // left = offset of the first col in the group
-    const groupLeft = allPinned ? (pinnedOffsets[visCols[0].id] ?? 0) : 0;
-    const stickyStyle = allPinned
-      ? `position:sticky;left:${groupLeft}px;z-index:12;`
-      : '';
-
-    if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="background:var(--surface2);border-right:2px solid var(--border2);padding:3px 10px;font-size:9px;color:var(--text-dim);${stickyStyle}">📌 pin columns to freeze while scrolling</th>`;
-    } else {
-      const hasSales = allCols.some(c => !c.always);
-      const btn = hasSales
-        ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:5px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>`
-        : '';
-      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);border-right:2px solid var(--border2);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);${stickyStyle}">${GROUP_LABELS[g]}${btn}</th>`;
-    }
-  }
-  row1 += '</tr>';
-
-  // Row 2: individual column headers
-  let row2 = '<tr>';
+  let row = '<tr>';
   for (let i = 0; i < cols.length; i++) {
     const col = cols[i];
     const next = cols[i + 1];
     const isGroupEnd = !next || next.group !== col.group;
+    const isGroupStart = i === 0 || cols[i-1].group !== col.group;
     const isPinned = State.pinnedCols.has(col.id);
     const w = State.colWidths[col.id] || getDefaultWidth(col);
     const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
@@ -525,18 +503,35 @@ function buildInventoryHeader() {
     const pinIcon = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin':'Pin'}">${isPinned?'📌':'📍'}</span>`;
     const resizeHandle = `<span class="resize-handle" onmousedown="startResize(event,'${col.id}')"></span>`;
     const stickyStyle = isPinned
-      ? `position:sticky;left:${pinnedOffsets[col.id]}px;z-index:11;background:var(--surface2);box-shadow:2px 0 4px rgba(0,0,0,0.07);`
+      ? `position:sticky;left:${pinnedOffsets[col.id]}px;z-index:11;`
       : '';
     const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}"
-      data-col="${col.id}"
-      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${borderRight}position:relative;overflow:visible;"
-      onclick="handleInvSort('${col.id}')"
-    >${col.label}${pinIcon}${resizeHandle}</th>`;
-  }
-  row2 += '</tr>';
+    const borderLeft = isGroupStart && col.group !== 'meta' ? 'border-left:2px solid var(--border2);' : '';
+    const bgColor = GROUP_COLORS[col.group] || '';
+    const bgStyle = bgColor ? `background:${bgColor};` : 'background:var(--surface2);';
 
-  thead.innerHTML = row1 + row2;
+    // Show group label + expand button on first col of each non-meta group
+    let groupLabel = '';
+    if (col.group !== 'meta' && isGroupStart) {
+      const allCols = INV_COLS.filter(c => c.group === col.group);
+      const hasSales = allCols.some(c => !c.always);
+      const btn = hasSales
+        ? `<span onclick="event.stopPropagation();toggleExpand('${col.group}')" style="cursor:pointer;font-size:10px;opacity:0.6;margin-left:3px;">${State.expanded[col.group]?'▾':'▸'}</span>`
+        : '';
+      groupLabel = `<div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:2px;line-height:1;">${GROUP_LABELS[col.group]}${btn}</div>`;
+    } else if (col.group !== 'meta') {
+      groupLabel = `<div style="font-size:8px;margin-bottom:2px;line-height:1;">&nbsp;</div>`;
+    }
+
+    row += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}"
+      data-col="${col.id}"
+      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${bgStyle}${borderRight}${borderLeft}position:relative;overflow:visible;vertical-align:bottom;padding-bottom:7px;"
+      onclick="handleInvSort('${col.id}')"
+    >${groupLabel}${col.label}${pinIcon}${resizeHandle}</th>`;
+  }
+  row += '</tr>';
+
+  thead.innerHTML = row;
   applyColWidths();
 }
 
