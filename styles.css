@@ -336,3 +336,109 @@ th.is-pinned .pin-btn { opacity: 1; }
 
 /* Allow columns to clip but show full text on hover via title; no ellipsis clipping */
 td { overflow: hidden; }
+
+/* ── DASHBOARD ── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.dash-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 20px 24px;
+  transition: box-shadow 0.15s;
+}
+.dash-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.dash-card-red    { border-left: 4px solid var(--red);   background: var(--red-bg); }
+.dash-card-yellow { border-left: 4px solid var(--yellow); background: var(--yellow-bg); }
+.dash-card-green  { border-left: 4px solid var(--green);  background: var(--green-bg); }
+.dash-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 8px; }
+.dash-num   { font-family: 'DM Mono', monospace; font-size: 32px; font-weight: 500; line-height: 1; color: var(--text); }
+.dash-sub   { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.dash-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.dash-section { background: var(--surface); border: 1px solid var(--border); padding: 20px 24px; }
+.dash-section h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+.dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dash-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.dash-table th.num { text-align: right; }
+.dash-table td { padding: 8px 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+.dash-table td.num { text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; }
+.dash-table tr:last-child td { border-bottom: none; }
+.dash-table tr:hover td { background: var(--surface2); }
+
+/* ── MOBILE ── */
+@media (max-width: 768px) {
+  :root { --sidebar-w: 0px; }
+
+  #sidebar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    width: 100% !important; min-width: 100% !important;
+    height: auto; flex-direction: row;
+    border-right: none; border-top: 1px solid var(--border);
+    z-index: 100; overflow-x: auto; overflow-y: hidden;
+  }
+  .sidebar-header, .sidebar-footer { display: none; }
+  nav {
+    display: flex; flex-direction: row;
+    padding: 0; flex: 1;
+  }
+  .nav-item {
+    flex-direction: column; gap: 3px;
+    padding: 10px 16px; font-size: 9px;
+    border-left: none; border-top: 3px solid transparent;
+    flex: 1; justify-content: center; align-items: center;
+    text-align: center;
+  }
+  .nav-item.active { border-top-color: var(--accent); border-left-color: transparent; }
+  .nav-item svg { width: 18px; height: 18px; }
+
+  #app { flex-direction: column; }
+  #main-content { padding-bottom: 60px; }
+
+  .view-header { flex-direction: column; gap: 10px; }
+  .view-actions { flex-wrap: wrap; gap: 6px; }
+  .view-header h2 { font-size: 16px; }
+
+  /* Mobile inventory — simple card view instead of table */
+  .mobile-hide { display: none !important; }
+  #inventory-table thead { display: none; }
+  #inventory-table, #inventory-table tbody, #inventory-table tr { display: block; width: 100%; }
+  #inventory-table tr {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    padding: 12px 14px;
+  }
+  #inventory-table tr:hover { background: var(--surface); }
+  #inventory-table td {
+    display: none;
+    border: none; padding: 2px 0;
+    white-space: normal; background: transparent;
+  }
+  /* Show only key mobile columns */
+  #inventory-table td.mob-artist  { display: block; font-weight: 600; font-size: 13px; }
+  #inventory-table td.mob-title   { display: block; color: var(--text-muted); font-size: 12px; margin-bottom: 6px; }
+  #inventory-table td.mob-catalog { display: inline-block; font-size: 10px; color: var(--text-muted); margin-right: 8px; }
+  #inventory-table td.mob-format  { display: inline-block; }
+  #inventory-table td.mob-total   {
+    display: block; margin-top: 8px;
+    font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500;
+  }
+  #inventory-table td.mob-status  { display: inline-block; margin-top: 4px; }
+  /* Warehouse expand toggle on mobile */
+  #inventory-table td.mob-wh-detail {
+    display: none;
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-muted);
+  }
+  #inventory-table tr.mob-expanded td.mob-wh-detail { display: block; }
+
+  /* Hide table-based views on mobile — show simplified */
+  .dash-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dash-row  { grid-template-columns: 1fr; }
+  .dash-num  { font-size: 24px; }
+
+  .search-input { width: 100%; }
+}
