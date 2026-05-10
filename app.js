@@ -484,6 +484,7 @@ function buildInventoryHeader() {
   applyColWidths();
 
   // Two header rows: group row + column row
+  // With table-layout:fixed, colspan cells need explicit width = sum of child col widths
   const groups = ['meta','fp','us','ca','uk','eu'];
   let row1 = '<tr>';
   for (const g of groups) {
@@ -491,12 +492,14 @@ function buildInventoryHeader() {
     const visCols = allCols.filter(c => c.always || State.expanded[g]);
     if (visCols.length === 0) continue;
     const isGroupEnd = 'border-right:2px solid var(--border2);';
+    // Calculate total width for this group's visible columns
+    const groupW = visCols.reduce((s,c) => s + (STICKY_COLS.includes(c.id) ? STICKY_WIDTHS[c.id] : (State.colWidths[c.id] || getDefaultWidth(c))), 0);
     if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="position:sticky;left:0;top:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;white-space:nowrap;overflow:hidden;">Artist · Title · Catalog # always frozen</th>`;
+      row1 += `<th colspan="${visCols.length}" style="width:${groupW}px;min-width:${groupW}px;position:sticky;left:0;top:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;white-space:nowrap;overflow:hidden;">Artist · Title · Catalog # always frozen</th>`;
     } else {
       const hasSales = allCols.some(c => !c.always);
       const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:12px;color:var(--accent);font-weight:600;" title="${State.expanded[g]?'Collapse sales columns':'Expand sales columns'}">${State.expanded[g]?'▾ hide':'▸ sales'}</span>` : '';
-      row1 += `<th colspan="${visCols.length}" style="position:sticky;top:0;z-index:10;text-align:center;background:var(--surface2);${isGroupEnd}white-space:nowrap;overflow:hidden;padding:4px 8px;">${GROUP_LABELS[g]}${btn}</th>`;
+      row1 += `<th colspan="${visCols.length}" style="width:${groupW}px;min-width:${groupW}px;position:sticky;top:0;z-index:10;text-align:center;background:var(--surface2);${isGroupEnd}white-space:nowrap;overflow:hidden;padding:4px 8px;">${GROUP_LABELS[g]}${btn}</th>`;
     }
   }
   row1 += '</tr>';
