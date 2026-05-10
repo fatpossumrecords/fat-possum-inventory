@@ -1042,9 +1042,14 @@ function renderInventory() {
       const v = getVal(p, col.id);
 
       if (col.id === 'artist') {
-        if (v) return `<td class="mob-artist${pinnedClass}" style="${style}">${esc(v)}</td>`;
-        // Blank artist — show editable input
-        return `<td class="mob-artist${pinnedClass}" style="${style}"><input type="text" placeholder="Add artist…" style="border:none;background:transparent;font-family:inherit;font-size:inherit;color:var(--text);width:100%;outline:none;border-bottom:1px dashed var(--border2);" onblur="if(this.value)saveManualArtist('${esc(p.upc)}',this.value)" onkeydown="if(event.key==='Enter')this.blur()" /></td>`;
+        const isManual = !!State.manualArtists[p.upc];
+        const isBlank = !v;
+        if (isBlank) {
+          // Blank — show input immediately
+          return `<td class="mob-artist${pinnedClass}" style="${style}"><input type="text" placeholder="Add artist…" style="border:none;background:transparent;font-family:inherit;font-size:inherit;color:var(--text);width:100%;outline:none;border-bottom:1px dashed var(--border2);cursor:text;" onblur="if(this.value)saveManualArtist('${p.upc}',this.value)" onkeydown="if(event.key==='Enter')this.blur()" /></td>`;
+        }
+        // Has value — show text, double-click to edit
+        return `<td class="mob-artist${pinnedClass}" style="${style}" ondblclick="this.innerHTML='<input type=\'text\'style=\'border:none;background:transparent;font-family:inherit;font-size:inherit;color:var(--text);width:100%;outline:none;border-bottom:1px solid var(--accent);\'value=\''+encodeURIComponent('${esc(v).replace(/'/g,"\'")}')+'\' />';const i=this.querySelector('input');i.value=decodeURIComponent(i.value);i.focus();i.select();i.onblur=()=>{if(i.value.trim())saveManualArtist('${p.upc}',i.value);};i.onkeydown=e=>{if(e.key==='Enter')i.blur();};" title="Double-click to edit">${esc(v)}${isManual ? '<span style=\'font-size:9px;color:var(--text-dim);margin-left:4px;\'>✎</span>' : ''}</td>`;
       }
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
