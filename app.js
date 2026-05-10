@@ -552,7 +552,6 @@ function loadOrchardCSV(file) {
 }
 
 function loadShopifyCSV(file) {
-  // Use Papa Parse for robust CSV parsing (handles multiline HTML fields)
   if (!window.Papa) {
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js';
@@ -570,7 +569,6 @@ function loadShopifyCSV(file) {
         let currentVendor = '';
         for (const row of rows) {
           const vendor = (row['Vendor'] || '').trim();
-          // Only carry forward real vendor names
           if (vendor && !vendor.startsWith('g::') && !vendor.includes('shopify') && vendor.length < 80) {
             currentVendor = vendor;
           }
@@ -579,20 +577,20 @@ function loadShopifyCSV(file) {
           if (currentVendor && upc) vendors[upc] = currentVendor;
           if (currentVendor && sku) vendors['sku:' + sku] = currentVendor;
         }
-      State.shopifyVendors = vendors;
-      // Save to Gist so it persists across devices
-      setStatus('orchard', 'loading', 'Saving…');
-      await saveGistData();
-      setStatus('orchard', 'ok', localStorage.getItem('fp_orchard_ts') ? 'Updated ' + formatRelativeDate(new Date(localStorage.getItem('fp_orchard_ts'))) : 'Ready');
-      // Re-apply to merged products
-      applyShopifyVendors();
-      renderInventory();
-      toast(`Shopify CSV loaded: ${Object.keys(vendors).length} artist mappings saved to cloud`, 'success');
-    } catch(err) {
-      toast('Shopify CSV parse error: ' + err.message, 'error');
-    }
-  };
-  reader.readAsText(file);
+        State.shopifyVendors = vendors;
+        setStatus('shopify', 'loading', 'Saving…');
+        await saveGistData();
+        const mappingCount = Object.keys(vendors).length;
+        setStatus('shopify', 'ok', mappingCount + ' artists');
+        applyShopifyVendors();
+        renderInventory();
+        toast(`Shopify CSV: ${mappingCount} artist mappings saved`, 'success');
+      } catch(err) {
+        toast('Shopify CSV error: ' + err.message, 'error');
+      }
+    },
+    error: (err) => toast('Shopify parse error: ' + err.message, 'error'),
+  });
 }
 
 function applyShopifyVendors() {
