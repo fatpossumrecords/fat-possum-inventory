@@ -130,10 +130,10 @@ function bootApp() {
     loadPackiyo();
   });
   // Also restore from localStorage cache while Packiyo loads
-  const saved = localStorage.getItem('fp_orchard');
-  if (saved) {
+  const orchardCache = localStorage.getItem('fp_orchard');
+  if (orchardCache) {
     try {
-      State.orchardData = JSON.parse(saved);
+      State.orchardData = JSON.parse(orchardCache);
       State.orchardLoaded = true;
       updateOrchardStatus();
     } catch(e) {}
