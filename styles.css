@@ -148,11 +148,8 @@ th {
   white-space: nowrap; text-align: left; user-select: none;
   overflow: hidden;
 }
-/* Pinned th must have solid background and high z-index */
-th.is-pinned {
-  background: var(--surface2) !important;
-  z-index: 21 !important;
-}
+/* Frozen columns always have solid background */
+th.is-pinned { background: var(--surface2) !important; }
 th.num { text-align: right; }
 th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--text); background: var(--border); }
@@ -329,19 +326,7 @@ select { cursor: pointer; }
 }
 th { position: relative; overflow: visible !important; }
 
-.pin-btn {
-  display: inline-block;
-  margin-left: 4px;
-  font-size: 10px;
-  opacity: 0.3;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  vertical-align: middle;
-  line-height: 1;
-  user-select: none;
-}
-.pin-btn:hover { opacity: 0.8; }
-th.is-pinned .pin-btn { opacity: 1; }
+/* pin buttons removed - artist/title/catalog always frozen */
 
 /* Allow columns to clip but show full text on hover via title; no ellipsis clipping */
 td { overflow: hidden; }
