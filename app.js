@@ -521,6 +521,16 @@ function buildInventoryHeader() {
   }
   row2 += '</tr>';
 
+  // Apply colgroup to header table before setting innerHTML
+  const headerTable = document.getElementById('inventory-header-table');
+  if (headerTable) {
+    let hcg = headerTable.querySelector('colgroup');
+    if (!hcg) { hcg = document.createElement('colgroup'); headerTable.prepend(hcg); }
+    hcg.innerHTML = cols.map(col => {
+      const w = STICKY_COLS.includes(col.id) ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
+      return `<col style="width:${w}px;min-width:${w}px;max-width:${w}px">`;
+    }).join('');
+  }
   thead.innerHTML = row1 + row2;
   applyColWidths();
 }
