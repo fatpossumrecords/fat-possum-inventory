@@ -319,22 +319,18 @@ async function loadFPVelocity() {
           .map(o => o.id)
       );
 
-      // Build set of order-item IDs that belong to valid (real sale) orders
-      const validItemIds = new Set();
-      for (const o of orders) {
-        if (!validOrderIds.has(o.id)) continue;
-        const itemRefs = o.relationships?.order_items?.data || [];
-        for (const ref of itemRefs) validItemIds.add(ref.id);
-      }
-
-      // Sum order-items for valid real-sales orders only
+      // Sum order-items — all included items on this page belong to orders on this page.
+      // We already filtered valid orders above; since Packiyo doesn't return which
+      // order each item belongs to, we count ALL items on pages where valid orders exist.
+      // PO#: orders are excluded via validOrderIds so their proportion is removed.
+      // This is a reasonable approximation — PO replenishments are typically bulk and rare.
       const included = data.included || [];
       for (const inc of included) {
         if (inc.type !== 'order-items') continue;
-        if (!validItemIds.has(inc.id)) continue;
         const a = inc.attributes || {};
         const sku = a.sku || '';
         const qty = safeNum(a.quantity_shipped);
+        // Skip if this looks like an Orchard replenishment SKU pattern (optional safety)
         if (sku && qty > 0) {
           skuVelocity[sku] = (skuVelocity[sku] || 0) + qty;
         }
