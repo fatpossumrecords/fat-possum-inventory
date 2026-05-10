@@ -492,13 +492,11 @@ function buildInventoryHeader() {
     if (visCols.length === 0) continue;
     const isGroupEnd = 'border-right:2px solid var(--border2);';
     if (g === 'meta') {
-      // Sticky group header for meta — spans all meta cols
-      const metaW = visCols.reduce((s,c) => s + (STICKY_COLS.includes(c.id) ? STICKY_WIDTHS[c.id] : (State.colWidths[c.id]||getDefaultWidth(c))), 0);
-      row1 += `<th colspan="${visCols.length}" style="position:sticky;left:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;">Artist · Title · Catalog # always frozen</th>`;
+      row1 += `<th colspan="${visCols.length}" style="position:sticky;left:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;white-space:nowrap;overflow:hidden;">Artist · Title · Catalog # always frozen</th>`;
     } else {
       const hasSales = allCols.some(c => !c.always);
       const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:5px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>` : '';
-      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);${isGroupEnd}">${GROUP_LABELS[g]}${btn}</th>`;
+      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);${isGroupEnd}white-space:nowrap;overflow:hidden;">${GROUP_LABELS[g]}${btn}</th>`;
     }
   }
   row1 += '</tr>';
@@ -517,7 +515,7 @@ function buildInventoryHeader() {
     const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
     row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isSticky?' is-pinned':''}"
       data-col="${col.id}"
-      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${borderRight}position:relative;overflow:hidden;"
+      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${borderRight}overflow:hidden;white-space:nowrap;"
       onclick="handleInvSort('${col.id}')"
     >${col.label}${resizeHandle}</th>`;
   }
