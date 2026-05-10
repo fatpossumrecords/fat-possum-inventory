@@ -473,49 +473,59 @@ function buildInventoryHeader() {
   const thead = document.querySelector('#inventory-table thead');
   const cols = visibleCols();
 
-  // Row 1: group headers
+  // Compute pinned left offsets first
+  let leftOffset = 0;
+  const pinnedOffsets = {};
+  for (const col of cols) {
+    if (State.pinnedCols.has(col.id)) {
+      pinnedOffsets[col.id] = leftOffset;
+      leftOffset += State.colWidths[col.id] || getDefaultWidth(col);
+    }
+  }
+
+  // Row 1: group headers — each th must also be sticky if all its cols are pinned
   const groups = ['meta','fp','us','ca','uk','eu'];
   let row1 = '<tr>';
+  let row1Left = 0;
   for (const g of groups) {
-    const allCols = INV_COLS.filter(c => c.group === g);
-    const visCols = allCols.filter(c => c.always || State.expanded[g]);
+    const allCols  = INV_COLS.filter(c => c.group === g);
+    const visCols  = allCols.filter(c => c.always || State.expanded[g]);
     if (visCols.length === 0) continue;
+    const allPinned = visCols.every(c => State.pinnedCols.has(c.id));
+    const stickyStyle = allPinned ? `position:sticky;left:${row1Left}px;z-index:12;` : '';
+    if (allPinned) row1Left += visCols.reduce((s,c) => s + (State.colWidths[c.id] || getDefaultWidth(c)), 0);
     if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="background:transparent;border-right:2px solid var(--border2);padding:4px 10px;font-size:9px;color:var(--text-dim);">📌 click pin icon to freeze column</th>`;
+      row1 += `<th colspan="${visCols.length}" style="background:var(--surface2);border-right:2px solid var(--border2);padding:4px 10px;font-size:9px;color:var(--text-dim);${stickyStyle}">📌 click pin icon to freeze column</th>`;
     } else {
       const hasSales = allCols.some(c => !c.always);
       const expandBtn = hasSales
-        ? `<span onclick="toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:11px;opacity:0.7;" title="${State.expanded[g]?'Collapse sales':'Expand sales'}">${State.expanded[g]?'▾':'▸'}</span>`
+        ? `<span onclick="toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>`
         : '';
-      row1 += `<th colspan="${visCols.length}" class="group-header" style="text-align:center;border-right:2px solid var(--border2);">${GROUP_LABELS[g]}${expandBtn}</th>`;
+      row1 += `<th colspan="${visCols.length}" class="group-header" style="text-align:center;border-right:2px solid var(--border2);${stickyStyle}">${GROUP_LABELS[g]}${expandBtn}</th>`;
     }
   }
   row1 += '</tr>';
 
-  // Row 2: column headers with pin buttons and resize handles
+  // Row 2: column headers
   let row2 = '<tr>';
-  let leftOffset = 0;
   for (let i = 0; i < cols.length; i++) {
-    const col = cols[i];
-    const nextCol = cols[i+1];
+    const col      = cols[i];
+    const nextCol  = cols[i+1];
     const isGroupEnd = !nextCol || nextCol.group !== col.group;
     const isPinned = State.pinnedCols.has(col.id);
     const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
-    const sortCls = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
-    const pinIcon = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin column':'Pin column'}">${isPinned?'📌':'📍'}</span>`;
+    const sortCls  = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
+    const pinIcon  = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin':'Pin'}">${isPinned?'📌':'📍'}</span>`;
     const resizeHandle = `<span class="resize-handle" data-col="${col.id}" onmousedown="startResize(event,'${col.id}')"></span>`;
-
-    const width = State.colWidths[col.id] ? `width:${State.colWidths[col.id]}px;min-width:${State.colWidths[col.id]}px;max-width:${State.colWidths[col.id]}px;` : '';
-    const stickyStyle = isPinned ? `position:sticky;left:${leftOffset}px;z-index:11;background:var(--surface2);box-shadow:3px 0 6px rgba(0,0,0,0.08);` : '';
-    const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-
-    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}" 
-      data-col="${col.id}" 
-      style="${width}${stickyStyle}${borderRight}position:relative;overflow:visible;"
+    const w = State.colWidths[col.id];
+    const widthStyle   = w ? `width:${w}px;min-width:${w}px;max-width:${w}px;` : `min-width:${getDefaultWidth(col)}px;`;
+    const stickyStyle  = isPinned ? `position:sticky;left:${pinnedOffsets[col.id]}px;z-index:11;background:var(--surface2);box-shadow:3px 0 6px rgba(0,0,0,0.08);` : '';
+    const borderRight  = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
+    row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}"
+      data-col="${col.id}"
+      style="${widthStyle}${stickyStyle}${borderRight}position:relative;overflow:visible;"
       onclick="handleInvSort('${col.id}')"
     >${col.label}${pinIcon}${resizeHandle}</th>`;
-
-    if (isPinned) leftOffset += State.colWidths[col.id] || getDefaultWidth(col);
   }
   row2 += '</tr>';
 
@@ -1338,7 +1348,13 @@ function setStatus(which, state, label) {
   if (txt) txt.textContent = label;
 }
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function safeNum(v) { const n=parseFloat(String(v??'').replace(/[^0-9.-]/g,'')); return isNaN(n)?0:n; }
+function safeNum(v) {
+  const n = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
+  if (isNaN(n) || !isFinite(n)) return 0;
+  if (n < 0) return 0;          // no negative inventory
+  if (n > 9999999) return 0;    // anything over 10M is clearly a bad value
+  return n;
+}
 function numCell(n) { return (!n||n===0)?`<span class="num-zero">0</span>`:String(n); }
 function isVinyl(s) { const l=(s||'').toLowerCase(); return l.includes('vinyl')||l.includes(' lp')||l.includes('12"')||l.includes('10"')||l.includes('7"'); }
 function guessFormat(name) { if(isVinyl(name)) return '12" Vinyl'; if(name.toLowerCase().includes('cd')) return 'CD'; return name; }
