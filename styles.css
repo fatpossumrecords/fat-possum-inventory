@@ -206,9 +206,10 @@ td {
   background: var(--surface);
 }
 td.num { text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; }
-tr:hover td { background: #ede9e1; }
-td.is-pinned { background: var(--surface) !important; }
-tr:hover td.is-pinned { background: #e8e4dc !important; }
+tr:nth-child(even) td { background: #f4f1ec; }
+tr:nth-child(even) td.is-pinned { background: #f4f1ec !important; }
+tr:hover td { background: #e8e3d8 !important; }
+tr:hover td.is-pinned { background: #e8e3d8 !important; }
 .loading-cell, .empty-cell {
   text-align: center; color: var(--text-muted);
   padding: 40px !important; font-size: 13px;
