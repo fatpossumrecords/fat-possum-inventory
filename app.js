@@ -477,7 +477,8 @@ for (const id of STICKY_COLS) {
 }
 
 function buildInventoryHeader() {
-  const thead = document.querySelector('#inventory-table thead');
+  const thead = document.getElementById('inventory-thead');
+  if (!thead) return;
   const cols = visibleCols();
 
   // Two header rows: group row + column row
@@ -536,14 +537,30 @@ function getDefaultWidth(col) {
 }
 
 function applyColWidths() {
-  const table = document.getElementById('inventory-table');
-  let cg = table.querySelector('colgroup');
-  if (!cg) { cg = document.createElement('colgroup'); table.prepend(cg); }
   const cols = visibleCols();
-  cg.innerHTML = cols.map(col => {
+  const colHTML = cols.map(col => {
     const w = STICKY_COLS.includes(col.id) ? STICKY_WIDTHS[col.id] : (State.colWidths[col.id] || getDefaultWidth(col));
-    return `<col style="width:${w}px;min-width:${w}px">`;
+    return `<col style="width:${w}px;min-width:${w}px;max-width:${w}px">`;
   }).join('');
+  // Apply to body table colgroup
+  const cg = document.getElementById('inventory-colgroup');
+  if (cg) cg.innerHTML = colHTML;
+  // Also apply to header table via colgroup
+  const headerTable = document.getElementById('inventory-header-table');
+  if (headerTable) {
+    let hcg = headerTable.querySelector('colgroup');
+    if (!hcg) { hcg = document.createElement('colgroup'); headerTable.prepend(hcg); }
+    hcg.innerHTML = colHTML;
+  }
+  // Sync horizontal scroll between header and body
+  const bodyWrap = document.querySelector('.inv-body-wrap');
+  const headerWrap = document.querySelector('.inv-header-wrap');
+  if (bodyWrap && headerWrap && !bodyWrap._scrollSynced) {
+    bodyWrap._scrollSynced = true;
+    bodyWrap.addEventListener('scroll', () => {
+      headerWrap.scrollLeft = bodyWrap.scrollLeft;
+    });
+  }
 }
 
 // Pin logic removed - artist/title/catalog always frozen
@@ -571,7 +588,7 @@ function onResizeUp() {
   _resizing = null;
   document.removeEventListener('mousemove', onResizeMove);
   document.removeEventListener('mouseup', onResizeUp);
-  buildInventoryHeader(); // re-sync sticky offsets
+  applyColWidths();
 }
 
 window.toggleExpand = function(group) {
