@@ -48,6 +48,8 @@ const State = {
   poAnnotations: JSON.parse(localStorage.getItem('fp_po_annotations') || '{}'),
   // manufacturing queue - persisted to localStorage
   mfgQueue: JSON.parse(localStorage.getItem('fp_mfg_queue') || '[]'),
+  // Shopify vendor/artist lookup by UPC and SKU
+  shopifyVendors: {},
   // manual column widths: { colId: px }
   colWidths: {},
 };
@@ -60,6 +62,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('upload-csv-btn').addEventListener('click', () => document.getElementById('csv-file-input').click());
   document.getElementById('csv-file-input').addEventListener('change', e => { if (e.target.files[0]) loadOrchardCSV(e.target.files[0]); });
+  document.getElementById('upload-shopify-btn').addEventListener('click', () => document.getElementById('shopify-file-input').click());
+  document.getElementById('shopify-file-input').addEventListener('change', e => { if (e.target.files[0]) loadShopifyCSV(e.target.files[0]); });
   document.getElementById('refresh-packiyo-btn').addEventListener('click', loadPackiyo);
   document.getElementById('logout-btn').addEventListener('click', logout);
 
@@ -112,6 +116,11 @@ function bootApp() {
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadColumnLayout();
+  // Restore Shopify vendor data from localStorage
+  try {
+    const sv = localStorage.getItem('fp_shopify_vendors');
+    if (sv) State.shopifyVendors = JSON.parse(sv);
+  } catch(e) {}
   loadGistData().then(() => { if (State.merged.length) { renderInventory(); renderAlerts(); } });
   // Restore hidden mfg items from localStorage
   try {
@@ -530,6 +539,42 @@ function loadOrchardCSV(file) {
   reader.readAsText(file);
 }
 
+function loadShopifyCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = parseCSV(e.target.result);
+      const vendors = {};
+      for (const row of rows) {
+        const vendor = (row['Vendor'] || '').trim();
+        const upc = normalizeUPC(row['Variant Barcode'] || '');
+        const sku = (row['Variant SKU'] || '').trim();
+        if (vendor && upc) vendors[upc] = vendor;
+        if (vendor && sku) vendors['sku:' + sku] = vendor;
+      }
+      State.shopifyVendors = vendors;
+      localStorage.setItem('fp_shopify_vendors', JSON.stringify(vendors));
+      // Re-apply to merged products
+      applyShopifyVendors();
+      renderInventory();
+      toast(`Shopify CSV loaded: ${Object.keys(vendors).length} artist mappings`, 'success');
+    } catch(err) {
+      toast('Shopify CSV parse error: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function applyShopifyVendors() {
+  if (!Object.keys(State.shopifyVendors).length) return;
+  for (const p of State.merged) {
+    if (p.artist) continue; // already has artist from Orchard
+    const byUpc = State.shopifyVendors[p.upc];
+    const bySku = State.shopifyVendors['sku:' + p.packiyo_sku] || State.shopifyVendors['sku:' + p.catalog];
+    if (byUpc || bySku) p.artist = byUpc || bySku;
+  }
+}
+
 function parseCSV(text) {
   const lines = text.split('\n');
   const headers = parseCSVLine(lines[0]);
@@ -646,6 +691,8 @@ function mergeData() {
   }
 
   State.merged = Array.from(products.values()).filter(p => (p.title || p.catalog) && !State.suppressedUpcs.has(p.upc));
+  // Re-apply Shopify vendor artists
+  applyShopifyVendors();
   // Re-apply FP velocity if already loaded
   if (State.fp_velocity && Object.keys(State.fp_velocity).length > 0) {
     for (const p of State.merged) {
