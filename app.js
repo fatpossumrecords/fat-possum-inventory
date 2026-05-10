@@ -731,10 +731,10 @@ function buildInventoryHeader() {
     if (col.group !== 'meta' && isGroupStart) {
       const allGroupCols = INV_COLS.filter(c => c.group === col.group);
       const hasSales = allGroupCols.some(c => !c.always);
-      const expandBtn = hasSales
-        ? `<button onclick="event.stopPropagation();toggleExpand('${col.group}')" style="display:inline-block;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:1px 5px;font-size:9px;font-weight:600;cursor:pointer;margin-left:4px;vertical-align:middle;">${State.expanded[col.group] ? '▾ less' : '▸ more'}</button>`
-        : '';
-      topLabel = `<div style="margin-bottom:2px;line-height:1.4;">${btn}</div>`;
+      const groupLabel = hasSales
+        ? `<span onclick="event.stopPropagation();toggleExpand('${col.group}')" style="cursor:pointer;color:${State.expanded[col.group]?'var(--text-muted)':'var(--accent)'};font-weight:600;font-size:9px;text-decoration:${State.expanded[col.group]?'none':'underline'};" title="${State.expanded[col.group]?'Collapse':'Expand sales columns'}">${GROUP_LABELS[col.group]}${State.expanded[col.group]?' ▾':' ▸'}</span>`
+        : `<span style="font-size:9px;color:var(--text-muted);font-weight:600;">${GROUP_LABELS[col.group]}</span>`;
+      topLabel = `<div style="margin-bottom:2px;line-height:1.4;">${groupLabel}</div>`;
     } else if (col.group !== 'meta') {
       topLabel = `<div style="margin-bottom:2px;height:14px;"></div>`;
     }
