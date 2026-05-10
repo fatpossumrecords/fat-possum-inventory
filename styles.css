@@ -499,11 +499,8 @@ tr:hover .suppress-btn { opacity: 1; }
 .suppress-btn:hover { color: var(--red); background: var(--red-bg); }
 
 /* ── ALERTS FROZEN COLUMNS ── */
-.alert-frozen {
-  position: sticky;
+.alert-frozen, td.af {
   background: var(--surface);
-  z-index: 3;
 }
-tr:nth-child(even) .alert-frozen { background: #f4f1ec; }
-tr:hover .alert-frozen { background: #e8e3d8 !important; }
-thead .alert-frozen { background: var(--surface2) !important; z-index: 11; }
+tr:nth-child(even) td.af { background: #f4f1ec; }
+tr:hover td.af { background: #e8e3d8 !important; }
