@@ -483,19 +483,20 @@ td { overflow: hidden; }
 
 /* ── SUPPRESS BUTTON ── */
 .suppress-btn {
-  display: inline-block;
-  margin-right: 5px;
+  background: none;
+  border: none;
   color: var(--text-dim);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
-  vertical-align: middle;
-  user-select: none;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: inherit;
 }
 tr:hover .suppress-btn { opacity: 1; }
-.suppress-btn:hover { color: var(--red); }
+.suppress-btn:hover { color: var(--red); background: var(--red-bg); }
 
 /* ── ALERTS FROZEN COLUMNS ── */
 .alert-frozen {
