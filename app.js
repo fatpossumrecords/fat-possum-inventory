@@ -1366,6 +1366,7 @@ function renderDashboard() {
   const today = new Date();
   let mfgUrgent = 0, mfgSoon = 0, mfgWithPO = 0;
   State.merged.forEach(p => {
+    if (State.hiddenMfgItems.has(p.upc)) return; // respect hidden items
     const total = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
     const poQty = (State.packiyoPOs[p.packiyo_sku]||State.packiyoPOs[p.catalog])?.qty||0;
     const monthly = ((p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0))/12;
@@ -1373,6 +1374,7 @@ function renderDashboard() {
     const totalWithAll = total+(p.fp_inbound||0)+poQty;
     const monthsLeft = monthly > 0 ? totalWithAll/monthly : Infinity;
     if (!isFinite(monthsLeft) && !poQty) return;
+    if (monthsLeft > 12) return; // match predictions 12-month cap
     const isLPItem = isVinyl(p.format||'');
     const leadTime = isLPItem ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
     if (!isFinite(monthsLeft) || monthsLeft > CONFIG.MFG_TRIGGER_MONTHS+3) { if (poQty) mfgWithPO++; return; }
