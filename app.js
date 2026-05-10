@@ -473,64 +473,70 @@ function buildInventoryHeader() {
   const thead = document.querySelector('#inventory-table thead');
   const cols = visibleCols();
 
-  // Compute pinned left offsets first
-  let leftOffset = 0;
+  // Compute exact pixel left offset for every pinned column
+  let runningLeft = 0;
   const pinnedOffsets = {};
   for (const col of cols) {
     if (State.pinnedCols.has(col.id)) {
-      pinnedOffsets[col.id] = leftOffset;
-      leftOffset += State.colWidths[col.id] || getDefaultWidth(col);
+      pinnedOffsets[col.id] = runningLeft;
+      runningLeft += State.colWidths[col.id] || getDefaultWidth(col);
     }
   }
 
-  // Row 1: group headers — each th must also be sticky if all its cols are pinned
+  // Row 1: group headers
+  // For each group, figure out sticky left by summing widths of all prior pinned cols
   const groups = ['meta','fp','us','ca','uk','eu'];
   let row1 = '<tr>';
-  let row1Left = 0;
   for (const g of groups) {
-    const allCols  = INV_COLS.filter(c => c.group === g);
-    const visCols  = allCols.filter(c => c.always || State.expanded[g]);
+    const allCols = INV_COLS.filter(c => c.group === g);
+    const visCols = allCols.filter(c => c.always || State.expanded[g]);
     if (visCols.length === 0) continue;
+
+    // A group header is sticky only if ALL its visible cols are pinned
     const allPinned = visCols.every(c => State.pinnedCols.has(c.id));
-    const stickyStyle = allPinned ? `position:sticky;left:${row1Left}px;z-index:12;` : '';
-    if (allPinned) row1Left += visCols.reduce((s,c) => s + (State.colWidths[c.id] || getDefaultWidth(c)), 0);
+    // left = offset of the first col in the group
+    const groupLeft = allPinned ? (pinnedOffsets[visCols[0].id] ?? 0) : 0;
+    const stickyStyle = allPinned
+      ? `position:sticky;left:${groupLeft}px;z-index:12;`
+      : '';
+
     if (g === 'meta') {
-      row1 += `<th colspan="${visCols.length}" style="background:var(--surface2);border-right:2px solid var(--border2);padding:4px 10px;font-size:9px;color:var(--text-dim);${stickyStyle}">📌 click pin icon to freeze column</th>`;
+      row1 += `<th colspan="${visCols.length}" style="background:var(--surface2);border-right:2px solid var(--border2);padding:3px 10px;font-size:9px;color:var(--text-dim);${stickyStyle}">📌 pin columns to freeze while scrolling</th>`;
     } else {
       const hasSales = allCols.some(c => !c.always);
-      const expandBtn = hasSales
-        ? `<span onclick="toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>`
+      const btn = hasSales
+        ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:5px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>`
         : '';
-      row1 += `<th colspan="${visCols.length}" class="group-header" style="text-align:center;border-right:2px solid var(--border2);${stickyStyle}">${GROUP_LABELS[g]}${expandBtn}</th>`;
+      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);border-right:2px solid var(--border2);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);${stickyStyle}">${GROUP_LABELS[g]}${btn}</th>`;
     }
   }
   row1 += '</tr>';
 
-  // Row 2: column headers
+  // Row 2: individual column headers
   let row2 = '<tr>';
   for (let i = 0; i < cols.length; i++) {
-    const col      = cols[i];
-    const nextCol  = cols[i+1];
-    const isGroupEnd = !nextCol || nextCol.group !== col.group;
+    const col = cols[i];
+    const next = cols[i + 1];
+    const isGroupEnd = !next || next.group !== col.group;
     const isPinned = State.pinnedCols.has(col.id);
+    const w = State.colWidths[col.id] || getDefaultWidth(col);
     const sortable = col.id !== 'status' && col.id !== 'upc' ? 'sortable' : '';
-    const sortCls  = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
-    const pinIcon  = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin':'Pin'}">${isPinned?'📌':'📍'}</span>`;
-    const resizeHandle = `<span class="resize-handle" data-col="${col.id}" onmousedown="startResize(event,'${col.id}')"></span>`;
-    const w = State.colWidths[col.id];
-    const widthStyle   = w ? `width:${w}px;min-width:${w}px;max-width:${w}px;` : `min-width:${getDefaultWidth(col)}px;`;
-    const stickyStyle  = isPinned ? `position:sticky;left:${pinnedOffsets[col.id]}px;z-index:11;background:var(--surface2);box-shadow:3px 0 6px rgba(0,0,0,0.08);` : '';
-    const borderRight  = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
+    const sortCls = State.sortCol === col.id ? (State.sortDir === 'asc' ? ' sort-asc' : ' sort-desc') : '';
+    const pinIcon = `<span class="pin-btn" onclick="event.stopPropagation();togglePin('${col.id}')" title="${isPinned?'Unpin':'Pin'}">${isPinned?'📌':'📍'}</span>`;
+    const resizeHandle = `<span class="resize-handle" onmousedown="startResize(event,'${col.id}')"></span>`;
+    const stickyStyle = isPinned
+      ? `position:sticky;left:${pinnedOffsets[col.id]}px;z-index:11;background:var(--surface2);box-shadow:2px 0 4px rgba(0,0,0,0.07);`
+      : '';
+    const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
     row2 += `<th class="${col.num?'num':''} ${sortable}${sortCls}${isPinned?' is-pinned':''}"
       data-col="${col.id}"
-      style="${widthStyle}${stickyStyle}${borderRight}position:relative;overflow:visible;"
+      style="width:${w}px;min-width:${w}px;max-width:${w}px;${stickyStyle}${borderRight}position:relative;overflow:visible;"
       onclick="handleInvSort('${col.id}')"
     >${col.label}${pinIcon}${resizeHandle}</th>`;
   }
   row2 += '</tr>';
 
   thead.innerHTML = row1 + row2;
-  // Apply col widths to colgroup
   applyColWidths();
 }
 
@@ -668,7 +674,7 @@ function renderInventory() {
       const isGroupEnd = !nextCol || nextCol.group !== col.group;
       const isPinned = State.pinnedCols.has(col.id);
       const borderRight = isGroupEnd ? 'border-right:2px solid var(--border2);' : '';
-      const stickyStyle = isPinned ? `position:sticky;left:${pinOffsets[col.id]}px;z-index:3;box-shadow:3px 0 6px rgba(0,0,0,0.06);` : '';
+      const stickyStyle = isPinned ? `position:sticky;left:${pinOffsets[col.id]}px;z-index:3;background:var(--surface);box-shadow:2px 0 4px rgba(0,0,0,0.07);` : '';
       const style = `${borderRight}${stickyStyle}`;
       const v = getVal(p, col.id);
 
