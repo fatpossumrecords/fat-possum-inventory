@@ -855,7 +855,8 @@ function renderManufacturing() {
     if (monthly <= 0 && !hasPO) return null;
     const need12mo = monthly > 0 ? Math.ceil(monthly * 12) : 0;
     const monthsLeft = monthly > 0 ? totalWithInbound / monthly : Infinity;
-    // Always show items with open POs; otherwise only show within trigger window
+    // Show within trigger window; always show items with open POs under 12 months
+    if (monthsLeft > 12) return null;
     if (!hasPO && monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
 
     const isLPItem = isVinyl(p.format || '');
