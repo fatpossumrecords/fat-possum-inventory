@@ -1592,8 +1592,8 @@ window.updateMovementNotes = function(i, val) {
 function exportMovements() {
   if (State.movements.length === 0) { toast('No movements to export.', 'error'); return; }
   downloadCSV('fp_movement_request_'+dateStr()+'.csv',
-    ['From Warehouse','To Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Quantity','Notes'],
-    State.movements.map(m => [WH_LABELS[m.from],WH_LABELS[m.to],m.artist,m.title,m.label,m.catalog,m.upc,m.format,m.qty,m.notes])
+    ['From Warehouse','To Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Quantity'],
+    State.movements.map(m => [WH_LABELS[m.from],WH_LABELS[m.to],m.artist,m.title,m.label,m.catalog,m.upc,m.format,m.qty])
   );
   toast('Movement request exported.', 'success');
 }
