@@ -291,85 +291,31 @@
       </div>
       </div><!-- end mfg-tab-predictions -->
 
-      <!-- QUEUE SUB-VIEW -->
+      <!-- QUEUE SUB-VIEW — driven by Packiyo open POs -->
       <div id="mfg-tab-queue" class="mfg-tab hidden">
         <div class="view-actions" style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);gap:8px;display:flex;flex-wrap:wrap;align-items:center;">
-          <button class="btn-primary btn-sm" onclick="showAddMfgQueueForm()">+ Add Item</button>
           <button id="export-mfg-queue-btn" class="btn-secondary btn-sm" onclick="exportMfgQueue()">Export CSV</button>
+          <button class="btn-secondary btn-sm" onclick="loadPackiyo()">↻ Refresh POs</button>
           <span id="mfg-queue-summary" style="font-size:11px;color:var(--text-muted);margin-left:8px;"></span>
-        </div>
-        <!-- Add form -->
-        <div id="mfg-queue-form" class="card hidden" style="margin:16px 24px 0;">
-          <h3>Add to Manufacturing Queue</h3>
-          <div class="form-row">
-            <div class="form-group flex-2">
-              <label>Product (search)</label>
-              <input type="text" id="mfq-product-search" placeholder="Search artist, title, catalog #…" autocomplete="off" />
-              <div id="mfq-product-dropdown" class="product-dropdown hidden"></div>
-              <input type="hidden" id="mfq-product-upc" />
-            </div>
-            <div class="form-group">
-              <label>Manufacturer</label>
-              <input type="text" id="mfq-manufacturer" placeholder="e.g. GZ Media" list="manufacturer-list" />
-              <datalist id="manufacturer-list"></datalist>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Qty Ordered</label>
-              <input type="number" id="mfq-qty" min="1" placeholder="0" />
-            </div>
-            <div class="form-group">
-              <label>Quoted Amount ($)</label>
-              <input type="number" id="mfq-amount" min="0" step="0.01" placeholder="0.00" />
-            </div>
-            <div class="form-group">
-              <label>Expected Ship Date</label>
-              <input type="date" id="mfq-expected-date" />
-            </div>
-            <div class="form-group">
-              <label>Actual Ship Date</label>
-              <input type="date" id="mfq-actual-date" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group flex-2">
-              <label>Notes</label>
-              <input type="text" id="mfq-notes" placeholder="Optional notes…" />
-            </div>
-            <div class="form-group">
-              <label>Ship To</label>
-              <select id="mfq-ship-to">
-                <option value="fp">Fat Possum WH</option>
-                <option value="us">Orchard US (Dropship)</option>
-              </select>
-            </div>
-            <button class="btn-primary" onclick="saveMfgQueueItem()">Add to Queue</button>
-            <button class="btn-secondary" onclick="document.getElementById('mfg-queue-form').classList.add('hidden')">Cancel</button>
-          </div>
-          <div id="mfq-selected" class="selected-product hidden"></div>
         </div>
         <div class="table-wrap">
           <table id="mfg-queue-table">
             <thead>
               <tr>
+                <th>PO Number</th>
                 <th>Artist</th>
                 <th>Title</th>
                 <th>Cat #</th>
                 <th>Format</th>
-                <th>Manufacturer</th>
-                <th class="num">Qty Ordered</th>
-                <th class="num">Quoted $</th>
+                <th class="num">Qty Pending</th>
                 <th>Expected Ship</th>
-                <th>Actual Ship</th>
-                <th>Ship To</th>
                 <th>Status</th>
-                <th>Notes</th>
-                <th></th>
+                <th class="num">Quoted $ <span style="font-weight:400;font-size:9px">(editable)</span></th>
+                <th>Notes <span style="font-weight:400;font-size:9px">(editable)</span></th>
               </tr>
             </thead>
             <tbody id="mfg-queue-tbody">
-              <tr><td colspan="13" class="empty-cell">No items in manufacturing queue.</td></tr>
+              <tr><td colspan="10" class="loading-cell">Loading POs…</td></tr>
             </tbody>
           </table>
         </div>
