@@ -35,6 +35,8 @@ const State = {
   hiddenMfgItems: new Set(JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]')),
   // purchase orders from packiyo, keyed by sku
   packiyoPOs: {},
+  // FP sales velocity by sku (last 12 months)
+  fp_velocity: {},
   // manufacturing queue - persisted to localStorage
   mfgQueue: JSON.parse(localStorage.getItem('fp_mfg_queue') || '[]'),
   // manual column widths: { colId: px }
@@ -481,6 +483,12 @@ function mergeData() {
   }
 
   State.merged = Array.from(products.values()).filter(p => p.title || p.catalog);
+  // Re-apply FP velocity if already loaded
+  if (State.fp_velocity && Object.keys(State.fp_velocity).length > 0) {
+    for (const p of State.merged) {
+      p.fp_12ms = State.fp_velocity[p.packiyo_sku] || State.fp_velocity[p.catalog] || 0;
+    }
+  }
   populateLabelDropdown();
   renderInventory();
   renderManufacturing();
