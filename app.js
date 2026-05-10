@@ -32,7 +32,7 @@ const State = {
   // pinned column ids
   pinnedCols: new Set(),
   // hidden manufacturing items (by upc) - persisted to localStorage
-  hiddenMfgItems: new Set(JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]')),
+  hiddenMfgItems: new Set(),
   // purchase orders from packiyo, keyed by sku
   packiyoPOs: {},
   // FP sales velocity by sku (last 12 months)
@@ -107,6 +107,11 @@ function bootApp() {
   const ur = document.getElementById('user-row');
   if (State.user) ur.textContent = State.user.email;
   loadColumnLayout();
+  // Restore hidden mfg items from localStorage
+  try {
+    const hidden = JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]');
+    State.hiddenMfgItems = new Set(hidden);
+  } catch(e) {}
   updateMfgQueueBadge();
   loadPackiyo();
   const saved = localStorage.getItem('fp_orchard');
