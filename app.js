@@ -467,7 +467,7 @@ function visibleCols() {
 
 // Fixed sticky columns - always frozen, no pin UI needed
 const STICKY_COLS = ['artist', 'title', 'catalog'];
-const STICKY_WIDTHS = { artist: 160, title: 220, catalog: 90 };
+const STICKY_WIDTHS = { artist: 140, title: 240, catalog: 100 };
 // Precompute sticky left offsets
 const STICKY_OFFSETS = {};
 let _stickyLeft = 0;
