@@ -495,8 +495,8 @@ function buildInventoryHeader() {
       row1 += `<th colspan="${visCols.length}" style="position:sticky;left:0;z-index:22;background:var(--surface2);${isGroupEnd}font-size:9px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;padding:3px 10px;white-space:nowrap;overflow:hidden;">Artist · Title · Catalog # always frozen</th>`;
     } else {
       const hasSales = allCols.some(c => !c.always);
-      const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:5px;font-size:11px;opacity:0.7;">${State.expanded[g]?'▾':'▸'}</span>` : '';
-      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);${isGroupEnd}white-space:nowrap;overflow:hidden;">${GROUP_LABELS[g]}${btn}</th>`;
+      const btn = hasSales ? `<span onclick="event.stopPropagation();toggleExpand('${g}')" style="cursor:pointer;margin-left:6px;font-size:12px;color:var(--accent);font-weight:600;" title="${State.expanded[g]?'Collapse sales columns':'Expand sales columns'}">${State.expanded[g]?'▾ hide':'▸ sales'}</span>` : '';
+      row1 += `<th colspan="${visCols.length}" style="text-align:center;background:var(--surface2);${isGroupEnd}white-space:nowrap;overflow:hidden;padding:4px 8px;">${GROUP_LABELS[g]}${btn}</th>`;
     }
   }
   row1 += '</tr>';
