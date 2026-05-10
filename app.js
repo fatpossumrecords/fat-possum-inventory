@@ -202,8 +202,11 @@ async function loadGistData() {
     State.suppressedUpcs = new Set(parsed.suppressed || []);
     if (parsed.shopifyVendors) {
       State.shopifyVendors = parsed.shopifyVendors;
-      console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify vendors');
+      const count = Object.keys(State.shopifyVendors).length;
+      setStatus('shopify', 'ok', count + ' artists');
+      console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', count, 'shopify vendors');
     } else {
+      setStatus('shopify', 'ok', 'No data');
       console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed titles');
     }
   } catch(e) {
@@ -549,24 +552,33 @@ function loadOrchardCSV(file) {
 }
 
 function loadShopifyCSV(file) {
-  const reader = new FileReader();
-  reader.onload = async e => {
-    try {
-      const rows = parseCSVRobust(e.target.result);
-      const vendors = {};
-      let currentVendor = '';
-      for (const row of rows) {
-        // Vendor only appears on first row of each product — carry it forward
-        const vendor = (row['Vendor'] || '').trim();
-        // Only update if it looks like a real vendor (not a tag like g::Rock)
-        if (vendor && !vendor.startsWith('g::') && !vendor.includes('shopify') && vendor.length < 100) {
-          currentVendor = vendor;
+  // Use Papa Parse for robust CSV parsing (handles multiline HTML fields)
+  if (!window.Papa) {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js';
+    script.onload = () => loadShopifyCSV(file);
+    document.head.appendChild(script);
+    return;
+  }
+  window.Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: async (results) => {
+      try {
+        const rows = results.data;
+        const vendors = {};
+        let currentVendor = '';
+        for (const row of rows) {
+          const vendor = (row['Vendor'] || '').trim();
+          // Only carry forward real vendor names
+          if (vendor && !vendor.startsWith('g::') && !vendor.includes('shopify') && vendor.length < 80) {
+            currentVendor = vendor;
+          }
+          const upc = normalizeUPC(row['Variant Barcode'] || '');
+          const sku = (row['Variant SKU'] || '').trim();
+          if (currentVendor && upc) vendors[upc] = currentVendor;
+          if (currentVendor && sku) vendors['sku:' + sku] = currentVendor;
         }
-        const upc = normalizeUPC(row['Variant Barcode'] || '');
-        const sku = (row['Variant SKU'] || '').trim();
-        if (currentVendor && upc) vendors[upc] = currentVendor;
-        if (currentVendor && sku) vendors['sku:' + sku] = currentVendor;
-      }
       State.shopifyVendors = vendors;
       // Save to Gist so it persists across devices
       setStatus('orchard', 'loading', 'Saving…');
