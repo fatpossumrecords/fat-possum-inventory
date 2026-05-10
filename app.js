@@ -1499,6 +1499,12 @@ window.applyAlertSelections = function() {
     // Avoid duplicates already in queue
     const exists = State.movements.find(m => m.upc === upc && m.from === from && m.to === to);
     if (exists) return;
+    // Calculate leaves-at-source note
+    const sourceAvailMap = { fp: prod.fp_available||0, us: prod.us_avail||0, ca: prod.ca_avail||0, uk: prod.uk_avail||0, eu: prod.eu_avail||0 };
+    const sourceAvail = sourceAvailMap[from] || 0;
+    const leavesAt = Math.max(0, sourceAvail - qty);
+    const WH_SHORT = { fp:'FP WH', us:'Orchard US', ca:'Orchard CA', uk:'Orchard UK', eu:'Orchard EU' };
+    const leaveNote = `Leaves ${leavesAt} at ${WH_SHORT[from]||from}`;
     State.movements.push({
       from, to,
       artist:  prod.artist,
@@ -1508,7 +1514,7 @@ window.applyAlertSelections = function() {
       format:  prod.format,
       label:   prod.label,
       qty,
-      notes:   'From Alerts',
+      notes:   leaveNote,
       timestamp: new Date().toISOString(),
     });
     added++;
