@@ -719,7 +719,11 @@ function loadOrchardCSV(file) {
       localStorage.setItem('fp_orchard', JSON.stringify(State.orchardData)); localStorage.setItem('fp_orchard_ts', new Date().toISOString()); localStorage.setItem('fp_orchard_uploads', JSON.stringify(getUploadHistory()));
       updateOrchardStatus();
       mergeData();
-      toast(`Orchard CSV loaded: ${State.orchardData.length} products`, 'success');
+      // Save to Gist for all users
+      setStatus('orchard', 'loading', 'Saving to cloud…');
+      await saveOrchardToGist();
+      updateOrchardStatus();
+      toast(`Orchard CSV loaded: ${State.orchardData.length} products — saved to cloud`, 'success');
     } catch (err) {
       setStatus('orchard', 'error', 'Parse error');
       toast('CSV parse error: ' + err.message, 'error');
