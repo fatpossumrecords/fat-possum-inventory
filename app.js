@@ -2212,22 +2212,7 @@ function renderDashboard() {
         </table>
       </div>
 
-      <div class="dash-section">
-        <h3>CSV Upload History</h3>
-        ${ts ? `<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Last upload: <strong>${new Date(ts).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</strong></p>` : '<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px">No CSV uploaded yet.</p>'}
-        <table class="dash-table">
-          <thead><tr><th>Date</th><th class="num">Products</th></tr></thead>
-          <tbody>
-            ${history.length === 0 ? '<tr><td colspan="2" class="empty-cell" style="padding:16px">No upload history yet.</td></tr>' :
-              history.map(h => `<tr>
-                <td>${new Date(h.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
-                <td class="num">${h.count.toLocaleString()}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-        <div style="margin-top:12px">
-          <button class="btn-secondary btn-sm" onclick="document.getElementById('csv-file-input').click()">Upload New CSV</button>
-        </div>
+      
       </div>
     </div>
 
@@ -2362,6 +2347,30 @@ window.exportMfgQueue = function() {
   );
   toast('Open POs exported.', 'success');
 };
+
+// ── UPLOAD HISTORY SIDEBAR ───────────────────────────────────
+window.toggleUploadHistory = function() {
+  const panel = document.getElementById('upload-history-panel');
+  const arrow = document.getElementById('upload-history-arrow');
+  if (!panel) return;
+  const open = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  if (arrow) arrow.textContent = open ? '▾' : '▸';
+  if (open) renderUploadHistory();
+};
+
+function renderUploadHistory() {
+  const el = document.getElementById('upload-history-list');
+  if (!el) return;
+  const history = JSON.parse(localStorage.getItem('fp_orchard_uploads') || '[]');
+  const ts = localStorage.getItem('fp_orchard_ts');
+  if (!history.length && !ts) { el.innerHTML = 'No uploads yet.'; return; }
+  el.innerHTML = history.map(h => `
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);">
+      <span>${new Date(h.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+      <span style="font-family:'DM Mono',monospace">${h.count.toLocaleString()}</span>
+    </div>`).join('');
+}
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
