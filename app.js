@@ -623,11 +623,16 @@ async function loadFPVelocity() {
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const skuVelocity = {};
     const allPoOrders = [];
-    let page = 1, done = false;
 
     setStatus('packiyo', 'loading', 'Loading sales…');
 
-    while (!done) {
+    // Orders are oldest-first — get total pages then work backwards from last page
+    const firstData = await packiyoFetch('/orders', { 'page[number]': 1, 'page[size]': 100 });
+    const totalPages = firstData.meta?.page?.lastPage || 1;
+    console.log('Total order pages:', totalPages, '— fetching recent 12 months from end');
+
+    let page = totalPages;
+    while (page >= 1) {
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
@@ -635,70 +640,56 @@ async function loadFPVelocity() {
       });
       const orders = data.data || [];
       if (!orders.length) break;
-      // Collect PO# orders for movement status checking
+
+      // Collect PO# orders for movement status tracking
       orders.filter(o => (o.attributes?.number||'').startsWith('PO#')).forEach(o => {
         allPoOrders.push({
-          number: o.attributes.number,
+          number: (o.attributes.number||'').trim(),
           status_text: o.attributes.status_text,
           fulfilled_at: o.attributes.fulfilled_at,
         });
       });
 
-      // Check if oldest order on this page is beyond 12 months
-      const lastOrder = orders[orders.length - 1];
-      const lastDate = new Date(lastOrder.attributes?.ordered_at || 0);
-      if (lastDate < oneYearAgo) done = true; // stop after this page
+      // If the newest order on this page is older than 12 months, stop
+      const newestDate = new Date(orders[0]?.attributes?.ordered_at || 0);
+      if (newestDate < oneYearAgo) break;
 
-      // Only count fulfilled orders within last 12 months
-      // Exclude "PO#:" orders — those are Orchard replenishments, not real sales
-      const validOrderIds = new Set(
-        orders
-          .filter(o => {
-            const attrs = o.attributes || {};
-            const status = (attrs.status_text || '').toLowerCase();
-            const date = new Date(attrs.ordered_at || 0);
-            const num = attrs.number || '';
-            const isOrchardReplenishment = num.startsWith('PO#:') || num.startsWith('PO:');
-            return (status === 'fulfilled' || status === 'completed')
-              && date >= oneYearAgo
-              && !isOrchardReplenishment;
-          })
-          .map(o => o.id)
+      // Count fulfilled non-PO# orders within last 12 months
+      const validIds = new Set(
+        orders.filter(o => {
+          const a = o.attributes || {};
+          const num = a.number || '';
+          return (a.status_text||'').toLowerCase() === 'fulfilled'
+            && new Date(a.ordered_at||0) >= oneYearAgo
+            && !num.startsWith('PO#')
+            && !num.startsWith('PO:');
+        }).map(o => o.id)
       );
 
-      // Sum order-items — all included items on this page belong to orders on this page.
-      // We already filtered valid orders above; since Packiyo doesn't return which
-      // order each item belongs to, we count ALL items on pages where valid orders exist.
-      // PO#: orders are excluded via validOrderIds so their proportion is removed.
-      // This is a reasonable approximation — PO replenishments are typically bulk and rare.
-      const included = data.included || [];
-      for (const inc of included) {
+      for (const inc of (data.included || [])) {
         if (inc.type !== 'order-items') continue;
         const a = inc.attributes || {};
         const sku = a.sku || '';
         const qty = safeNum(a.quantity_shipped);
-        // Skip if this looks like an Orchard replenishment SKU pattern (optional safety)
-        if (sku && qty > 0) {
-          skuVelocity[sku] = (skuVelocity[sku] || 0) + qty;
-        }
+        if (sku && qty > 0) skuVelocity[sku] = (skuVelocity[sku] || 0) + qty;
       }
 
-      const lastPage = data.meta?.page?.lastPage || 1;
-      if (page >= lastPage) break;
-      page++;
+      page--;
       await sleep(200);
     }
 
+    console.log('FP velocity: fetched pages', totalPages, 'down to', page+1, '— SKUs with sales:', Object.keys(skuVelocity).length);
+
     State.fp_velocity = skuVelocity;
     State.fp_poOrders = allPoOrders;
-    console.log('FP PO orders stored:', allPoOrders.length, allPoOrders.slice(0,2));
-    checkMovementStatuses();
+    try { localStorage.setItem('fp_packiyo_velocity', JSON.stringify(skuVelocity)); } catch(e) {}
+
     // Apply to merged products
     for (const p of State.merged) {
       p.fp_12ms = skuVelocity[p.packiyo_sku] || skuVelocity[p.catalog] || 0;
     }
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
-    console.log('FP velocity loaded:', Object.keys(skuVelocity).length, 'SKUs with sales in last 12mo, pages fetched:', page);
+    checkMovementStatuses();
     renderAlerts();
     renderDashboard();
     renderInventory();
