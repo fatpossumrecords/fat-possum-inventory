@@ -1744,7 +1744,7 @@ function renderMovementsTable() {
 
     const exportSid = encodeURIComponent(group.key);
     html += `<tr style="background:var(--surface2);border-top:2px solid var(--border2);">
-      <td colspan="6" style="padding:8px 12px;font-weight:600;font-size:12px;">
+      <td colspan="5" style="padding:8px 12px;font-weight:600;font-size:12px;">
         ${WH_LABELS[group.from]} <span style="color:var(--text-dim);margin:0 6px">→</span> ${WH_LABELS[group.to]}
         <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px">${group.items.length} item${group.items.length!==1?'s':''} · ${totalQty.toLocaleString()} units</span>
         ${poNumber ? `<span style="font-size:10px;color:var(--accent);margin-left:8px;font-weight:600">${esc(poNumber)}</span>` : ''}
