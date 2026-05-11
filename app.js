@@ -1877,6 +1877,8 @@ function getConfirmedInbound() {
 }
 
 window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); };
+
+
 window.updateMovementQty = function(i, val) {
   const n = parseInt(val, 10);
   if (!isNaN(n) && n > 0) State.movements[i].qty = n;
