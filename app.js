@@ -2451,6 +2451,109 @@ window.updateFPSales = async function() {
   if (btn) { btn.disabled = false; btn.textContent = 'Update FP Sales'; }
 };
 
+// ── NEEDS ATTENTION BANNER ───────────────────────────────────
+function buildNeedsAttentionBanner() {
+  const el = document.getElementById('needs-attention-banner');
+  if (!el) return;
+
+  // Find candidates: velocity >= 10/mo, under 4 weeks at any warehouse, not in movements or mfg queue
+  const WAREHOUSES_NA = [
+    { key:'fp', avail:'fp_available', vel:'fp_12ms',    label:'Fat Possum WH' },
+    { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
+    { key:'ca', avail:'ca_avail',     vel:'ca_12ms',    label:'Orchard Canada' },
+    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
+    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr', label:'Orchard EU' },
+  ];
+
+  const addressedUpcs = new Set([
+    ...State.movements.filter(m => m.status === 'confirmed' || m.status === 'shipped').map(m => m.upc),
+  ]);
+
+  const candidates = [];
+  for (const p of State.merged) {
+    if (addressedUpcs.has(p.upc)) continue;
+    for (const wh of WAREHOUSES_NA) {
+      const avail = p[wh.avail] || 0;
+      const annual = p[wh.vel] || 0;
+      const monthly = annual / 12;
+      if (monthly < 10) continue;
+      const weeks = (avail / monthly) * 4.33;
+      if (weeks < 4) {
+        candidates.push({ p, wh, avail, monthly, weeks });
+        break;
+      }
+    }
+  }
+
+  if (!candidates.length) {
+    el.style.display = 'none';
+    return;
+  }
+
+  // Pick a random candidate each visit
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  const { p, wh, avail, monthly, weeks } = pick;
+  const status = avail === 0 ? 'OUT OF STOCK' : weeks < 2 ? 'CRITICAL' : 'LOW';
+  const need = Math.ceil(monthly * 12 - avail);
+
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <div style="flex:0 0 auto;margin-right:16px;">
+      <svg width="80" height="40" viewBox="0 0 80 40" style="overflow:visible">
+        <style>
+          @keyframes drive { from { transform: translateX(-20px); } to { transform: translateX(90px); } }
+          @keyframes wheel { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          .truck-group { animation: drive 3s linear infinite; }
+          .wheel1 { transform-origin: 18px 30px; animation: wheel 1s linear infinite; }
+          .wheel2 { transform-origin: 38px 30px; animation: wheel 1s linear infinite; }
+        </style>
+        <rect x="0" y="5" width="80" height="2" fill="rgba(255,255,255,0.3)" rx="1"/>
+        <g class="truck-group">
+          <rect x="5" y="12" width="30" height="16" fill="white" opacity="0.9" rx="2"/>
+          <rect x="2" y="16" width="8" height="12" fill="white" opacity="0.7" rx="1"/>
+          <rect x="6" y="14" width="4" height="5" fill="#E8650A" rx="1"/>
+          <circle class="wheel1" cx="10" cy="30" r="4" fill="#333"/>
+          <circle cx="10" cy="30" r="2" fill="#666"/>
+          <circle class="wheel2" cx="26" cy="30" r="4" fill="#333"/>
+          <circle cx="26" cy="30" r="2" fill="#666"/>
+          <rect x="5" y="18" width="28" height="8" fill="#E8650A" opacity="0.3" rx="1"/>
+        </g>
+      </svg>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1px;opacity:0.8;margin-bottom:2px;">NEEDS ATTENTION</div>
+      <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${esc(p.artist)} — ${esc(p.title)}
+      </div>
+      <div style="font-size:11px;opacity:0.85;margin-top:2px;">
+        ${status} at ${wh.label} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo velocity · ${need.toLocaleString()} units needed
+      </div>
+    </div>
+    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:12px;">
+      <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
+      <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
+    </div>
+  `;
+}
+
+window.needsAttentionDismiss = function() {
+  const el = document.getElementById('needs-attention-banner');
+  if (el) el.style.display = 'none';
+};
+
+window.needsAttentionAction = function(upc, whKey) {
+  switchView('alerts');
+  setTimeout(() => {
+    const el = document.getElementById('alert-section-' + whKey);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Highlight the specific row
+    document.querySelectorAll('.alert-check[data-upc="'+upc+'"]').forEach(cb => {
+      cb.closest('tr').style.background = '#fff3cd';
+      setTimeout(() => cb.closest('tr').style.background = '', 2000);
+    });
+  }, 100);
+};
+
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
   document.querySelectorAll('.view').forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
@@ -2458,7 +2561,7 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
-  if (viewName === 'dashboard') renderDashboard();
+  if (viewName === 'dashboard') { renderDashboard(); setTimeout(buildNeedsAttentionBanner, 500); }
   if (viewName === 'suppressed') renderSuppressedLog();
 }
 
