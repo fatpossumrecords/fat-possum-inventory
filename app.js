@@ -1585,7 +1585,16 @@ function renderAlerts() {
               <td class="num">${numCell(p.avail)}</td>
               <td class="num">${p.monthly.toFixed(1)}</td>
               <td class="num" style="font-weight:600">${weeks}</td>
-              <td><span class="pill ${cls}">${weeks} wks</span></td>
+              <td><span class="pill ${cls}">${weeks} wks</span>
+                ${(()=>{
+                  const _po = State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog];
+                  const _mov = State.movements.find(m => m.upc === p.upc && (m.status==='confirmed'||m.status==='shipped'));
+                  let _f = '';
+                  if (_po?.qty > 0) _f += '<div style="font-size:9px;color:var(--green);font-weight:600;margin-top:2px;">&#128230; '+_po.qty.toLocaleString()+' inbound (PO)</div>';
+                  if (_mov) _f += '<div style="font-size:9px;color:#3b7de8;font-weight:600;margin-top:2px;">&#10003; transfer '+_mov.status+'</div>';
+                  return _f;
+                })()}
+              </td>
               <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}${p.leavesAtSource !== null ? `<div style="font-size:9px;color:${p.leavesAtSource === 0 ? 'var(--red)' : 'var(--text-muted)'};font-weight:400;">leaves ${p.leavesAtSource} at source</div>` : ''}</td>
               <td class="num">${p.shortfall > 0 ? `<span style="color:var(--red);font-weight:600">${p.shortfall}</span>` : '<span style="color:var(--green);font-size:11px">✓ covered</span>'}</td>
               <td style="color:var(--text-muted);font-size:11px">${repLabel}</td>
