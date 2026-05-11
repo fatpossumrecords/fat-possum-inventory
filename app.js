@@ -2579,7 +2579,7 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
-  if (viewName === 'dashboard') { renderDashboard(); setTimeout(buildNeedsAttentionBanner, 500); }
+  if (viewName === 'dashboard') { renderDashboard(); buildNeedsAttentionBanner(); }
   if (viewName === 'suppressed') renderSuppressedLog();
 }
 
