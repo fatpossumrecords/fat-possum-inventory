@@ -1510,8 +1510,12 @@ window.applyAlertSelections = function() {
     const leavesAt = Math.max(0, sourceAvail - qty);
     const WH_SHORT = { fp:'FP WH', us:'Orchard US', ca:'Orchard CA', uk:'Orchard UK', eu:'Orchard EU' };
     const leaveNote = `Leaves ${leavesAt} at ${WH_SHORT[from]||from}`;
+    // Find or create a draft shipment for this route
+    const routeKey = `${from}→${to}`;
+    const draftShipment = State.movements.find(m => m.from === from && m.to === to && m.status === 'draft');
+    const shipmentId = draftShipment ? draftShipment.shipmentId : `${routeKey}-${Date.now()}`;
     State.movements.push({
-      from, to,
+      from, to, shipmentId,
       artist:  prod.artist,
       title:   prod.title,
       catalog: prod.orchard_catalog || prod.catalog,
@@ -1597,7 +1601,9 @@ function addMovement() {
   if (from === to) { toast('Origin and destination cannot be the same.', 'error'); return; }
   const prod = State.merged.find(p => p.upc === upc);
   if (!prod) { toast('Product not found.', 'error'); return; }
-  State.movements.push({ from, to, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, status:'draft', poNumber:'', confirmedAt:null, processedAt:null, timestamp: new Date().toISOString() });
+  const _draftShipment = State.movements.find(m => m.from === from && m.to === to && m.status === 'draft');
+  const _shipmentId = _draftShipment ? _draftShipment.shipmentId : `${from}→${to}-${Date.now()}`;
+  State.movements.push({ from, to, shipmentId: _shipmentId, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, status:'draft', poNumber:'', confirmedAt:null, processedAt:null, timestamp: new Date().toISOString() });
   document.getElementById('mov-product-search').value = '';
   document.getElementById('mov-product-upc').value = '';
   document.getElementById('mov-selected-product').classList.add('hidden');
@@ -1618,18 +1624,25 @@ function renderMovementsTable() {
   // Migrate old movements without status
   State.movements.forEach(m => { if (!m.status) m.status = 'draft'; });
 
-  // Group by route (from→to)
+  // Group by shipmentId (each confirmed shipment is separate; drafts group by route)
   const ROUTE_ORDER = ['fp→us','us→ca','us→uk','us→eu','uk→eu'];
   const groups = {};
   State.movements.forEach((m, i) => {
-    const key = `${m.from}→${m.to}`;
-    if (!groups[key]) groups[key] = { from: m.from, to: m.to, key, items: [] };
+    // Migrate old movements without shipmentId
+    if (!m.shipmentId) m.shipmentId = `${m.from}→${m.to}-legacy`;
+    const key = m.shipmentId;
+    if (!groups[key]) groups[key] = { from: m.from, to: m.to, key, routeKey: `${m.from}→${m.to}`, items: [] };
     groups[key].items.push({ ...m, _idx: i });
   });
 
-  // Sort groups by route order
+  // Sort groups: first by route order, then drafts before confirmed
   const sortedGroups = Object.values(groups).sort((a,b) => {
-    return (ROUTE_ORDER.indexOf(a.key) - ROUTE_ORDER.indexOf(b.key));
+    const routeDiff = (ROUTE_ORDER.indexOf(a.routeKey) - ROUTE_ORDER.indexOf(b.routeKey));
+    if (routeDiff !== 0) return routeDiff;
+    const aStatus = a.items[0]?.status || 'draft';
+    const bStatus = b.items[0]?.status || 'draft';
+    const order = { draft:0, confirmed:1, shipped:2, processed:3 };
+    return (order[aStatus]||0) - (order[bStatus]||0);
   });
 
   const STATUS_PILL = {
@@ -1639,6 +1652,7 @@ function renderMovementsTable() {
     processed: '<span class="pill pill-ok" style="font-size:10px">Processed</span>',
   };
 
+  // Clear the static header - we render group headers inline
   let html = '';
   for (const group of sortedGroups) {
     const isFPtoUS = group.key === 'fp→us';
@@ -1694,9 +1708,11 @@ function renderMovementsTable() {
   container.innerHTML = html;
 }
 // ── MOVEMENT STATUS ──────────────────────────────────────────
-window.confirmGroup = function(routeKey) {
-  const [from, to] = routeKey.split('→');
-  const groupItems = State.movements.filter(m => m.from === from && m.to === to);
+window.confirmGroup = function(shipmentId) {
+  const groupItems = State.movements.filter(m => m.shipmentId === shipmentId);
+  if (!groupItems.length) return;
+  const from = groupItems[0].from;
+  const to = groupItems[0].to;
   if (!groupItems.length) return;
   const isFPtoUS = routeKey === 'fp→us';
   let poNumber = '';
@@ -1715,9 +1731,8 @@ window.confirmGroup = function(routeKey) {
   toast(isFPtoUS ? `Group confirmed with ${poNumber}. Watching Packiyo for shipment.` : 'Group confirmed. Click "Mark Processed" when stock arrives.', 'success');
 };
 
-window.processGroup = function(routeKey) {
-  const [from, to] = routeKey.split('→');
-  State.movements.filter(m => m.from === from && m.to === to).forEach(m => {
+window.processGroup = function(shipmentId) {
+  State.movements.filter(m => m.shipmentId === shipmentId).forEach(m => {
     m.status = 'processed';
     m.processedAt = new Date().toISOString();
   });
