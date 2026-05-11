@@ -1743,7 +1743,8 @@ function renderMovementsTable() {
         <td>${esc(m.format)}</td>
         <td class="num"><input type="number" min="1" value="${m.qty}" data-idx="${m._idx}"
           style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
-          onchange="updateMovementQty(${m._idx}, this.value)" /></td>
+          onchange="updateMovementQty(${m._idx}, this.value)"
+          oninput="updateMovementQty(${m._idx}, this.value)" /></td>
         <td><input type="text" class="mov-notes" data-idx="${m._idx}" value="${esc(m.notes||'')}"
           style="width:200px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
           onchange="updateMovementNotes(${m._idx}, this.value)" placeholder="Notes…" /></td>
