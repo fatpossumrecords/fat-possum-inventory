@@ -456,6 +456,7 @@ async function loadPackiyo() {
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
+    try { localStorage.setItem('fp_packiyo_products', JSON.stringify(State.packiyoProducts)); } catch(e) {}
     renderDashboard();
 
     // Load POs then velocity sequentially to avoid rate limiting
