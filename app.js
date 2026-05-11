@@ -1749,7 +1749,7 @@ function renderMovementsTable() {
         <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px">${group.items.length} item${group.items.length!==1?'s':''} · ${totalQty.toLocaleString()} units</span>
         ${poNumber ? `<span style="font-size:10px;color:var(--accent);margin-left:8px;font-weight:600">${esc(poNumber)}</span>` : ''}
       </td>
-      <td colspan="2" style="padding:8px 12px;text-align:right;white-space:nowrap;gap:6px;display:flex;align-items:center;justify-content:flex-end;">
+      <td colspan="2" style="padding:8px 12px;text-align:right;white-space:nowrap;">
         <button class="btn-secondary btn-sm grp-export" data-sid="${exportSid}" style="margin-right:6px;">Export</button>
         <span style="margin-right:8px;">${pill}</span>
         ${confirmBtn}
@@ -1773,7 +1773,7 @@ function renderMovementsTable() {
         <td><input type="text" class="mov-notes" data-idx="${m._idx}" value="${esc(m.notes||'')}"
           style="width:200px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
           onchange="updateMovementNotes(${m._idx}, this.value)" placeholder="Notes…" /></td>
-        <td colspan="2" style="text-align:right;"><button class="btn-danger btn-sm" onclick="removeMovement(${m._idx})">×</button></td>
+        <td style="width:32px;text-align:center;"><button class="btn-danger btn-sm" onclick="removeMovement(${m._idx})" style="padding:2px 6px;">×</button></td>
       </tr>`;
     });
   }
