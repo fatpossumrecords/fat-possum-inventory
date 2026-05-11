@@ -384,6 +384,8 @@ async function loadPackiyo() {
     await loadPackiyoPOs();
     await sleep(500);
     await loadFPVelocity();
+    await sleep(300);
+    await loadRecentPOOrders();
 
     mergeData();
   } catch (err) {
@@ -493,6 +495,37 @@ async function loadPackiyoPOs() {
   } catch(e) {
     console.warn('Could not load POs:', e.message);
     State.packiyoPOs = {};
+  }
+}
+
+// ── RECENT PO ORDERS (for movement status tracking) ─────────
+async function loadRecentPOOrders() {
+  try {
+    // Get total page count first
+    const first = await packiyoFetch('/orders', { 'page[number]': 1, 'page[size]': 100 });
+    const lastPage = first.meta?.page?.lastPage || 1;
+    // Fetch last 3 pages to capture recent PO# orders
+    const pagesToFetch = [lastPage, lastPage-1, lastPage-2].filter(p => p > 0);
+    const poOrders = [];
+    for (const page of pagesToFetch) {
+      await sleep(200);
+      const data = await packiyoFetch('/orders', { 'page[number]': page, 'page[size]': 100 });
+      const orders = data.data || [];
+      orders.filter(o => (o.attributes?.number||'').startsWith('PO#')).forEach(o => {
+        poOrders.push({
+          number: (o.attributes.number||'').trim(),
+          status_text: o.attributes.status_text,
+          fulfilled_at: o.attributes.fulfilled_at,
+        });
+      });
+    }
+    if (poOrders.length) {
+      State.fp_poOrders = poOrders;
+      console.log('Recent PO orders loaded:', poOrders.length, poOrders.map(p=>p.number+' '+p.status_text));
+      checkMovementStatuses();
+    }
+  } catch(e) {
+    console.warn('Could not load recent PO orders:', e.message);
   }
 }
 
