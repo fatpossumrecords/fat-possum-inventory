@@ -1021,6 +1021,7 @@ const INV_COLS = [
   // FP WH
   { id:'fp_available', label:'FP Avail',  num:true,  group:'fp',    always:true  },
   { id:'fp_inbound',   label:'FP Inbound',num:true,  group:'fp',    always:false },
+  { id:'fp_12ms',      label:'FP 12MS',   num:true,  group:'fp',    always:false },
   // Orchard US
   { id:'us_avail',   label:'US Avail',    num:true,  group:'us',    always:true  },
   { id:'us_mtd',     label:'US MTD',      num:true,  group:'us',    always:false },
