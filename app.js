@@ -1666,10 +1666,11 @@ function renderMovementsTable() {
     const totalQty = group.items.reduce((s,m) => s + (m.qty||0), 0);
 
     // Group header
+    const sid = encodeURIComponent(group.key);
     const confirmBtn = groupStatus === 'draft'
-      ? `<button class="btn-primary btn-sm" onclick="confirmGroup('${group.key}')">Confirm ${isFPtoUS ? '& Add PO#' : 'Shipment'}</button>`
+      ? `<button class="btn-primary btn-sm grp-confirm" data-sid="${sid}">Confirm ${isFPtoUS ? '& Add PO#' : 'Shipment'}</button>`
       : groupStatus === 'confirmed' && !isFPtoUS
-        ? `<button class="btn-secondary btn-sm" onclick="processGroup('${group.key}')">Mark Processed</button>`
+        ? `<button class="btn-secondary btn-sm grp-process" data-sid="${sid}">Mark Processed</button>`
         : groupStatus === 'shipped'
           ? `<span style="font-size:10px;color:var(--text-muted)">Auto-clears in 7d</span>`
           : groupStatus === 'processed'
@@ -1708,6 +1709,16 @@ function renderMovementsTable() {
   container.innerHTML = html;
 }
 // ── MOVEMENT STATUS ──────────────────────────────────────────
+// Event delegation for group confirm/process buttons
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('grp-confirm')) {
+    confirmGroup(decodeURIComponent(e.target.dataset.sid));
+  }
+  if (e.target.classList.contains('grp-process')) {
+    processGroup(decodeURIComponent(e.target.dataset.sid));
+  }
+});
+
 window.confirmGroup = function(shipmentId) {
   const groupItems = State.movements.filter(m => m.shipmentId === shipmentId);
   if (!groupItems.length) return;
