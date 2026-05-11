@@ -1609,14 +1609,28 @@ function addMovement() {
 }
 
 function renderMovementsTable() {
-  const tbody = document.getElementById('movements-tbody');
+  const container = document.getElementById('movements-tbody');
   document.getElementById('mov-queue-count').textContent = `${State.movements.length} item${State.movements.length!==1?'s':''}`;
   if (State.movements.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-cell">No movements queued yet.</td></tr>`;
+    container.innerHTML = `<tr><td colspan="8" class="empty-cell">No movements queued yet.</td></tr>`;
     return;
   }
   // Migrate old movements without status
   State.movements.forEach(m => { if (!m.status) m.status = 'draft'; });
+
+  // Group by route (from→to)
+  const ROUTE_ORDER = ['fp→us','us→ca','us→uk','us→eu','uk→eu'];
+  const groups = {};
+  State.movements.forEach((m, i) => {
+    const key = `${m.from}→${m.to}`;
+    if (!groups[key]) groups[key] = { from: m.from, to: m.to, key, items: [] };
+    groups[key].items.push({ ...m, _idx: i });
+  });
+
+  // Sort groups by route order
+  const sortedGroups = Object.values(groups).sort((a,b) => {
+    return (ROUTE_ORDER.indexOf(a.key) - ROUTE_ORDER.indexOf(b.key));
+  });
 
   const STATUS_PILL = {
     draft:     '<span class="pill" style="background:#eee;color:#555;font-size:10px">Draft</span>',
@@ -1625,73 +1639,95 @@ function renderMovementsTable() {
     processed: '<span class="pill pill-ok" style="font-size:10px">Processed</span>',
   };
 
-  tbody.innerHTML = State.movements.map((m, i) => {
-    const isFPtoUS = m.from === 'fp' && m.to === 'us';
-    const isDraft = m.status === 'draft';
-    const isConfirmed = m.status === 'confirmed';
-    const isShipped = m.status === 'shipped';
-    const isProcessed = m.status === 'processed';
-    const pill = STATUS_PILL[m.status] || STATUS_PILL.draft;
-    const poLabel = m.poNumber ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px">${esc(m.poNumber)}</div>` : '';
-    const actionBtn = isDraft
-      ? `<button class="btn-primary btn-sm" onclick="confirmMovement(${i})">Confirm</button>`
-      : isConfirmed && !isFPtoUS
-        ? `<button class="btn-secondary btn-sm" onclick="processMovement(${i})">Mark Processed</button>`
-        : isShipped
-          ? `<span style="font-size:10px;color:var(--text-muted)">Clears in 7d</span>`
-          : isProcessed
+  let html = '';
+  for (const group of sortedGroups) {
+    const isFPtoUS = group.key === 'fp→us';
+    // Group status = worst status of any item (draft < confirmed < shipped/processed)
+    const statuses = [...new Set(group.items.map(m => m.status))];
+    const groupStatus = statuses.includes('draft') ? 'draft'
+      : statuses.includes('confirmed') ? 'confirmed'
+      : statuses.includes('shipped') ? 'shipped' : 'processed';
+    const poNumber = group.items[0].poNumber || '';
+    const pill = STATUS_PILL[groupStatus] || STATUS_PILL.draft;
+    const totalQty = group.items.reduce((s,m) => s + (m.qty||0), 0);
+
+    // Group header
+    const confirmBtn = groupStatus === 'draft'
+      ? `<button class="btn-primary btn-sm" onclick="confirmGroup('${group.key}')">Confirm ${isFPtoUS ? '& Add PO#' : 'Shipment'}</button>`
+      : groupStatus === 'confirmed' && !isFPtoUS
+        ? `<button class="btn-secondary btn-sm" onclick="processGroup('${group.key}')">Mark Processed</button>`
+        : groupStatus === 'shipped'
+          ? `<span style="font-size:10px;color:var(--text-muted)">Auto-clears in 7d</span>`
+          : groupStatus === 'processed'
             ? `<span style="font-size:10px;color:var(--text-muted)">Clears in 30d</span>`
             : '';
-    return `<tr>
-      <td style="white-space:nowrap">${WH_LABELS[m.from]}<span style="color:var(--text-dim);margin:0 4px">→</span>${WH_LABELS[m.to]}</td>
-      <td>${esc(m.artist)}<br><small style="color:var(--text-muted)">${esc(m.title)}</small></td>
-      <td style="color:var(--text-muted);font-size:11px">${esc(m.label)}</td>
-      <td><code>${esc(m.catalog)}</code></td>
-      <td style="font-size:10px;color:var(--text-dim)">${esc(m.upc)}</td>
-      <td>${esc(m.format)}</td>
-      <td class="num"><input type="number" min="1" value="${m.qty}"
-        style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
-        onchange="updateMovementQty(${i}, this.value)" /></td>
-      <td><input type="text" value="${esc(m.notes)}"
-        style="width:150px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
-        onchange="updateMovementNotes(${i}, this.value)" placeholder="Notes…" /></td>
-      <td>${pill}${poLabel}</td>
-      <td>${actionBtn}</td>
-      <td><button class="btn-danger" onclick="removeMovement(${i})">×</button></td>
+
+    html += `<tr style="background:var(--surface2);border-top:2px solid var(--border2);">
+      <td colspan="6" style="padding:8px 12px;font-weight:600;font-size:12px;">
+        ${WH_LABELS[group.from]} <span style="color:var(--text-dim);margin:0 6px">→</span> ${WH_LABELS[group.to]}
+        <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px">${group.items.length} item${group.items.length!==1?'s':''} · ${totalQty.toLocaleString()} units</span>
+        ${poNumber ? `<span style="font-size:10px;color:var(--accent);margin-left:8px;font-weight:600">${esc(poNumber)}</span>` : ''}
+      </td>
+      <td colspan="2" style="padding:8px 12px;text-align:right;">
+        <span style="margin-right:10px;">${pill}</span>
+        ${confirmBtn}
+      </td>
     </tr>`;
-  }).join('');
+
+    // Line items
+    group.items.forEach(m => {
+      html += `<tr>
+        <td style="padding-left:24px;">${esc(m.artist)}</td>
+        <td>${esc(m.title)}</td>
+        <td style="color:var(--text-muted);font-size:11px">${esc(m.catalog)}</td>
+        <td>${esc(m.format)}</td>
+        <td class="num"><input type="number" min="1" value="${m.qty}"
+          style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+          onchange="updateMovementQty(${m._idx}, this.value)" /></td>
+        <td><input type="text" value="${esc(m.notes||'')}"
+          style="width:200px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
+          onchange="updateMovementNotes(${m._idx}, this.value)" placeholder="Notes…" /></td>
+        <td colspan="2" style="text-align:right;"><button class="btn-danger btn-sm" onclick="removeMovement(${m._idx})">×</button></td>
+      </tr>`;
+    });
+  }
+  container.innerHTML = html;
 }
 // ── MOVEMENT STATUS ──────────────────────────────────────────
-window.confirmMovement = function(i) {
-  const m = State.movements[i];
-  if (!m) return;
-  if (m.from === 'fp' && m.to === 'us') {
-    // FP→US: need Orchard PO number to match against Packiyo
-    const po = prompt('Enter the Orchard PO# (e.g. "PO# 7200026997"):');
-    if (!po) return;
-    m.poNumber = po.trim();
-    m.status = 'confirmed';
-    m.confirmedAt = new Date().toISOString();
-    toast(`Movement confirmed with ${m.poNumber}. Watching Packiyo for shipment.`, 'success');
-  } else {
-    // Orchard→Orchard: just confirm
-    m.status = 'confirmed';
-    m.confirmedAt = new Date().toISOString();
-    toast('Movement confirmed. Click "Mark Processed" when stock arrives.', 'success');
+window.confirmGroup = function(routeKey) {
+  const [from, to] = routeKey.split('→');
+  const groupItems = State.movements.filter(m => m.from === from && m.to === to);
+  if (!groupItems.length) return;
+  const isFPtoUS = routeKey === 'fp→us';
+  let poNumber = '';
+  if (isFPtoUS) {
+    poNumber = prompt('Enter the Orchard PO# for this shipment (e.g. "PO# 7200026997"):');
+    if (!poNumber) return;
+    poNumber = poNumber.trim();
   }
+  groupItems.forEach(m => {
+    m.status = 'confirmed';
+    m.confirmedAt = new Date().toISOString();
+    if (poNumber) m.poNumber = poNumber;
+  });
   saveGistData();
   renderMovementsTable();
+  toast(isFPtoUS ? `Group confirmed with ${poNumber}. Watching Packiyo for shipment.` : 'Group confirmed. Click "Mark Processed" when stock arrives.', 'success');
 };
 
-window.processMovement = function(i) {
-  const m = State.movements[i];
-  if (!m) return;
-  m.status = 'processed';
-  m.processedAt = new Date().toISOString();
+window.processGroup = function(routeKey) {
+  const [from, to] = routeKey.split('→');
+  State.movements.filter(m => m.from === from && m.to === to).forEach(m => {
+    m.status = 'processed';
+    m.processedAt = new Date().toISOString();
+  });
   saveGistData();
   renderMovementsTable();
-  toast('Movement marked as processed. Will auto-remove in 30 days.', 'success');
+  toast('Group marked as processed. Will auto-remove in 30 days.', 'success');
 };
+
+window.confirmMovement = window.confirmGroup; // backwards compat
+window.processMovement = window.processGroup;
 
 // Check if any FP→US movements with PO# have shipped in Packiyo
 function checkMovementStatuses() {
