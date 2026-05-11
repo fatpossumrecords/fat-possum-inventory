@@ -1656,7 +1656,7 @@ function addMovement() {
   const _draftShipment = State.movements.find(m => m.from === from && m.to === to && m.status === 'draft');
   const _shipmentId = _draftShipment ? _draftShipment.shipmentId : `${from}→${to}-${Date.now()}`;
   // Calculate leaves-at-source note for manually added movements
-  const _sourceMap = { fp: prod.fp_available||0, us: prod.us_avail||0, ca: prod.ca_avail||0, uk: prod.uk_avail||0, eu: prod.eu_avail||0 };
+  const _sourceMap = { fp: prod.fp_onhand||0, us: prod.us_avail||0, ca: prod.ca_avail||0, uk: prod.uk_avail||0, eu: prod.eu_avail||0 };
   const _leavesAt = Math.max(0, (_sourceMap[from]||0) - qty);
   const _whShort = { fp:'FP WH', us:'Orchard US', ca:'Orchard CA', uk:'Orchard UK', eu:'Orchard EU' };
   const _leaveNote = 'Leaves ' + _leavesAt + ' at ' + (_whShort[from]||from);
@@ -1892,7 +1892,8 @@ window.recalcMovementNote = function(i, newQty) {
   const n = newQty !== undefined ? newQty : m.qty;
   const prod = State.merged.find(p => p.upc === m.upc);
   if (!prod) return;
-  const srcMap = { fp:prod.fp_available||0, us:prod.us_avail||0, ca:prod.ca_avail||0, uk:prod.uk_avail||0, eu:prod.eu_avail||0 };
+  // For FP WH use fp_onhand (physical stock) not fp_available (already reduced by allocations)
+  const srcMap = { fp:prod.fp_onhand||0, us:prod.us_avail||0, ca:prod.ca_avail||0, uk:prod.uk_avail||0, eu:prod.eu_avail||0 };
   const leaves = Math.max(0, (srcMap[m.from]||0) - n);
   const short = { fp:'FP WH', us:'Orchard US', ca:'Orchard CA', uk:'Orchard UK', eu:'Orchard EU' };
   m.notes = 'Leaves ' + leaves + ' at ' + (short[m.from]||m.from);
