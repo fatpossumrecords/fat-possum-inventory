@@ -126,11 +126,7 @@ function bootApp() {
   updateMfgQueueBadge();
   // Load Gist FIRST (suppressed titles, manual artists, shopify vendors)
   // then load Packiyo so mergeData has the suppression list ready
-  loadGistData().then(() => {
-    if (State.movements.length) renderMovementsTable();
-    loadPackiyo();
-  });
-  // Also restore from localStorage cache while Packiyo loads
+  // Restore Orchard CSV from localStorage first (no mergeData yet)
   const orchardCache = localStorage.getItem('fp_orchard');
   if (orchardCache) {
     try {
@@ -139,16 +135,14 @@ function bootApp() {
       updateOrchardStatus();
     } catch(e) {}
   }
-  const saved = localStorage.getItem('fp_orchard');
-  if (saved) {
-    try {
-      State.orchardData = JSON.parse(saved);
-      State.orchardLoaded = true;
-      State.orchardLoaded = true;
-      updateOrchardStatus();
-      mergeData();
-    } catch(e) {}
-  }
+  // Load Gist FIRST, then Packiyo — ensures suppressions/manual artists
+  // are ready before mergeData runs
+  loadGistData().then(() => {
+    if (State.movements.length) renderMovementsTable();
+    // Now mergeData with Gist data already in State
+    if (State.orchardData.length || State.packiyoProducts.length) mergeData();
+    loadPackiyo();
+  });
 }
 
 // ── ORCHARD STATUS + UPLOAD HISTORY ─────────────────────────
