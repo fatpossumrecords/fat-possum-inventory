@@ -210,12 +210,11 @@ function resetColumnLayout() {
 // ── GITHUB GIST SYNC ─────────────────────────────────────────
 async function loadGistData() {
   try {
-    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
-      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
-    });
+    // Use raw URL to avoid API truncation of large files
+    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
+    const res = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
-    const data = await res.json();
-    const content = data.files?.[CONFIG.GIST_FILE]?.content;
+    const content = await res.text();
     if (!content) return;
     const parsed = JSON.parse(content);
     State.suppressedUpcs = new Set(parsed.suppressed || []);
@@ -456,7 +455,15 @@ async function loadPackiyo() {
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
-    try { localStorage.setItem('fp_packiyo_products', JSON.stringify(State.packiyoProducts)); } catch(e) {}
+    // Cache slim version (only fields we use)
+    try {
+      const slim = State.packiyoProducts.map(p => ({
+        id: p.id, sku: p.sku, name: p.name, barcode: p.barcode,
+        quantity_available: p.quantity_available, quantity_on_hand: p.quantity_on_hand,
+        quantity_inbound: p.quantity_inbound, quantity_allocated: p.quantity_allocated,
+      }));
+      localStorage.setItem('fp_packiyo_products', JSON.stringify(slim));
+    } catch(e) { console.warn('Products cache failed:', e.message); }
     renderDashboard();
 
     // Load POs then velocity sequentially to avoid rate limiting
