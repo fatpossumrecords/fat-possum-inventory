@@ -2552,14 +2552,24 @@ window.needsAttentionDismiss = function() {
 window.needsAttentionAction = function(upc, whKey) {
   switchView('alerts');
   setTimeout(() => {
-    const el = document.getElementById('alert-section-' + whKey);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Highlight the specific row
-    document.querySelectorAll('.alert-check[data-upc="'+upc+'"]').forEach(cb => {
-      cb.closest('tr').style.background = '#fff3cd';
-      setTimeout(() => cb.closest('tr').style.background = '', 2000);
-    });
-  }, 100);
+    // Scroll to the warehouse section
+    const section = document.getElementById('alert-section-' + whKey);
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Find the specific checkbox for this UPC in this warehouse and check it
+    const cb = document.querySelector('.alert-check[data-upc="'+upc+'"][data-wh="'+whKey+'"]');
+    if (cb) {
+      cb.checked = true;
+      // Highlight the row
+      const row = cb.closest('tr');
+      if (row) {
+        row.style.outline = '2px solid white';
+        row.style.outlineOffset = '-2px';
+        setTimeout(() => { row.style.outline = ''; row.style.outlineOffset = ''; }, 3000);
+      }
+    }
+    // Show the Apply button hint
+    updateInventorySelection && updateInventorySelection();
+  }, 200);
 };
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
