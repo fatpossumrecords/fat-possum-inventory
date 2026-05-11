@@ -390,76 +390,94 @@ td { overflow: hidden; }
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; }
 
+  /* ── Bottom nav bar ── */
   #sidebar {
     position: fixed; bottom: 0; left: 0; right: 0;
     width: 100% !important; min-width: 100% !important;
     height: auto; flex-direction: row;
     border-right: none; border-top: 1px solid var(--border);
     z-index: 100; overflow-x: auto; overflow-y: hidden;
+    background: var(--surface);
   }
-  .sidebar-header, .sidebar-footer { display: none; }
-  nav {
-    display: flex; flex-direction: row;
-    padding: 0; flex: 1;
-  }
+  .sidebar-header, .sidebar-footer,
+  .status-row, #orchard-last-upload { display: none; }
+  nav { display: flex; flex-direction: row; padding: 0; flex: 1; }
   .nav-item {
-    flex-direction: column; gap: 3px;
-    padding: 10px 16px; font-size: 9px;
-    border-left: none; border-top: 3px solid transparent;
-    flex: 1; justify-content: center; align-items: center;
-    text-align: center;
+    flex-direction: column; gap: 2px;
+    padding: 8px 6px; font-size: 9px; font-weight: 500;
+    border-left: none; border-top: 2px solid transparent;
+    flex: 1; justify-content: center; align-items: center; text-align: center;
+    white-space: nowrap;
   }
-  .nav-item.active { border-top-color: var(--accent); border-left-color: transparent; }
-  .nav-item svg { width: 18px; height: 18px; }
+  .nav-item.active { border-top-color: var(--accent); color: var(--accent); }
+  .nav-item svg { width: 16px; height: 16px; }
 
+  /* ── Layout ── */
   #app { flex-direction: column; }
-  #main-content { padding-bottom: 60px; }
+  #main-content { padding-bottom: 70px; overflow-y: auto; }
+  .view { padding: 0; }
+  .view-header { flex-direction: column; gap: 8px; padding: 14px 16px 10px; }
+  .view-header h2 { font-size: 18px; }
+  .view-sub { font-size: 11px; }
+  .view-actions { flex-wrap: wrap; gap: 6px; padding: 0 16px 10px; }
 
-  .view-header { flex-direction: column; gap: 10px; }
-  .view-actions { flex-wrap: wrap; gap: 6px; }
-  .view-header h2 { font-size: 16px; }
+  /* ── Floating action bar above bottom nav ── */
+  #inv-action-bar { bottom: 60px !important; }
 
-  /* Mobile inventory — simple card view instead of table */
+  /* ── Dashboard ── */
+  .dash-grid { grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; }
+  .dash-card { padding: 12px; }
+  .dash-num  { font-size: 22px; }
+  .dash-section { padding: 0 16px 16px; }
+  .dash-table { font-size: 11px; }
+
+  /* ── Inventory — card layout ── */
   .mobile-hide { display: none !important; }
+  .inv-body-wrap { overflow-x: hidden; }
   #inventory-table thead { display: none; }
   #inventory-table, #inventory-table tbody, #inventory-table tr { display: block; width: 100%; }
   #inventory-table tr {
     background: var(--surface);
-    border: 1px solid var(--border);
-    margin-bottom: 8px;
-    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    margin: 0;
   }
-  #inventory-table tr:hover { background: var(--surface); }
+  #inventory-table tr:nth-child(even) { background: #f4f1ec; }
   #inventory-table td {
-    display: none;
-    border: none; padding: 2px 0;
-    white-space: normal; background: transparent;
+    display: none; border: none; padding: 1px 0;
+    white-space: normal; background: transparent !important;
+    position: static !important;
   }
-  /* Show only key mobile columns */
-  #inventory-table td.mob-artist  { display: block; font-weight: 600; font-size: 13px; }
-  #inventory-table td.mob-title   { display: block; color: var(--text-muted); font-size: 12px; margin-bottom: 6px; }
-  #inventory-table td.mob-catalog { display: inline-block; font-size: 10px; color: var(--text-muted); margin-right: 8px; }
-  #inventory-table td.mob-format  { display: inline-block; }
+  #inventory-table td.mob-artist  { display: block; font-weight: 600; font-size: 13px; color: var(--text); }
+  #inventory-table td.mob-title   { display: block; color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
+  #inventory-table td.mob-catalog { display: inline-block; font-size: 10px; color: var(--text-dim); margin-right: 8px; font-family: 'DM Mono', monospace; }
+  #inventory-table td.mob-format  { display: inline-block; font-size: 10px; color: var(--text-dim); }
   #inventory-table td.mob-total   {
-    display: block; margin-top: 8px;
-    font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500;
+    display: inline-block; margin-top: 6px; margin-right: 10px;
+    font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 600; color: var(--text);
   }
-  #inventory-table td.mob-status  { display: inline-block; margin-top: 4px; }
-  /* Warehouse expand toggle on mobile */
-  #inventory-table td.mob-wh-detail {
-    display: none;
-    margin-top: 8px; padding-top: 8px;
-    border-top: 1px solid var(--border);
-    font-size: 11px; color: var(--text-muted);
-  }
-  #inventory-table tr.mob-expanded td.mob-wh-detail { display: block; }
+  #inventory-table td.mob-status  { display: inline-block; margin-top: 6px; vertical-align: middle; }
 
-  /* Hide table-based views on mobile — show simplified */
-  .dash-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .dash-row  { grid-template-columns: 1fr; }
-  .dash-num  { font-size: 24px; }
+  /* ── Alerts — readable on mobile ── */
+  .alert-section { margin: 0 0 16px; }
+  .alert-section h3 { font-size: 13px; padding: 10px 16px; }
+  #alerts-container .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #alerts-container table { min-width: 700px; font-size: 11px; }
 
-  .search-input { width: 100%; }
+  /* ── Movements — readable ── */
+  #movements-tbody tr { font-size: 11px; }
+  #movements-tbody td { padding: 6px 8px; }
+
+  /* ── Manufacturing ── */
+  #mfg-table { min-width: 700px; font-size: 11px; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Search ── */
+  #search-input { width: 100%; box-sizing: border-box; }
+
+  /* ── Filters wrap nicely ── */
+  .filter-row { flex-wrap: wrap; gap: 6px; }
+  select.select-sm { font-size: 12px; }
 }
 
 /* ── MFG TABS ── */
