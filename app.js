@@ -126,20 +126,10 @@ function bootApp() {
   updateMfgQueueBadge();
   // Load Gist FIRST (suppressed titles, manual artists, shopify vendors)
   // then load Packiyo so mergeData has the suppression list ready
-  // Restore Orchard CSV from localStorage first (no mergeData yet)
-  const orchardCache = localStorage.getItem('fp_orchard');
-  if (orchardCache) {
-    try {
-      State.orchardData = JSON.parse(orchardCache);
-      State.orchardLoaded = true;
-      updateOrchardStatus();
-    } catch(e) {}
-  }
-  // Load Gist FIRST, then Packiyo — ensures suppressions/manual artists
-  // are ready before mergeData runs
+  // Load Gist FIRST — has orchard data, suppressions, manual artists, movements
   loadGistData().then(() => {
+    if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
-    // Now mergeData with Gist data already in State
     if (State.orchardData.length || State.packiyoProducts.length) mergeData();
     loadPackiyo();
   });
@@ -216,6 +206,14 @@ async function loadGistData() {
     if (parsed.movements) {
       State.movements = parsed.movements;
     }
+    if (parsed.orchardData && parsed.orchardData.length) {
+      State.orchardData = parsed.orchardData;
+      State.orchardLoaded = true;
+      console.log('Orchard data loaded from Gist:', parsed.orchardData.length, 'products');
+    }
+    if (parsed.orchardTs) {
+      localStorage.setItem('fp_orchard_ts', parsed.orchardTs);
+    }
     console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify,', Object.keys(State.manualArtists||{}).length, 'manual artists');
   } catch(e) {
     console.warn('Gist load failed:', e.message);
@@ -229,6 +227,8 @@ async function saveGistData() {
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
+      orchardData: State.orchardData || [],
+      orchardTs: localStorage.getItem('fp_orchard_ts') || '',
     };
     await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
@@ -626,7 +626,7 @@ async function loadFPVelocity() {
 function loadOrchardCSV(file) {
   setStatus('orchard', 'loading', 'Parsing…');
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     try {
       State.orchardData = deduplicateOrchard(parseCSV(e.target.result));
       State.orchardLoaded = true;
