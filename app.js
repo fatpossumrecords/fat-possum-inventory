@@ -1724,8 +1724,7 @@ window.confirmGroup = function(shipmentId) {
   if (!groupItems.length) return;
   const from = groupItems[0].from;
   const to = groupItems[0].to;
-  if (!groupItems.length) return;
-  const isFPtoUS = routeKey === 'fp→us';
+  const isFPtoUS = from === 'fp' && to === 'us';
   let poNumber = '';
   if (isFPtoUS) {
     poNumber = prompt('Enter the Orchard PO# for this shipment (e.g. "PO# 7200026997"):');
