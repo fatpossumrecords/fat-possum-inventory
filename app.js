@@ -126,11 +126,37 @@ function bootApp() {
   updateMfgQueueBadge();
   // Load Gist FIRST (suppressed titles, manual artists, shopify vendors)
   // then load Packiyo so mergeData has the suppression list ready
+  // Restore cached Packiyo data instantly for immediate render
+  try {
+    const cachedProducts = localStorage.getItem('fp_packiyo_products');
+    const cachedPOs = localStorage.getItem('fp_packiyo_pos');
+    const cachedVelocity = localStorage.getItem('fp_packiyo_velocity');
+    if (cachedProducts) {
+      State.packiyoProducts = JSON.parse(cachedProducts);
+      State.packiyoLoaded = true;
+      setStatus('packiyo', 'ok', State.packiyoProducts.length + ' items (cached)');
+    }
+    if (cachedPOs) State.packiyoPOs = JSON.parse(cachedPOs);
+    if (cachedVelocity) {
+      State.fp_velocity = JSON.parse(cachedVelocity);
+      // Pre-apply velocity to products for immediate render
+      for (const p of State.packiyoProducts) {
+        const vel = State.fp_velocity;
+        // Will be applied properly in mergeData via applyShopifyVendors
+      }
+    }
+  } catch(e) {}
+
   // Load Gist FIRST — has orchard data, suppressions, manual artists, movements
   loadGistData().then(() => {
     if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
-    if (State.orchardData.length || State.packiyoProducts.length) mergeData();
+    // Render immediately with cached data while fresh loads in background
+    if (State.orchardData.length || State.packiyoProducts.length) {
+      mergeData();
+      renderDashboard();
+    }
+    // Then refresh Packiyo in background
     loadPackiyo();
   });
 }
