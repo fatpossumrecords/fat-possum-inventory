@@ -1879,12 +1879,32 @@ function getConfirmedInbound() {
 window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); };
 
 
+window.recalcMovementNote = function(i, newQty) {
+  const m = State.movements[i];
+  if (!m) return;
+  const n = newQty !== undefined ? newQty : m.qty;
+  const prod = State.merged.find(p => p.upc === m.upc);
+  if (!prod) return;
+  const srcMap = { fp:prod.fp_available||0, us:prod.us_avail||0, ca:prod.ca_avail||0, uk:prod.uk_avail||0, eu:prod.eu_avail||0 };
+  const leaves = Math.max(0, (srcMap[m.from]||0) - n);
+  const short = { fp:'FP WH', us:'Orchard US', ca:'Orchard CA', uk:'Orchard UK', eu:'Orchard EU' };
+  m.notes = 'Leaves ' + leaves + ' at ' + (short[m.from]||m.from);
+  const el = document.querySelector('input.mov-notes[data-idx="'+i+'"]');
+  if (el) el.value = m.notes;
+  saveGistData();
+};
+
 window.updateMovementQty = function(i, val) {
   const n = parseInt(val, 10);
-  if (!isNaN(n) && n > 0) State.movements[i].qty = n;
+  if (!isNaN(n) && n > 0) {
+    State.movements[i].qty = n;
+    window.recalcMovementNote(i, n);
+  }
 };
+
 window.updateMovementNotes = function(i, val) {
   State.movements[i].notes = val;
+  saveGistData();
 };
 
 // ── EXPORTS ───────────────────────────────────────────────────
