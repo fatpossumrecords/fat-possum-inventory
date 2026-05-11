@@ -1940,6 +1940,30 @@ function downloadCSV(filename, headers, rows) {
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────
+function buildMovementsSummaryHTML() {
+  if (!State.movements.length) return '<p style="color:var(--text-muted);font-size:12px;margin:0">No movements in queue.</p>';
+  const groups = {};
+  State.movements.forEach(m => {
+    const sid = m.shipmentId || (m.from+'-'+m.to+'-legacy');
+    if (!groups[sid]) groups[sid] = { from:m.from, to:m.to, items:[], status:m.status||'draft', poNumber:m.poNumber||'' };
+    groups[sid].items.push(m);
+  });
+  const STATUS_COLOR = { draft:'var(--text-muted)', confirmed:'#3b7de8', shipped:'var(--orange)', processed:'var(--green)' };
+  const STATUS_LABEL = { draft:'Draft', confirmed:'Confirmed', shipped:'Shipped', processed:'Processed' };
+  const rows = Object.values(groups).map(g => {
+    const totalQty = g.items.reduce((s,m) => s+(m.qty||0), 0);
+    const color = STATUS_COLOR[g.status] || 'var(--text-muted)';
+    return '<tr>'
+      + '<td style="font-size:11px">' + (WH_LABELS[g.from]||g.from) + ' → ' + (WH_LABELS[g.to]||g.to) + '</td>'
+      + '<td class="num">' + g.items.length + '</td>'
+      + '<td class="num">' + totalQty.toLocaleString() + '</td>'
+      + '<td style="color:' + color + ';font-weight:600;font-size:11px">' + (STATUS_LABEL[g.status]||g.status) + '</td>'
+      + '<td style="font-size:10px;color:var(--text-muted)">' + esc(g.poNumber||'—') + '</td>'
+      + '</tr>';
+  }).join('');
+  return '<table class="dash-table"><thead><tr><th>Route</th><th class="num">Items</th><th class="num">Units</th><th>Status</th><th>PO#</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
 function renderDashboard() {
   const el = document.getElementById('dashboard-body');
   if (!el) return;
@@ -2017,6 +2041,10 @@ function renderDashboard() {
     </div>
 
     <div class="dash-row">
+      <div class="dash-section">
+        <h3>Active Movements</h3>
+        ${buildMovementsSummaryHTML()}
+      </div>
       <div class="dash-section">
         <h3>Warehouse Snapshot</h3>
         <table class="dash-table">
