@@ -2503,7 +2503,8 @@ function buildNeedsAttentionBanner() {
     <style>
       @keyframes na-drive {
         0%   { transform: translateX(-230px); }
-        100% { transform: translateX(calc(100% + 20px)); }
+        80%  { transform: translateX(calc(100vw - 200px)); }
+        100% { transform: translateX(-230px); }
       }
       @keyframes na-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .na-rig { animation: na-drive 6s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
@@ -2522,8 +2523,8 @@ function buildNeedsAttentionBanner() {
       <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
       <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
     </div>
-    <svg class="na-rig" width="220" height="56" viewBox="0 0 220 56">
-      <rect x="0" y="44" width="220" height="1.5" fill="rgba(255,255,255,0.2)" rx="1"/>
+    <svg class="na-rig" width="220" height="56" viewBox="0 0 220 56" style="opacity:0.35">
+      <rect x="0" y="44" width="220" height="1.5" fill="rgba(255,255,255,0.4)" rx="1"/>
       <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.15)" rx="2"/>
       <line x1="45" y1="12" x2="45" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
       <line x1="70" y1="12" x2="70" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
@@ -2551,25 +2552,24 @@ window.needsAttentionDismiss = function() {
 
 window.needsAttentionAction = function(upc, whKey) {
   switchView('alerts');
-  setTimeout(() => {
-    // Scroll to the warehouse section
+  // Retry a few times to wait for alerts to render
+  let attempts = 0;
+  const trySelect = () => {
     const section = document.getElementById('alert-section-' + whKey);
-    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Find the specific checkbox for this UPC in this warehouse and check it
     const cb = document.querySelector('.alert-check[data-upc="'+upc+'"][data-wh="'+whKey+'"]');
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (cb) {
       cb.checked = true;
-      // Highlight the row
       const row = cb.closest('tr');
       if (row) {
-        row.style.outline = '2px solid white';
-        row.style.outlineOffset = '-2px';
-        setTimeout(() => { row.style.outline = ''; row.style.outlineOffset = ''; }, 3000);
+        row.style.background = 'rgba(255,255,255,0.15)';
+        setTimeout(() => { row.style.background = ''; }, 3000);
       }
+    } else if (attempts++ < 5) {
+      setTimeout(trySelect, 300);
     }
-    // Show the Apply button hint
-    updateInventorySelection && updateInventorySelection();
-  }, 200);
+  };
+  setTimeout(trySelect, 150);
 };
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
