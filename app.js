@@ -292,15 +292,23 @@ async function saveOrchardToGist() {
 
 async function saveGistData() {
   try {
-    // Never include orchardData in regular saves — only via saveOrchardToGist()
+    // Read current Gist first to preserve orchardData
+    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
+    let existing = {};
+    try {
+      const r = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) existing = await r.json();
+    } catch(e) {}
+
     const payload = {
+      ...existing, // preserve orchardData, orchardTs, and anything else
       suppressed: [...State.suppressedUpcs],
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
-    console.log('Saving to Gist, payload size:', body.length, 'bytes');
+    console.log('Saving to Gist, size:', Math.round(body.length/1024)+'KB', 'orchard rows preserved:', payload.orchardData?.length || 0);
     const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
       headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
