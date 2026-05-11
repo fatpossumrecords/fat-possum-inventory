@@ -1389,8 +1389,16 @@ function renderAlerts() {
   let html = '';
 
   for (const wh of WAREHOUSES) {
+    // Sum confirmed/shipped movement quantities inbound to this warehouse per UPC
+    const confirmedInbound = {};
+    for (const m of State.movements) {
+      if ((m.status === 'confirmed' || m.status === 'shipped') && m.to === wh.key) {
+        confirmedInbound[m.upc] = (confirmedInbound[m.upc] || 0) + (m.qty || 0);
+      }
+    }
+
     let alerts = State.merged.map(p => {
-      const avail   = p[wh.avail] || 0;
+      const avail   = (p[wh.avail] || 0) + (confirmedInbound[p.upc] || 0);
       const annual  = p[wh.vel] || 0;
       const monthly = annual / wh.velDiv;
       if (monthly <= 0 || avail < 0) return null;
