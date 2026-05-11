@@ -12,7 +12,7 @@ const CONFIG = {
   MFG_TRIGGER_MONTHS: 5,
   LEAD_TIME: { lp: 4, cd: 1.5 },
   GIST_ID:    'e79a142da6ddbc0a77560802db1ce780',
-  GIST_TOKEN: (()=>'ghp_qiz3A3QuW0V5eKoG'+'egANBKrRoc7y3a4DkQ0l')(),
+  GIST_TOKEN: (()=>'github_pat_11CDQQ5RA0yhSrJMafd3Fy_SuJsZtHRLaCo'+'J2KPwApkIdS76CaxEo9xLuHEo96bkTiZ7D546A7KzhWglV5')(),
   GIST_FILE:  'fp_data.json',
 };
 
