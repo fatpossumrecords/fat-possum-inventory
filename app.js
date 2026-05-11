@@ -262,15 +262,43 @@ function slimOrchardData(rows) {
   });
 }
 
+async function saveOrchardToGist() {
+  if (!State.orchardData.length) return;
+  try {
+    // Read current Gist first to preserve existing data
+    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    const current = await res.json();
+    const existing = JSON.parse(current.files?.[CONFIG.GIST_FILE]?.content || '{}');
+    // Merge orchard data into existing payload
+    const payload = {
+      ...existing,
+      orchardData: slimOrchardData(State.orchardData),
+      orchardTs: localStorage.getItem('fp_orchard_ts') || '',
+    };
+    const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
+    console.log('Saving orchard to Gist, rows:', State.orchardData.length, 'size:', body.length);
+    const saveRes = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      body,
+    });
+    if (!saveRes.ok) console.warn('Orchard Gist save failed:', saveRes.status);
+    else console.log('Orchard saved to Gist OK');
+  } catch(e) {
+    console.warn('Orchard Gist save failed:', e.message);
+  }
+}
+
 async function saveGistData() {
   try {
+    // Never include orchardData in regular saves — only via saveOrchardToGist()
     const payload = {
       suppressed: [...State.suppressedUpcs],
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
-      orchardData: slimOrchardData(State.orchardData || []),
-      orchardTs: localStorage.getItem('fp_orchard_ts') || '',
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
     console.log('Saving to Gist, payload size:', body.length, 'bytes, orchard rows:', payload.orchardData.length);
