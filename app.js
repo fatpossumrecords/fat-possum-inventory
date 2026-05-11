@@ -2497,30 +2497,19 @@ function buildNeedsAttentionBanner() {
   const need = Math.ceil(monthly * 12 - avail);
 
   el.style.display = 'flex';
+  el.style.position = 'relative';
+  el.style.overflow = 'hidden';
   el.innerHTML = `
-    <div style="flex:0 0 auto;margin-right:16px;">
-      <svg width="80" height="40" viewBox="0 0 80 40" style="overflow:visible">
-        <style>
-          @keyframes drive { from { transform: translateX(-20px); } to { transform: translateX(90px); } }
-          @keyframes wheel { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          .truck-group { animation: drive 3s linear infinite; }
-          .wheel1 { transform-origin: 18px 30px; animation: wheel 1s linear infinite; }
-          .wheel2 { transform-origin: 38px 30px; animation: wheel 1s linear infinite; }
-        </style>
-        <rect x="0" y="5" width="80" height="2" fill="rgba(255,255,255,0.3)" rx="1"/>
-        <g class="truck-group">
-          <rect x="5" y="12" width="30" height="16" fill="white" opacity="0.9" rx="2"/>
-          <rect x="2" y="16" width="8" height="12" fill="white" opacity="0.7" rx="1"/>
-          <rect x="6" y="14" width="4" height="5" fill="#E8650A" rx="1"/>
-          <circle class="wheel1" cx="10" cy="30" r="4" fill="#333"/>
-          <circle cx="10" cy="30" r="2" fill="#666"/>
-          <circle class="wheel2" cx="26" cy="30" r="4" fill="#333"/>
-          <circle cx="26" cy="30" r="2" fill="#666"/>
-          <rect x="5" y="18" width="28" height="8" fill="#E8650A" opacity="0.3" rx="1"/>
-        </g>
-      </svg>
-    </div>
-    <div style="flex:1;min-width:0;">
+    <style>
+      @keyframes na-drive {
+        0%   { transform: translateX(-230px); }
+        100% { transform: translateX(calc(100% + 20px)); }
+      }
+      @keyframes na-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      .na-rig { animation: na-drive 6s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
+      @media (max-width: 768px) { .na-rig { display: none; } }
+    </style>
+    <div style="flex:1;min-width:0;position:relative;z-index:2;padding:12px 0;">
       <div style="font-size:10px;font-weight:700;letter-spacing:1px;opacity:0.8;margin-bottom:2px;">NEEDS ATTENTION</div>
       <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
         ${esc(p.artist)} — ${esc(p.title)}
@@ -2529,10 +2518,29 @@ function buildNeedsAttentionBanner() {
         ${status} at ${wh.label} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo velocity · ${need.toLocaleString()} units needed
       </div>
     </div>
-    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:12px;">
+    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:12px;position:relative;z-index:2;">
       <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
       <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
     </div>
+    <svg class="na-rig" width="220" height="56" viewBox="0 0 220 56">
+      <rect x="0" y="44" width="220" height="1.5" fill="rgba(255,255,255,0.2)" rx="1"/>
+      <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.15)" rx="2"/>
+      <line x1="45" y1="12" x2="45" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
+      <line x1="70" y1="12" x2="70" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
+      <line x1="95" y1="12" x2="95" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
+      <rect x="128" y="35" width="12" height="4" fill="rgba(255,255,255,0.2)" rx="1"/>
+      <rect x="138" y="15" width="40" height="24" fill="rgba(255,255,255,0.2)" rx="2"/>
+      <rect x="152" y="17" width="18" height="11" fill="rgba(255,255,255,0.3)" rx="1"/>
+      <rect x="138" y="28" width="40" height="4" fill="rgba(255,255,255,0.15)"/>
+      <rect x="170" y="5" width="3" height="11" fill="rgba(255,255,255,0.3)" rx="1"/>
+      <rect x="181" y="25" width="4" height="4" fill="rgba(255,255,255,0.6)" rx="1"/>
+      <g style="transform-origin:40px 44px;animation:na-spin 0.6s linear infinite"><circle cx="40" cy="44" r="7" fill="rgba(0,0,0,0.4)"/><circle cx="40" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="40" y1="37" x2="40" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="33" y1="44" x2="47" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+      <g style="transform-origin:56px 44px;animation:na-spin 0.6s linear infinite"><circle cx="56" cy="44" r="7" fill="rgba(0,0,0,0.4)"/><circle cx="56" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="56" y1="37" x2="56" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="49" y1="44" x2="63" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+      <g style="transform-origin:90px 44px;animation:na-spin 0.6s linear infinite"><circle cx="90" cy="44" r="7" fill="rgba(0,0,0,0.4)"/><circle cx="90" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="90" y1="37" x2="90" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="83" y1="44" x2="97" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+      <g style="transform-origin:143px 44px;animation:na-spin 0.6s linear infinite"><circle cx="143" cy="44" r="7" fill="rgba(0,0,0,0.4)"/><circle cx="143" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="143" y1="37" x2="143" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="136" y1="44" x2="150" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+      <g style="transform-origin:157px 44px;animation:na-spin 0.6s linear infinite"><circle cx="157" cy="44" r="7" fill="rgba(0,0,0,0.4)"/><circle cx="157" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="157" y1="37" x2="157" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="150" y1="44" x2="164" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+      <g style="transform-origin:176px 44px;animation:na-spin 0.6s linear infinite"><circle cx="176" cy="44" r="6" fill="rgba(0,0,0,0.4)"/><circle cx="176" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="176" y1="38" x2="176" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="170" y1="44" x2="182" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+    </svg>
   `;
 }
 
