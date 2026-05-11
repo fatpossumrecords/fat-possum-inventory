@@ -239,6 +239,15 @@ async function loadGistData() {
     if (parsed.orchardTs) {
       localStorage.setItem('fp_orchard_ts', parsed.orchardTs);
     }
+    if (parsed.fpVelocity && Object.keys(parsed.fpVelocity).length) {
+      State.fp_velocity = parsed.fpVelocity;
+      console.log('FP velocity loaded from Gist:', Object.keys(parsed.fpVelocity).length, 'SKUs');
+    }
+    if (parsed.fpVelocityTs) {
+      State.fp_velocity_ts = parsed.fpVelocityTs;
+      const btn = document.getElementById('update-sales-btn');
+      if (btn) btn.title = 'Last updated: ' + new Date(parsed.fpVelocityTs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    }
     console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify,', Object.keys(State.manualArtists||{}).length, 'manual artists');
   } catch(e) {
     console.warn('Gist load failed:', e.message);
@@ -259,6 +268,36 @@ function slimOrchardData(rows) {
     for (const k of KEEP) { if (row[k] !== undefined) slim[k] = row[k]; }
     return slim;
   });
+}
+
+async function saveFPVelocityToGist() {
+  if (!Object.keys(State.fp_velocity).length) return;
+  try {
+    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
+    let existing = {};
+    try {
+      const r = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) existing = await r.json();
+    } catch(e) {}
+    const ts = new Date().toISOString();
+    State.fp_velocity_ts = ts;
+    const payload = {
+      ...existing,
+      fpVelocity: State.fp_velocity,
+      fpVelocityTs: ts,
+    };
+    const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
+    console.log('Saving FP velocity to Gist, SKUs:', Object.keys(State.fp_velocity).length, 'size:', Math.round(body.length/1024)+'KB');
+    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      body,
+    });
+    if (!res.ok) console.warn('FP velocity Gist save failed:', res.status);
+    else console.log('FP velocity saved to Gist OK, timestamp:', ts);
+  } catch(e) {
+    console.warn('FP velocity Gist save failed:', e.message);
+  }
 }
 
 async function saveOrchardToGist() {
@@ -474,13 +513,17 @@ async function loadPackiyo() {
     } catch(e) { console.warn('Products cache failed:', e.message); }
     renderDashboard();
 
-    // Load POs then velocity sequentially to avoid rate limiting
+    // Load POs (fast) — velocity loads from Gist, only re-fetch manually
     await sleep(500);
     await loadPackiyoPOs();
-    await sleep(500);
-    await loadFPVelocity();
     await sleep(300);
     await loadRecentPOOrders();
+    // Apply cached velocity to merged products
+    if (State.fp_velocity && Object.keys(State.fp_velocity).length) {
+      for (const p of State.merged) {
+        p.fp_12ms = State.fp_velocity[p.packiyo_sku] || State.fp_velocity[p.catalog] || 0;
+      }
+    }
 
     mergeData();
   } catch (err) {
@@ -697,6 +740,8 @@ async function loadFPVelocity() {
       p.fp_12ms = skuVelocity[p.packiyo_sku] || skuVelocity[p.catalog] || 0;
     }
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
+    // Save velocity to Gist for other devices
+    await saveFPVelocityToGist();
     checkMovementStatuses();
     renderAlerts();
     renderDashboard();
@@ -2392,6 +2437,19 @@ function renderUploadHistory() {
       <span style="font-family:'DM Mono',monospace">${h.count.toLocaleString()}</span>
     </div>`).join('');
 }
+
+window.updateFPSales = async function() {
+  const btn = document.getElementById('update-sales-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  toast('Fetching FP sales history — this may take a minute…', '');
+  try {
+    await loadFPVelocity();
+    toast('FP sales updated and saved to cloud.', 'success');
+  } catch(e) {
+    toast('FP sales update failed: ' + e.message, 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Update FP Sales'; }
+};
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
