@@ -272,11 +272,19 @@ async function saveGistData() {
       orchardData: slimOrchardData(State.orchardData || []),
       orchardTs: localStorage.getItem('fp_orchard_ts') || '',
     };
-    await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+    const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
+    console.log('Saving to Gist, payload size:', body.length, 'bytes, orchard rows:', payload.orchardData.length);
+    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
       headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } })
+      body,
     });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn('Gist save failed:', res.status, err);
+    } else {
+      console.log('Gist save OK, status:', res.status);
+    }
   } catch(e) {
     console.warn('Gist save failed:', e.message);
   }
