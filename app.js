@@ -1648,7 +1648,12 @@ function addMovement() {
   if (!prod) { toast('Product not found.', 'error'); return; }
   const _draftShipment = State.movements.find(m => m.from === from && m.to === to && m.status === 'draft');
   const _shipmentId = _draftShipment ? _draftShipment.shipmentId : `${from}→${to}-${Date.now()}`;
-  State.movements.push({ from, to, shipmentId: _shipmentId, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes, status:'draft', poNumber:'', confirmedAt:null, processedAt:null, timestamp: new Date().toISOString() });
+  // Calculate leaves-at-source note for manually added movements
+  const _sourceMap = { fp: prod.fp_available||0, us: prod.us_avail||0, ca: prod.ca_avail||0, uk: prod.uk_avail||0, eu: prod.eu_avail||0 };
+  const _leavesAt = Math.max(0, (_sourceMap[from]||0) - qty);
+  const _whShort = { fp:'FP WH', us:'Orchard US', ca:'Orchard CA', uk:'Orchard UK', eu:'Orchard EU' };
+  const _leaveNote = 'Leaves ' + _leavesAt + ' at ' + (_whShort[from]||from);
+  State.movements.push({ from, to, shipmentId: _shipmentId, artist:prod.artist, title:prod.title, catalog: prod.orchard_catalog || prod.catalog, upc:prod.upc, format:prod.format, label:prod.label, qty, notes: _leaveNote, status:'draft', poNumber:'', confirmedAt:null, processedAt:null, timestamp: new Date().toISOString() });
   document.getElementById('mov-product-search').value = '';
   document.getElementById('mov-product-upc').value = '';
   document.getElementById('mov-selected-product').classList.add('hidden');
@@ -1746,7 +1751,7 @@ function renderMovementsTable() {
             style="width:60px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
             onchange="updateMovementQty(${m._idx}, this.value)"
             oninput="updateMovementQty(${m._idx}, this.value)" />
-          <button onclick="recalcMovementNote(${m._idx}, +this.previousElementSibling.value)" title="Recalculate leaves" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px 3px;">↻</button>
+          <button class="mov-recalc" data-idx="${m._idx}" title="Recalculate leaves" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:13px;padding:2px 3px;">↻</button>
         </td>
         <td><input type="text" class="mov-notes" data-idx="${m._idx}" value="${esc(m.notes||'')}"
           style="width:200px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
@@ -1758,6 +1763,15 @@ function renderMovementsTable() {
   container.innerHTML = html;
 }
 // ── MOVEMENT STATUS ──────────────────────────────────────────
+// Event delegation for movement buttons
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('mov-recalc')) {
+    const idx = parseInt(e.target.dataset.idx);
+    const qtyInput = e.target.previousElementSibling;
+    if (qtyInput) recalcMovementNote(idx, +qtyInput.value);
+  }
+});
+
 // Event delegation for group confirm/process buttons
 document.addEventListener('click', e => {
   if (e.target.classList.contains('grp-confirm')) {
