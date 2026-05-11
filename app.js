@@ -301,7 +301,7 @@ async function saveGistData() {
       movements: State.movements || [],
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
-    console.log('Saving to Gist, payload size:', body.length, 'bytes, orchard rows:', payload.orchardData.length);
+    console.log('Saving to Gist, payload size:', body.length, 'bytes');
     const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
       headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
