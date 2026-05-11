@@ -502,6 +502,7 @@ async function loadFPVelocity() {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const skuVelocity = {};
+    const allPoOrders = [];
     let page = 1, done = false;
 
     setStatus('packiyo', 'loading', 'Loading sales…');
@@ -514,6 +515,14 @@ async function loadFPVelocity() {
       });
       const orders = data.data || [];
       if (!orders.length) break;
+      // Collect PO# orders for movement status checking
+      orders.filter(o => (o.attributes?.number||'').startsWith('PO#')).forEach(o => {
+        allPoOrders.push({
+          number: o.attributes.number,
+          status_text: o.attributes.status_text,
+          fulfilled_at: o.attributes.fulfilled_at,
+        });
+      });
 
       // Check if oldest order on this page is beyond 12 months
       const lastOrder = orders[orders.length - 1];
@@ -561,6 +570,9 @@ async function loadFPVelocity() {
     }
 
     State.fp_velocity = skuVelocity;
+    State.fp_poOrders = allPoOrders;
+    console.log('FP PO orders stored:', allPoOrders.length, allPoOrders.slice(0,2));
+    checkMovementStatuses();
     // Apply to merged products
     for (const p of State.merged) {
       p.fp_12ms = skuVelocity[p.packiyo_sku] || skuVelocity[p.catalog] || 0;
