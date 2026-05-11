@@ -339,6 +339,13 @@ function renderSuppressedLog() {
 // ── PACKIYO API ───────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Debounced Gist save to prevent 409 conflicts
+let _gistSaveTimer = null;
+function saveGistDebounced() {
+  clearTimeout(_gistSaveTimer);
+  _gistSaveTimer = setTimeout(() => saveGistData(), 1000);
+}
+
 async function packiyoFetch(endpoint, params = {}, retries = 3) {
   const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const url = CONFIG.PACKIYO_BASE + endpoint + (qs ? '?' + qs : '');
@@ -1891,7 +1898,7 @@ window.recalcMovementNote = function(i, newQty) {
   m.notes = 'Leaves ' + leaves + ' at ' + (short[m.from]||m.from);
   const el = document.querySelector('input.mov-notes[data-idx="'+i+'"]');
   if (el) el.value = m.notes;
-  saveGistData();
+  saveGistDebounced();
 };
 
 window.updateMovementQty = function(i, val) {
