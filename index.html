@@ -71,6 +71,15 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
         Suppressed
       </a>
+      <div style="border-top:1px solid var(--border);padding:8px 16px;">
+        <div onclick="toggleUploadHistory()" style="cursor:pointer;font-size:10px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;user-select:none;">
+          <span>CSV Upload History</span>
+          <span id="upload-history-arrow">▸</span>
+        </div>
+        <div id="upload-history-panel" style="display:none;margin-top:8px;font-size:10px;color:var(--text-muted);">
+          <div id="upload-history-list">No uploads yet.</div>
+        </div>
+      </div>
     <div class="sidebar-footer">
       <div class="data-status">
         <div class="status-row">
