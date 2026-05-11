@@ -1742,14 +1742,16 @@ function renderMovementsTable() {
             ? `<span style="font-size:10px;color:var(--text-muted)">Clears in 30d</span>`
             : '';
 
+    const exportSid = encodeURIComponent(group.key);
     html += `<tr style="background:var(--surface2);border-top:2px solid var(--border2);">
       <td colspan="6" style="padding:8px 12px;font-weight:600;font-size:12px;">
         ${WH_LABELS[group.from]} <span style="color:var(--text-dim);margin:0 6px">→</span> ${WH_LABELS[group.to]}
         <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px">${group.items.length} item${group.items.length!==1?'s':''} · ${totalQty.toLocaleString()} units</span>
         ${poNumber ? `<span style="font-size:10px;color:var(--accent);margin-left:8px;font-weight:600">${esc(poNumber)}</span>` : ''}
       </td>
-      <td colspan="2" style="padding:8px 12px;text-align:right;">
-        <span style="margin-right:10px;">${pill}</span>
+      <td colspan="2" style="padding:8px 12px;text-align:right;white-space:nowrap;gap:6px;display:flex;align-items:center;justify-content:flex-end;">
+        <button class="btn-secondary btn-sm grp-export" data-sid="${exportSid}" style="margin-right:6px;">Export</button>
+        <span style="margin-right:8px;">${pill}</span>
         ${confirmBtn}
       </td>
     </tr>`;
@@ -1780,6 +1782,9 @@ function renderMovementsTable() {
 // ── MOVEMENT STATUS ──────────────────────────────────────────
 // Event delegation for movement buttons
 document.addEventListener('click', e => {
+  if (e.target.classList.contains('grp-export')) {
+    exportGroup(decodeURIComponent(e.target.dataset.sid));
+  }
   if (e.target.classList.contains('mov-recalc')) {
     const idx = parseInt(e.target.dataset.idx);
     const qtyInput = e.target.previousElementSibling;
@@ -1796,6 +1801,20 @@ document.addEventListener('click', e => {
     processGroup(decodeURIComponent(e.target.dataset.sid));
   }
 });
+
+window.exportGroup = function(shipmentId) {
+  const items = State.movements.filter(m => m.shipmentId === shipmentId);
+  if (!items.length) return;
+  const from = items[0].from;
+  const to = items[0].to;
+  const poNum = items[0].poNumber || '';
+  const fname = 'fp_movement_' + (WH_LABELS[from]||from).replace(/\s/g,'_') + '_to_' + (WH_LABELS[to]||to).replace(/\s/g,'_') + '_' + dateStr() + '.csv';
+  downloadCSV(fname,
+    ['From Warehouse','To Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Quantity','PO Number'],
+    items.map(m => [WH_LABELS[m.from], WH_LABELS[m.to], m.artist, m.title, m.label, m.catalog, m.upc, m.format, m.qty, poNum])
+  );
+  toast('Exported ' + items.length + ' items.', 'success');
+};
 
 window.confirmGroup = function(shipmentId) {
   const groupItems = State.movements.filter(m => m.shipmentId === shipmentId);
