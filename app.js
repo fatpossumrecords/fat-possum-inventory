@@ -246,6 +246,22 @@ async function loadGistData() {
   }
 }
 
+function slimOrchardData(rows) {
+  // Only keep the fields we actually use in mergeData — cuts size by ~70%
+  const KEEP = [
+    'Display UPC', 'Product Code', 'Release Name', 'Artist Name', 'Label Name', 'Configuration',
+    'US Available', 'US MTDS#', 'US 3MS#', 'US 12MS#',
+    'CA Available', 'CA MTDS#', 'CA 3MS#', 'CA 12MS#',
+    'DPW Stock Available', 'DPW Open Orders', 'DPW Last Month Ships', 'DPW This Year Ships', 'DPW Last Year Ships',
+    'EU Stock OKL', 'EU This Month', 'EU Last Month', 'EU This Year',
+  ];
+  return rows.map(row => {
+    const slim = {};
+    for (const k of KEEP) { if (row[k] !== undefined) slim[k] = row[k]; }
+    return slim;
+  });
+}
+
 async function saveGistData() {
   try {
     const payload = {
@@ -253,7 +269,7 @@ async function saveGistData() {
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
-      orchardData: State.orchardData || [],
+      orchardData: slimOrchardData(State.orchardData || []),
       orchardTs: localStorage.getItem('fp_orchard_ts') || '',
     };
     await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
