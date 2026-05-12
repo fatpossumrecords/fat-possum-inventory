@@ -1346,6 +1346,7 @@ function renderInventory() {
     return 0;
   });
 
+  updateClearFiltersBtn();
   document.getElementById('inventory-count').textContent =
     `${rows.length.toLocaleString()} products${State.merged.length !== rows.length ? ` (of ${State.merged.length.toLocaleString()})` : ''}`;
 
@@ -1415,6 +1416,25 @@ function renderInventory() {
       return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
     }).join('') + `<td style="text-align:center;width:32px;border-left:1px solid var(--border);"><input type="checkbox" class="inv-row-check" data-upc="${p.upc}" data-artist="${esc(p.artist)}" data-title="${esc(p.title)}" onchange="updateInventorySelection()" /></td>` + '</tr>';
   }).join('');
+}
+
+window.clearInventoryFilters = function() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('filter-config').value = '';
+  document.getElementById('filter-warehouse').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('clear-filters-btn').style.display = 'none';
+  renderInventory();
+};
+
+function updateClearFiltersBtn() {
+  const btn = document.getElementById('clear-filters-btn');
+  if (!btn) return;
+  const active = document.getElementById('search-input').value
+    || document.getElementById('filter-config').value
+    || document.getElementById('filter-warehouse').value
+    || document.getElementById('filter-status').value;
+  btn.style.display = active ? '' : 'none';
 }
 
 function stockStatus(p) {
