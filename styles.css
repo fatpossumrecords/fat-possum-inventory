@@ -522,3 +522,38 @@ tr:hover .suppress-btn { opacity: 1; }
 }
 tr:nth-child(even) td.af { background: #f4f1ec; }
 tr:hover td.af { background: #e8e3d8 !important; }
+
+/* ── NOTIFICATION BADGES ── */
+.notif-badge {
+  position: absolute;
+  top: 0; right: 0;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
+}
+.notif-badge.hidden { display: none; }
+
+@keyframes bell-shake {
+  0%,100% { transform: rotate(0); }
+  15% { transform: rotate(12deg); }
+  30% { transform: rotate(-10deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(4deg); }
+}
+.bell-ringing { animation: bell-shake 1s ease-in-out; }
+
+@keyframes vinyl-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.vinyl-spinning { animation: vinyl-spin 3s linear infinite; }
