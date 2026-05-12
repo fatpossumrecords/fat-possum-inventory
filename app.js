@@ -2238,14 +2238,27 @@ function buildInboundHTML() {
     .sort((a,b) => (b.fp_inbound||0) - (a.fp_inbound||0))
     .slice(0, 5);
   if (!inbound.length) return '<div style="font-size:12px;color:var(--text-muted)">No inbound stock.</div>';
+  // Build SKU→expected_at lookup from open POs
+  const skuExpected = {};
+  for (const po of (State.packiyoPOList||[])) {
+    const exp = po.attributes?.expected_at;
+    if (!exp) continue;
+    for (const line of (po._lines||[])) {
+      if (line.sku && !skuExpected[line.sku]) skuExpected[line.sku] = exp;
+    }
+  }
   return '<table style="width:100%;font-size:11px;border-collapse:collapse;">'
-    + inbound.map(p =>
-      '<tr>'
-      + '<td style="padding:3px 0;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">' + esc(p.artist) + ' — ' + esc(p.title) + '</td>'
-      + '<td style="padding:3px 0 3px 8px;text-align:right;font-family:monospace;font-weight:600;color:var(--text);white-space:nowrap;">+' + (p.fp_inbound||0).toLocaleString() + '</td>'
-      + '<td style="padding:3px 0 3px 6px;text-align:right;font-size:10px;color:var(--text-muted);white-space:nowrap;">' + esc(p.catalog) + '</td>'
-      + '</tr>'
-    ).join('')
+    + inbound.map(p => {
+      const exp = skuExpected[p.packiyo_sku] || skuExpected[p.catalog];
+      const expStr = exp ? formatDate(new Date(exp)) : '—';
+      const expColor = !exp ? 'var(--text-muted)' : new Date(exp) < new Date() ? 'var(--red)' : 'var(--green)';
+      return '<tr>'
+        + '<td style="padding:3px 0;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">' + esc(p.artist) + ' — ' + esc(p.title) + '</td>'
+        + '<td style="padding:3px 0 3px 6px;text-align:right;font-family:monospace;font-weight:600;color:var(--text);white-space:nowrap;">+' + (p.fp_inbound||0).toLocaleString() + '</td>'
+        + '<td style="padding:3px 0 3px 6px;text-align:right;white-space:nowrap;">' + catalogLink(p.catalog) + '</td>'
+        + '<td style="padding:3px 0 3px 6px;text-align:right;font-size:10px;color:' + expColor + ';white-space:nowrap;">' + expStr + '</td>'
+        + '</tr>';
+    }).join('')
     + '</table>';
 }
 
