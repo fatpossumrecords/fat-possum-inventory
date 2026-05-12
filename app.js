@@ -2393,6 +2393,9 @@ function renderDashboard() {
       </div>
     </div>
   `;
+  const _resolved = State.movements.filter(m => m.status==='confirmed'||m.status==='shipped'||m.status==='processed').length;
+  setTimeout(() => countUp(document.getElementById('resolved-count'), _resolved), 150);
+  setTimeout(() => renderDoomsdayClock(), 80);
 }
 
 // ── RECORD OF THE DAY ───────────────────────────────────────
