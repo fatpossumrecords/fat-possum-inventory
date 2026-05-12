@@ -1945,6 +1945,11 @@ function renderMovementsTable() {
 // ── MOVEMENT STATUS ──────────────────────────────────────────
 // Event delegation for movement buttons
 document.addEventListener('click', e => {
+  if (e.target.classList.contains('dash-inbound-more')) {
+    e.preventDefault();
+    switchView('manufacturing');
+    setTimeout(() => switchMfgTab('queue'), 100);
+  }
   if (e.target.classList.contains('doom-kill')) {
     doomsdayKill(e.target.dataset.upc, e.target.dataset.artist, e.target.dataset.title);
   }
@@ -2236,11 +2241,6 @@ function countUp(el, target, duration=800) {
 }
 
 function buildInboundHTML() {
-  const inbound = State.merged
-    .filter(p => (p.fp_inbound||0) > 0)
-    .sort((a,b) => (b.fp_inbound||0) - (a.fp_inbound||0))
-    .slice(0, 5);
-  if (!inbound.length) return '<div style="font-size:12px;color:var(--text-muted)">No inbound stock.</div>';
   // Build SKU→expected_at lookup from open POs
   const skuExpected = {};
   for (const po of (State.packiyoPOList||[])) {
@@ -2250,11 +2250,25 @@ function buildInboundHTML() {
       if (line.sku && !skuExpected[line.sku]) skuExpected[line.sku] = exp;
     }
   }
-  return '<table style="width:100%;font-size:11px;border-collapse:collapse;">'
-    + inbound.map(p => {
+  const now = new Date();
+  const inbound = State.merged
+    .filter(p => (p.fp_inbound||0) > 0)
+    .map(p => {
       const exp = skuExpected[p.packiyo_sku] || skuExpected[p.catalog];
-      const expStr = exp ? formatDate(new Date(exp)) : '—';
-      const expColor = !exp ? 'var(--text-muted)' : new Date(exp) < new Date() ? 'var(--red)' : 'var(--green)';
+      return { p, exp: exp ? new Date(exp) : null };
+    })
+    .sort((a,b) => {
+      if (!a.exp && !b.exp) return 0;
+      if (!a.exp) return 1;
+      if (!b.exp) return -1;
+      return a.exp - b.exp;
+    })
+    .slice(0, 5);
+  if (!inbound.length) return '<div style="font-size:12px;color:var(--text-muted)">No inbound stock.</div>';
+  return '<table style="width:100%;font-size:11px;border-collapse:collapse;">'
+    + inbound.map(({ p, exp }) => {
+      const expStr = exp ? formatDate(exp) : '—';
+      const expColor = !exp ? 'var(--text-muted)' : exp < now ? 'var(--red)' : 'var(--green)';
       return '<tr>'
         + '<td style="padding:3px 0;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">' + esc(p.artist) + ' — ' + esc(p.title) + '</td>'
         + '<td style="padding:3px 0 3px 6px;text-align:right;font-family:monospace;font-weight:600;color:var(--text);white-space:nowrap;">+' + (p.fp_inbound||0).toLocaleString() + '</td>'
@@ -2262,7 +2276,10 @@ function buildInboundHTML() {
         + '<td style="padding:3px 0 3px 6px;text-align:right;font-size:10px;color:' + expColor + ';white-space:nowrap;">' + expStr + '</td>'
         + '</tr>';
     }).join('')
-    + '</table>';
+    + '</table>'
+    + '<div style="text-align:right;margin-top:8px;">'
+    + '<a href="#" class="dash-inbound-more" style="font-size:10px;color:var(--accent);text-decoration:none;font-weight:600;">See more →</a>'
+    + '</div>';
 }
 
 function renderDashboard() {
@@ -2355,7 +2372,7 @@ function renderDashboard() {
         <div class="dash-sub">movements actioned</div>
       </div>
       <div class="dash-card" style="grid-column:span 2;">
-        <div class="dash-label" style="margin-bottom:8px;">Inbound to FP WH</div>
+        <div class="dash-label" style="margin-bottom:8px;">Inbound to Fat Possum Warehouse</div>
         ${buildInboundHTML()}
       </div>
       <div class="dash-card" id="doomsday-card" style="padding:12px 14px;min-width:0;">
