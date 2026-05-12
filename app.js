@@ -2555,7 +2555,7 @@ function buildNeedsAttentionBanner() {
   el.style.overflow = 'hidden';
   el.innerHTML = `
     <style>
-      @keyframes na-chase { 0%{transform:translateX(-420px)} 100%{transform:translateX(calc(100vw + 100px))} }
+      @keyframes na-chase { 0%{transform:translateX(-420px)} 23.3%{transform:translateX(calc(100vw + 100px))} 23.3%,100%{transform:translateX(-420px)} }
       @keyframes na-lf { 0%,100%{transform:rotate(30deg)} 50%{transform:rotate(-30deg)} }
       @keyframes na-lb { 0%,100%{transform:rotate(-30deg)} 50%{transform:rotate(30deg)} }
       @keyframes na-tw { 0%,100%{transform:rotate(12deg)} 50%{transform:rotate(-18deg)} }
@@ -2576,7 +2576,7 @@ function buildNeedsAttentionBanner() {
       <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
       <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
     </div>
-    <svg class="na-chase" width="800" height="120" viewBox="0 0 400 60">
+    <svg class="na-chase" width="800" height="120" viewBox="0 0 400 60" style="z-index:1;">
       <!-- TRUCK -->
       <g transform="translate(0,8)">
         <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.6)" rx="2"/>
