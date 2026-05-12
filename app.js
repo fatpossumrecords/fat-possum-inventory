@@ -2918,8 +2918,17 @@ function switchView(viewName) {
       buildNeedsAttentionBanner();
       updateNotifications();
     } else {
-      // Data not ready yet — try again shortly
       setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
+    }
+    // Force browser repaint — fixes CSS rendering bug on view switch
+    const dv = document.getElementById('view-dashboard');
+    if (dv) {
+      dv.style.transform = 'translateZ(0)';
+      requestAnimationFrame(() => {
+        dv.style.transform = '';
+        dv.style.opacity = '0.99';
+        requestAnimationFrame(() => { dv.style.opacity = ''; });
+      });
     }
   }
   // Always show search in header
