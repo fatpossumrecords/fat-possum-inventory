@@ -2355,8 +2355,10 @@ function renderDashboard() {
         <div class="dash-label" style="margin-bottom:8px;">Inbound to FP WH</div>
         ${buildInboundHTML()}
       </div>
-      <div class="dash-card" id="record-of-day-card" style="display:flex;align-items:center;justify-content:center;min-height:120px;padding:8px;">
-        <div style="font-size:11px;color:var(--text-muted)">Loading…</div>
+      <div class="dash-card" id="doomsday-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 8px;">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">STOCKOUT CLOCK</div>
+        <canvas id="doomsday-canvas" width="90" height="90"></canvas>
+        <div id="doomsday-label" style="font-size:9px;color:var(--text-muted);margin-top:6px;text-align:center;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
       </div>
     </div>
 
@@ -2392,41 +2394,100 @@ function renderDashboard() {
 }
 
 // ── RECORD OF THE DAY ───────────────────────────────────────
-async function loadRecordOfDay() {
-  const card = document.getElementById('record-of-day-card');
-  if (!card || !State.merged.length) return;
-  const pool = State.merged.filter(p => p.artist && p.title && isVinyl(p.format||''));
-  if (!pool.length) { card.innerHTML = '<div style="font-size:11px;color:var(--text-muted)">No vinyl titles.</div>'; return; }
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  card.innerHTML = '<div style="font-size:11px;color:var(--text-muted)">Loading…</div>';
-  try {
-    const q = encodeURIComponent(pick.artist + ' ' + pick.title);
-    const url = 'https://itunes.apple.com/search?term=' + q + '&media=music&entity=album&limit=5&callback=itunesCallback';
-    // Use JSONP to avoid CORS
-    window._itunesResolve = null;
-    const promise = new Promise((resolve) => { window._itunesResolve = resolve; });
-    const script = document.createElement('script');
-    script.src = url;
-    window.itunesCallback = (data) => {
-      document.head.removeChild(script);
-      window._itunesResolve(data);
-    };
-    document.head.appendChild(script);
-    const data = await Promise.race([promise, new Promise(r => setTimeout(() => r(null), 5000))]);
-    const result = data?.results?.[0];
-    if (result?.artworkUrl100) {
-      const artUrl = result.artworkUrl100.replace('100x100bb', '300x300bb');
-      card.innerHTML = '<div style="text-align:center;">'
-        + '<img src="' + artUrl + '" alt="' + esc(pick.artist) + '"'
-        + ' style="width:110px;height:110px;object-fit:cover;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.12);"'
-        + ' />'
-        + '<div style="font-size:9px;color:var(--text-muted);margin-top:5px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(pick.artist) + '</div>'
-        + '</div>';
-    } else {
-      card.innerHTML = '<div style="font-size:10px;color:var(--text-muted);text-align:center;">' + esc(pick.artist) + '<br><span style="font-size:9px">' + esc(pick.title) + '</span></div>';
+
+// ── DOOMSDAY CLOCK ──────────────────────────────────────────
+function renderDoomsdayClock() {
+  const canvas = document.getElementById('doomsday-canvas');
+  const label = document.getElementById('doomsday-label');
+  if (!canvas || !State.merged.length) return;
+  const ctx = canvas.getContext('2d');
+  const W = 90, cx = 45, cy = 45, r = 36;
+
+  // Find most critical title — lowest weeks left with velocity > 0
+  let worst = null, worstWeeks = Infinity;
+  const WHS = [
+    { avail:'fp_available', vel:'fp_12ms' },
+    { avail:'us_avail', vel:'us_12ms' },
+    { avail:'ca_avail', vel:'ca_12ms' },
+    { avail:'uk_avail', vel:'uk_last_yr' },
+    { avail:'eu_avail', vel:'eu_this_yr' },
+  ];
+  for (const p of State.merged) {
+    for (const wh of WHS) {
+      const monthly = (p[wh.vel]||0)/12;
+      if (monthly <= 0) continue;
+      const weeks = ((p[wh.avail]||0)/monthly)*4.33;
+      if (weeks < worstWeeks) { worstWeeks = weeks; worst = p; }
     }
-  } catch(e) {
-    card.innerHTML = '<div style="font-size:10px;color:var(--text-muted)">—</div>';
+  }
+
+  // Clock hand angle: 0 weeks = midnight (almost gone), 52 weeks = 6 o'clock (safe)
+  const maxWeeks = 52;
+  const clampedWeeks = Math.max(0, Math.min(worstWeeks, maxWeeks));
+  // Map: 0 weeks → 11:59 (just before midnight), 52 weeks → ~6 o'clock
+  // Angle in radians: midnight = -π/2, going clockwise
+  // 0 weeks = -π/2 + tiny offset, 52 weeks = π/2
+  const pct = clampedWeeks / maxWeeks; // 0=critical, 1=safe
+  const handAngle = -Math.PI/2 + pct * Math.PI * 1.5; // sweeps 270°
+
+  // Color: red < 4wks, orange < 8wks, green otherwise
+  const color = worstWeeks < 4 ? '#c0392b' : worstWeeks < 8 ? '#E8650A' : '#27ae60';
+
+  ctx.clearRect(0, 0, W, W);
+
+  // Clock face
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Tick marks (12 hours)
+  for (let i = 0; i < 12; i++) {
+    const a = (i/12)*Math.PI*2 - Math.PI/2;
+    const inner = i % 3 === 0 ? r-10 : r-6;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a)*(r-2), cy + Math.sin(a)*(r-2));
+    ctx.lineTo(cx + Math.cos(a)*inner, cy + Math.sin(a)*inner);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = i%3===0 ? 1.5 : 0.8;
+    ctx.stroke();
+  }
+
+  // Danger arc (red zone near midnight)
+  ctx.beginPath();
+  ctx.arc(cx, cy, r-4, -Math.PI/2 - 0.3, -Math.PI/2 + 0.3);
+  ctx.strokeStyle = 'rgba(192,57,43,0.5)';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+
+  // Clock hand
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(handAngle)*(r-8), cy + Math.sin(handAngle)*(r-8));
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  // Weeks text inside
+  ctx.fillStyle = color;
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(worstWeeks < Infinity ? worstWeeks.toFixed(1)+'w' : '∞', cx, cy+14);
+
+  if (label && worst) {
+    label.textContent = worst.artist + ' — ' + worst.title;
+    label.style.color = color;
   }
 }
 
@@ -3011,8 +3072,8 @@ function switchView(viewName) {
       renderDashboard();
       buildNeedsAttentionBanner();
       updateNotifications();
-      loadRecordOfDay();
-    } else {
+      renderDoomsdayClock();
+        } else {
       setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
     }
     const dv = document.getElementById('view-dashboard');
