@@ -4,6 +4,8 @@
    ============================================================ */
 
 const CONFIG = {
+  SHEET_ID: '1idqsNpDe1qoBDY9X5m7nPalGvfEusmuO0DpOWtByaOQ',
+  SHEET_NAME: 'Sheet1',
   GOOGLE_CLIENT_ID: '955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com',
   ALLOWED_DOMAIN:   'fatpossum.com',
   PACKIYO_BASE:     'https://fatpossum.app.packiyo.com/api/v1',
@@ -52,6 +54,14 @@ const State = {
   shopifyVendors: {},
   // Manually entered artists by UPC
   manualArtists: {},
+  // Box lots by UPC
+  boxLots: {},
+  // Manual format overrides by UPC
+  manualFormats: {},
+  // Manual label overrides by UPC
+  manualLabels: {},
+  // Google Sheets access token
+  sheetsToken: null,
   // manual column widths: { colId: px }
   colWidths: {},
 };
@@ -261,6 +271,9 @@ async function loadGistData() {
     if (parsed.manualArtists) {
       State.manualArtists = parsed.manualArtists;
     }
+    if (parsed.boxLots)       State.boxLots       = parsed.boxLots;
+    if (parsed.manualFormats) State.manualFormats = parsed.manualFormats;
+    if (parsed.manualLabels)  State.manualLabels  = parsed.manualLabels;
     if (parsed.movements) {
       State.movements = parsed.movements;
     }
@@ -434,6 +447,9 @@ async function saveGistData() {
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
+      boxLots: State.boxLots || {},
+      manualFormats: State.manualFormats || {},
+      manualLabels: State.manualLabels || {},
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
     const sizeKB = body.length / 1024;
@@ -593,6 +609,7 @@ async function loadPackiyo() {
     State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
+    syncToSheets();
     // Cache slim version (only fields we use)
     try {
       const slim = State.packiyoProducts.map(p => ({
@@ -951,6 +968,133 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── BOX LOTS / MANUAL FORMAT / MANUAL LABEL ─────────────────
+window.saveBoxLot = async function(upc, value) {
+  State.boxLots[upc] = value.trim();
+  if (!value.trim()) delete State.boxLots[upc];
+  await saveGistData();
+  syncToSheets();
+};
+
+window.saveManualFormat = async function(upc, value) {
+  if (value) State.manualFormats[upc] = value;
+  else delete State.manualFormats[upc];
+  // Apply to merged product
+  const p = State.merged.find(x => x.upc === upc);
+  if (p && value) p.format = value;
+  await saveGistData();
+  syncToSheets();
+};
+
+window.saveManualLabel = async function(upc, value) {
+  if (value) State.manualLabels[upc] = value;
+  else delete State.manualLabels[upc];
+  const p = State.merged.find(x => x.upc === upc);
+  if (p && value) p.label = value;
+  await saveGistData();
+  syncToSheets();
+};
+
+// ── GOOGLE SHEETS SYNC ────────────────────────────────────────
+window.initSheetsAuth = function() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.GOOGLE_CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    callback: (resp) => {
+      if (resp.access_token) {
+        State.sheetsToken = resp.access_token;
+        console.log('Sheets auth OK');
+        syncToSheets();
+      }
+    },
+  });
+  client.requestAccessToken({ prompt: 'consent' });
+};
+
+async function syncToSheets() {
+  if (!State.sheetsToken) return; // not authed yet — skip silently
+  const packiyoUpcs = new Set(State.packiyoProducts.map(p => {
+    const upc = (p.barcode||'').replace(/\D/g,'').replace(/^0+/,'');
+    return upc;
+  }));
+  const rows = State.merged
+    .filter(p => p.fromPackiyo || packiyoUpcs.has(p.upc))
+    .map(p => {
+      const fmt    = State.manualFormats[p.upc] || p.format || '';
+      const lbl    = State.manualLabels[p.upc]  || p.label  || '';
+      const boxLot = State.boxLots[p.upc] || '';
+      const status = stockStatus(p);
+      return [p.artist, p.title, p.catalog, p.upc, boxLot, fmt, lbl, status, p.fp_available||0];
+    });
+
+  const HEADER = ['Artist','Title','Catalog #','UPC','Box Lot','Format','Label','Status','FP Available'];
+  const sheetRange = CONFIG.SHEET_NAME + '!A1';
+
+  try {
+    // First get existing data to build UPC→row index map
+    const getRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A:D')}`,
+      { headers: { 'Authorization': 'Bearer ' + State.sheetsToken } }
+    );
+    const existing = await getRes.json();
+    const existingRows = existing.values || [];
+    // Build map: UPC (col D = index 3) → row number (1-based)
+    const upcToRow = {};
+    existingRows.forEach((row, i) => {
+      if (i === 0) return; // skip header
+      const upc = (row[3] || '').trim();
+      if (upc) upcToRow[upc] = i + 1; // 1-based sheet row
+    });
+
+    // Separate into updates (existing rows) and appends (new rows)
+    const updates = [];
+    const appends = [];
+    for (const row of rows) {
+      const upc = row[3];
+      if (upcToRow[upc]) {
+        updates.push({ range: `${CONFIG.SHEET_NAME}!A${upcToRow[upc]}`, values: [row] });
+      } else {
+        appends.push(row);
+      }
+    }
+
+    // Write header if sheet is empty
+    if (existingRows.length === 0) {
+      appends.unshift(HEADER);
+    }
+
+    // Batch update existing rows
+    if (updates.length) {
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values:batchUpdate`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valueInputOption: 'RAW', data: updates }),
+        }
+      );
+    }
+
+    // Append new rows
+    if (appends.length) {
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A1')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: appends }),
+        }
+      );
+    }
+
+    console.log('Sheets sync OK — updated:', updates.length, 'appended:', appends.length);
+    setStatus('sheets', 'ok', 'Synced ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}));
+  } catch(e) {
+    console.warn('Sheets sync failed:', e.message);
+    setStatus('sheets', 'error', 'Sync failed');
+  }
+}
+
 window.saveManualArtist = async function(upc, value) {
   if (!value.trim()) return;
   State.manualArtists[upc] = value.trim();
@@ -1122,6 +1266,11 @@ function mergeData() {
   State.merged = Array.from(products.values()).filter(p => (p.title || p.catalog) && !State.suppressedUpcs.has(p.upc));
   // Re-apply Shopify vendor artists
   applyShopifyVendors();
+  // Apply manual format and label overrides
+  for (const p of State.merged) {
+    if (State.manualFormats[p.upc]) p.format = State.manualFormats[p.upc];
+    if (State.manualLabels[p.upc])  p.label  = State.manualLabels[p.upc];
+  }
   // Re-apply FP velocity if already loaded
   if (State.fp_velocity && Object.keys(State.fp_velocity).length > 0) {
     for (const p of State.merged) {
@@ -1153,6 +1302,7 @@ const INV_COLS = [
   { id:'catalog',    label:'Catalog #',   num:false, group:'meta',  always:true  },
   { id:'total',      label:'Total Stock', num:true,  group:'meta',  always:true  },
   { id:'upc',        label:'UPC',         num:false, group:'meta',  always:true  },
+  { id:'box_lot',    label:'Box Lot',     num:false, group:'meta',  always:true  },
   { id:'format',     label:'Format',      num:false, group:'meta',  always:true  },
   { id:'status',     label:'Status',      num:false, group:'meta',  always:true  },
   { id:'open_po',    label:'Open PO',     num:false, group:'meta',  always:true  },
@@ -1310,6 +1460,7 @@ function getVal(p, colId) {
   if (colId === 'total') return (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
   if (colId === 'status') return stockStatus(p);
   if (colId === 'open_po') return '';
+  if (colId === 'box_lot') return State.boxLots[p.upc] || '';
   return p[colId] ?? '';
 }
 
@@ -1390,6 +1541,18 @@ function renderInventory() {
         return `<td class="mob-artist${pinnedClass}" style="${style}" data-upc="${p.upc}" class="artist-cell" ondblclick="editArtistCell(this)">${esc(v)}${isManual ? ' <span style="font-size:9px;color:var(--text-dim)">✎</span>' : ''}</td>`;
       }
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
+      if (col.id === 'label') {
+        const lblVal = State.manualLabels[p.upc] || v;
+        const labels = [...new Set(State.merged.map(x=>x.label).filter(Boolean))].sort();
+        const opts = labels.map(l => `<option value="${esc(l)}"${l===lblVal?' selected':''}>${esc(l)}</option>`).join('');
+        return `<td class="${pinnedClass}" style="${style}">
+          <select data-upc="${p.upc}" onchange="saveManualLabel('${p.upc}',this.value)"
+            style="font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);max-width:110px;">
+            <option value="">—</option>
+            ${opts}
+          </select>
+        </td>`;
+      }
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
       if (col.id === 'open_po') {
         const hasMov = State.movements.some(m => m.upc === p.upc && (m.status === 'confirmed' || m.status === 'shipped'));
@@ -1400,7 +1563,29 @@ function renderInventory() {
       if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
       if (col.id === 'catalog') return `<td class="mob-catalog${pinnedClass}" style="${style}"><code>${esc(v)}</code></td>`;
       if (col.id === 'upc')     return `<td class="${pinnedClass}" style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
-      if (col.id === 'format')  return `<td class="mob-format${pinnedClass}" style="${style}"><span class="pill pill-plan" style="font-size:9px">${esc(v)}</span></td>`;
+      if (col.id === 'box_lot') {
+        const bl = State.boxLots[p.upc] || '';
+        return `<td class="${pinnedClass}" style="${style}">
+          <input type="text" value="${esc(bl)}" placeholder="—"
+            data-upc="${p.upc}"
+            style="width:80px;font-size:11px;padding:2px 5px;background:${bl?'var(--surface)':'var(--surface2)'};border:1px solid ${bl?'var(--border2)':'transparent'};border-radius:2px;color:var(--text);font-family:'DM Mono',monospace;"
+            onchange="saveBoxLot('${p.upc}',this.value)"
+            onfocus="this.style.border='1px solid var(--accent)'"
+            onblur="this.style.border='1px solid '+(this.value?'var(--border2)':'transparent')" />
+        </td>`;
+      }
+      if (col.id === 'format') {
+        const fmtVal = State.manualFormats[p.upc] || v;
+        const formats = [...new Set(State.merged.map(x=>x.format).filter(Boolean))].sort();
+        const opts = formats.map(f => `<option value="${esc(f)}"${f===fmtVal?' selected':''}>${esc(f)}</option>`).join('');
+        return `<td class="mob-format${pinnedClass}" style="${style}">
+          <select data-upc="${p.upc}" onchange="saveManualFormat('${p.upc}',this.value)"
+            style="font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);max-width:100px;">
+            <option value="">—</option>
+            ${opts}
+          </select>
+        </td>`;
+      }
       if (col.id === 'fp_available') {
         const alertWh = alertingWarehouses(p);
         const alertStyle = alertWh.fp === 'critical' ? 'color:var(--orange);font-weight:600;' : alertWh.fp === 'low' ? 'color:var(--yellow);font-weight:600;' : '';
