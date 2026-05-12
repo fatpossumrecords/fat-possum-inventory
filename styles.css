@@ -121,9 +121,9 @@ nav { padding: 8px 0; flex: 1; }
 #main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .view { display: none; }
 .view.hidden { display: none !important; }
-.view.active { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
-/* Sticky headers — stick to table-wrap scroll container */
-.table-wrap thead th { position: sticky; top: 0; z-index: 10; }
+.view.active { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+/* Sticky headers — each scroll container handles its own */
+.table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .table-wrap thead th.is-pinned { z-index: 20 !important; }
 
 .view-header {
@@ -143,7 +143,7 @@ nav { padding: 8px 0; flex: 1; }
 .inv-body-wrap {
   overflow: auto;
   flex: 1;
-  max-height: 100%;
+  min-height: 0;
 }
 .inv-body-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .inv-body-wrap thead th.is-pinned { z-index: 20 !important; }
@@ -319,6 +319,10 @@ select { cursor: pointer; }
   overflow-y: auto; padding: 24px; flex: 1;
   display: flex; flex-direction: column; gap: 24px;
 }
+/* Dashboard, movements, suppressed — need their own scroll */
+#view-dashboard > #dashboard-body,
+#view-movements > .movement-builder,
+#view-suppressed { overflow-y: auto; flex: 1; min-height: 0; }
 .alert-section h3 {
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px;
   color: var(--text-muted); margin-bottom: 10px; padding-bottom: 8px;
@@ -502,8 +506,10 @@ td { overflow: hidden; }
 }
 .tab-btn:hover { color: var(--text); background: var(--border); }
 .tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.mfg-tab { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.mfg-tab { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
 .mfg-tab.active { display: flex; }
+.mfg-tab .table-wrap { flex: 1; overflow: auto; min-height: 0; }
+.mfg-tab .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 
 
 /* ── SUPPRESS BUTTON ── */
