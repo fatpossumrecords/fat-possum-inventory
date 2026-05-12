@@ -2914,7 +2914,16 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
-  if (viewName === 'dashboard') { renderDashboard(); buildNeedsAttentionBanner(); }
+  if (viewName === 'dashboard') {
+    if (State.merged.length) {
+      renderDashboard();
+      buildNeedsAttentionBanner();
+      updateNotifications();
+    } else {
+      // Data not ready yet — try again shortly
+      setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
+    }
+  }
   // Always show search in header
   document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
   if (viewName === 'suppressed') renderSuppressedLog();
