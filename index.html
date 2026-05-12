@@ -100,6 +100,16 @@
           <span>Shopify</span>
           <span id="shopify-status-text" class="status-label">—</span>
         </div>
+        <div class="status-row" style="margin-top:6px;flex-direction:column;align-items:flex-start;gap:3px;">
+          <div style="display:flex;align-items:center;gap:6px;width:100%;">
+            <span class="status-dot" id="gist-dot"></span>
+            <span>Gist Storage</span>
+            <span id="gist-status-text" class="status-label">—</span>
+          </div>
+          <div style="width:100%;height:4px;background:var(--border2);border-radius:2px;overflow:hidden;">
+            <div id="gist-bar" style="height:100%;width:0%;border-radius:2px;background:var(--green);transition:width 0.4s;"></div>
+          </div>
+        </div>
       </div>
       <div id="orchard-last-upload" style="font-size:10px;color:var(--text-dim);margin-top:-4px"></div>
       <button id="upload-csv-btn" class="btn-secondary btn-sm">Upload Orchard CSV</button>
