@@ -2435,7 +2435,10 @@ function buildDoomsdayPool() {
 function renderDoomsdayClock() {
   const el = document.getElementById('doomsday-display');
   if (!el || !State.merged.length) return;
-  if (!_doomsdayPool || !_doomsdayPool.length) {
+  if (!_doomsdayPool) {
+    _doomsdayPool = buildDoomsdayPool();
+    _doomsdayIdx = 0;
+  } else if (_doomsdayIdx >= _doomsdayPool.length) {
     _doomsdayPool = buildDoomsdayPool();
     _doomsdayIdx = 0;
   }
@@ -2461,7 +2464,6 @@ function renderDoomsdayClock() {
 
 window.doomsdayKeepIt = function() {
   _doomsdayIdx++;
-  renderDoomsdayClock();
 };
 window.doomsdayMakeMore = function() {
   switchView('manufacturing');
@@ -2469,7 +2471,6 @@ window.doomsdayMakeMore = function() {
 window.doomsdayKill = function(upc, artist, title) {
   suppressTitle(upc, artist, title);
   _doomsdayPool = _doomsdayPool.filter(item => item.p.upc !== upc);
-  renderDoomsdayClock();
 };
 
 // ── MANUFACTURING QUEUE (Packiyo PO-driven) ──────────────────
@@ -3053,7 +3054,6 @@ function switchView(viewName) {
       renderDashboard();
       buildNeedsAttentionBanner();
       updateNotifications();
-      renderDoomsdayClock();
         } else {
       setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
     }
