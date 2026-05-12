@@ -73,7 +73,19 @@ window.addEventListener('DOMContentLoaded', () => {
     item.addEventListener('click', e => { e.preventDefault(); switchView(item.dataset.view); });
   });
 
-  document.getElementById('search-input').addEventListener('input', renderInventory);
+  document.getElementById('search-input').addEventListener('input', () => {
+    const val = document.getElementById('search-input').value;
+    if (val.length > 0) switchView('inventory');
+    renderInventory();
+  });
+  // Press / anywhere to focus search
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !e.target.matches('input,textarea') && !document.getElementById('title-search-modal')?.style.display?.includes('flex')) {
+      e.preventDefault();
+      document.getElementById('search-input')?.focus();
+      switchView('inventory');
+    }
+  });
   document.getElementById('filter-status').addEventListener('change', renderInventory);
   document.getElementById('filter-config').addEventListener('change', renderInventory);
   document.getElementById('filter-warehouse').addEventListener('change', renderInventory);
@@ -2192,6 +2204,10 @@ function buildMovementsSummaryHTML() {
 function renderDashboard() {
   const el = document.getElementById('dashboard-body');
   if (!el) return;
+  if (!State.merged.length) {
+    el.innerHTML = '<div class="loading-cell">Loading data…</div>';
+    return;
+  }
 
   const totalProducts = State.merged.length;
   const totalStock    = State.merged.reduce((s,p) => s+(p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0), 0);
@@ -2899,6 +2915,8 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
   if (viewName === 'dashboard') { renderDashboard(); buildNeedsAttentionBanner(); }
+  // Always show search in header
+  document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
   if (viewName === 'suppressed') renderSuppressedLog();
 }
 
