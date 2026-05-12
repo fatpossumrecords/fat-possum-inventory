@@ -275,6 +275,8 @@ async function loadGistData() {
       if (btn) btn.title = 'Last updated: ' + new Date(parsed.fpVelocityTs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     }
     console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify,', Object.keys(State.manualArtists||{}).length, 'manual artists');
+    // Update size indicator from raw content length
+    updateGistStatus(content.length / 1024);
   } catch(e) {
     console.warn('Gist load failed:', e.message);
   }
@@ -422,7 +424,9 @@ async function saveGistData() {
       movements: State.movements || [],
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
-    console.log('Saving to Gist, size:', Math.round(body.length/1024)+'KB', 'orchard rows preserved:', payload.orchardData?.length || 0);
+    const sizeKB = body.length / 1024;
+    console.log('Saving to Gist, size:', Math.round(sizeKB)+'KB', 'orchard rows preserved:', payload.orchardData?.length || 0);
+    updateGistStatus(sizeKB);
     const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
       headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
@@ -3157,6 +3161,19 @@ function switchView(viewName) {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
+function updateGistStatus(sizeKB) {
+  const dot = document.getElementById('gist-dot');
+  const txt = document.getElementById('gist-status-text');
+  const bar = document.getElementById('gist-bar');
+  const LIMIT_KB = 1024;
+  const pct = Math.min(100, (sizeKB / LIMIT_KB) * 100);
+  const color = pct > 90 ? 'var(--red)' : pct > 70 ? 'var(--orange)' : 'var(--green)';
+  const state = pct > 90 ? 'error' : pct > 70 ? 'loading' : 'ok';
+  if (dot) dot.className = 'status-dot ' + state;
+  if (txt) txt.textContent = sizeKB.toFixed(0) + 'KB / 1MB';
+  if (bar) { bar.style.width = pct + '%'; bar.style.background = color; }
+}
+
 function setStatus(which, state, label) {
   const dot = document.getElementById(`${which}-dot`);
   const txt = document.getElementById(`${which}-status-text`);
