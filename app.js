@@ -2410,9 +2410,23 @@ function buildDoomsdayPool() {
     { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
     { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
   ];
+  // Build exclusion sets — titles with open POs or confirmed/shipped movements are addressed
+  const addressedUpcs = new Set();
+  for (const m of State.movements) {
+    if (m.status === 'confirmed' || m.status === 'shipped') addressedUpcs.add(m.upc);
+  }
+  for (const [sku, po] of Object.entries(State.packiyoPOs)) {
+    if (po.qty > 0) {
+      // Find the product UPC for this SKU
+      const prod = State.merged.find(p => p.packiyo_sku === sku || p.catalog === sku);
+      if (prod) addressedUpcs.add(prod.upc);
+    }
+  }
+
   const seen = new Set();
   const items = [];
   for (const p of State.merged) {
+    if (addressedUpcs.has(p.upc)) continue;
     let worstWeeks = Infinity, worstLabel = '';
     for (const wh of WHS) {
       const monthly = (p[wh.vel]||0)/12;
