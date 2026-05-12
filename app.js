@@ -2536,12 +2536,12 @@ function buildNeedsAttentionBanner() {
   el.style.overflow = 'hidden';
   el.innerHTML = `
     <style>
-      @keyframes na-chase { 0%{transform:translateX(-320px)} 100%{transform:translateX(calc(100% + 320px))} }
+      @keyframes na-chase { 0%{transform:translateX(-420px)} 100%{transform:translateX(calc(100vw + 100px))} }
       @keyframes na-lf { 0%,100%{transform:rotate(30deg)} 50%{transform:rotate(-30deg)} }
       @keyframes na-lb { 0%,100%{transform:rotate(-30deg)} 50%{transform:rotate(30deg)} }
       @keyframes na-tw { 0%,100%{transform:rotate(12deg)} 50%{transform:rotate(-18deg)} }
       @keyframes na-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-      .na-chase { animation: na-chase 6s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
+      .na-chase { animation: na-chase 7s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
       @media (max-width: 768px) { .na-chase { display: none; } }
     </style>
     <div style="flex:1;min-width:0;position:relative;z-index:2;padding:12px 0;">
@@ -2557,15 +2557,15 @@ function buildNeedsAttentionBanner() {
       <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
       <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
     </div>
-    <svg class="na-chase" width="400" height="60" viewBox="0 0 400 60" style="opacity:0.45">
+    <svg class="na-chase" width="400" height="60" viewBox="0 0 400 60">
       <!-- TRUCK -->
       <g transform="translate(0,8)">
-        <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.18)" rx="2"/>
+        <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.6)" rx="2"/>
         <line x1="45" y1="12" x2="45" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
         <line x1="70" y1="12" x2="70" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
         <line x1="95" y1="12" x2="95" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
         <rect x="128" y="34" width="12" height="4" fill="rgba(255,255,255,0.2)" rx="1"/>
-        <rect x="138" y="15" width="40" height="24" fill="rgba(255,255,255,0.22)" rx="2"/>
+        <rect x="138" y="15" width="40" height="24" fill="rgba(255,255,255,0.45)" rx="2"/>
         <rect x="152" y="17" width="18" height="11" fill="rgba(255,255,255,0.35)" rx="1"/>
         <rect x="138" y="28" width="40" height="4" fill="rgba(255,255,255,0.15)"/>
         <rect x="170" y="5" width="3" height="11" fill="rgba(255,255,255,0.3)" rx="1"/>
@@ -2579,23 +2579,23 @@ function buildNeedsAttentionBanner() {
       </g>
       <!-- POSSUM 260px ahead -->
       <g transform="translate(260,32)">
-        <ellipse cx="0" cy="2" rx="30" ry="18" fill="rgba(200,200,200,0.85)"/>
-        <ellipse cx="2" cy="8" rx="18" ry="10" fill="rgba(235,235,235,0.9)"/>
-        <circle cx="30" cy="-6" r="15" fill="rgba(200,200,200,0.9)"/>
-        <ellipse cx="33" cy="-4" rx="11" ry="12" fill="rgba(232,232,232,0.95)"/>
-        <path d="M38,-8 Q52,-6 60,-4 Q52,-2 38,0 Z" fill="rgba(232,190,190,0.95)"/>
+        <ellipse cx="0" cy="2" rx="30" ry="18" fill="#cccccc"/>
+        <ellipse cx="2" cy="8" rx="18" ry="10" fill="#eeeeee"/>
+        <circle cx="30" cy="-6" r="15" fill="#cccccc"/>
+        <ellipse cx="33" cy="-4" rx="11" ry="12" fill="#e8e8e8"/>
+        <path d="M38,-8 Q52,-6 60,-4 Q52,-2 38,0 Z" fill="#e8c0c0"/>
         <ellipse cx="60" cy="-4" rx="3" ry="2" fill="#d66"/>
         <circle cx="43" cy="-13" r="3.5" fill="#111"/>
         <circle cx="44" cy="-14" r="1.2" fill="white"/>
-        <ellipse cx="22" cy="-19" rx="6" ry="7" fill="rgba(200,200,200,0.9)"/>
-        <ellipse cx="22" cy="-19" rx="4" ry="5" fill="rgba(232,150,150,0.8)"/>
+        <ellipse cx="22" cy="-19" rx="6" ry="7" fill="#cccccc"/>
+        <ellipse cx="22" cy="-19" rx="4" ry="5" fill="#e89696"/>
         <g style="transform-origin:-28px 6px;animation:na-tw 0.3s ease-in-out infinite">
-          <path d="M-28,6 Q-50,2 -56,-6 Q-60,-14 -52,-20 Q-46,-24 -44,-18" fill="none" stroke="rgba(232,170,170,0.8)" stroke-width="5" stroke-linecap="round"/>
+          <path d="M-28,6 Q-50,2 -56,-6 Q-60,-14 -52,-20 Q-46,-24 -44,-18" fill="none" stroke="#e8a0a0" stroke-width="5" stroke-linecap="round"/>
         </g>
-        <g style="transform-origin:18px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M18,14 L22,26" fill="none" stroke="rgba(170,170,170,0.9)" stroke-width="4" stroke-linecap="round"/></g>
-        <g style="transform-origin:8px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M8,14 L4,26" fill="none" stroke="rgba(170,170,170,0.9)" stroke-width="4" stroke-linecap="round"/></g>
-        <g style="transform-origin:-10px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M-10,14 L-8,26" fill="none" stroke="rgba(170,170,170,0.9)" stroke-width="4" stroke-linecap="round"/></g>
-        <g style="transform-origin:-20px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M-20,14 L-24,26" fill="none" stroke="rgba(170,170,170,0.9)" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:18px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M18,14 L22,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:8px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M8,14 L4,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:-10px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M-10,14 L-8,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:-20px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M-20,14 L-24,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
       </g>
     </svg>
   `;
