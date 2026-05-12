@@ -1945,6 +1945,9 @@ function renderMovementsTable() {
 // ── MOVEMENT STATUS ──────────────────────────────────────────
 // Event delegation for movement buttons
 document.addEventListener('click', e => {
+  if (e.target.classList.contains('doom-kill')) {
+    doomsdayKill(e.target.dataset.upc, e.target.dataset.artist, e.target.dataset.title);
+  }
   if (e.target.classList.contains('grp-export')) {
     exportGroup(decodeURIComponent(e.target.dataset.sid));
   }
@@ -2355,10 +2358,9 @@ function renderDashboard() {
         <div class="dash-label" style="margin-bottom:8px;">Inbound to FP WH</div>
         ${buildInboundHTML()}
       </div>
-      <div class="dash-card" id="doomsday-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 8px;">
-        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">STOCKOUT CLOCK</div>
-        <canvas id="doomsday-canvas" width="90" height="90"></canvas>
-        <div id="doomsday-label" style="font-size:9px;color:var(--text-muted);margin-top:6px;text-align:center;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <div class="dash-card" id="doomsday-card" style="padding:12px 14px;min-width:0;">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">STOCKOUT CLOCK</div>
+        <div id="doomsday-display"></div>
       </div>
     </div>
 
@@ -2396,100 +2398,79 @@ function renderDashboard() {
 // ── RECORD OF THE DAY ───────────────────────────────────────
 
 // ── DOOMSDAY CLOCK ──────────────────────────────────────────
-function renderDoomsdayClock() {
-  const canvas = document.getElementById('doomsday-canvas');
-  const label = document.getElementById('doomsday-label');
-  if (!canvas || !State.merged.length) return;
-  const ctx = canvas.getContext('2d');
-  const W = 90, cx = 45, cy = 45, r = 36;
+let _doomsdayPool = null;
+let _doomsdayIdx = 0;
 
-  // Find most critical title — lowest weeks left with velocity > 0
-  let worst = null, worstWeeks = Infinity;
+function buildDoomsdayPool() {
   const WHS = [
-    { avail:'fp_available', vel:'fp_12ms' },
-    { avail:'us_avail', vel:'us_12ms' },
-    { avail:'ca_avail', vel:'ca_12ms' },
-    { avail:'uk_avail', vel:'uk_last_yr' },
-    { avail:'eu_avail', vel:'eu_this_yr' },
+    { key:'fp', avail:'fp_available', vel:'fp_12ms',    label:'FP WH' },
+    { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
+    { key:'ca', avail:'ca_avail',     vel:'ca_12ms',    label:'Orchard CA' },
+    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
+    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr', label:'Orchard EU' },
   ];
+  const seen = new Set();
+  const items = [];
   for (const p of State.merged) {
+    let worstWeeks = Infinity, worstLabel = '';
     for (const wh of WHS) {
       const monthly = (p[wh.vel]||0)/12;
       if (monthly <= 0) continue;
       const weeks = ((p[wh.avail]||0)/monthly)*4.33;
-      if (weeks < worstWeeks) { worstWeeks = weeks; worst = p; }
+      if (weeks < worstWeeks) { worstWeeks = weeks; worstLabel = wh.label; }
+    }
+    if (worstWeeks < CONFIG.REORDER_WEEKS && !seen.has(p.upc)) {
+      seen.add(p.upc);
+      items.push({ p, weeks: worstWeeks, whLabel: worstLabel });
     }
   }
-
-  // Clock hand angle: 0 weeks = midnight (almost gone), 52 weeks = 6 o'clock (safe)
-  const maxWeeks = 52;
-  const clampedWeeks = Math.max(0, Math.min(worstWeeks, maxWeeks));
-  // Map: 0 weeks → 11:59 (just before midnight), 52 weeks → ~6 o'clock
-  // Angle in radians: midnight = -π/2, going clockwise
-  // 0 weeks = -π/2 + tiny offset, 52 weeks = π/2
-  const pct = clampedWeeks / maxWeeks; // 0=critical, 1=safe
-  const handAngle = -Math.PI/2 + pct * Math.PI * 1.5; // sweeps 270°
-
-  // Color: red < 4wks, orange < 8wks, green otherwise
-  const color = worstWeeks < 4 ? '#c0392b' : worstWeeks < 8 ? '#E8650A' : '#27ae60';
-
-  ctx.clearRect(0, 0, W, W);
-
-  // Clock face
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI*2);
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  // Tick marks (12 hours)
-  for (let i = 0; i < 12; i++) {
-    const a = (i/12)*Math.PI*2 - Math.PI/2;
-    const inner = i % 3 === 0 ? r-10 : r-6;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a)*(r-2), cy + Math.sin(a)*(r-2));
-    ctx.lineTo(cx + Math.cos(a)*inner, cy + Math.sin(a)*inner);
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = i%3===0 ? 1.5 : 0.8;
-    ctx.stroke();
+  // Shuffle
+  for (let i = items.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [items[i],items[j]] = [items[j],items[i]];
   }
-
-  // Danger arc (red zone near midnight)
-  ctx.beginPath();
-  ctx.arc(cx, cy, r-4, -Math.PI/2 - 0.3, -Math.PI/2 + 0.3);
-  ctx.strokeStyle = 'rgba(192,57,43,0.5)';
-  ctx.lineWidth = 6;
-  ctx.stroke();
-
-  // Clock hand
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(cx + Math.cos(handAngle)*(r-8), cy + Math.sin(handAngle)*(r-8));
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Center dot
-  ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, Math.PI*2);
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  // Weeks text inside
-  ctx.fillStyle = color;
-  ctx.font = 'bold 13px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(worstWeeks < Infinity ? worstWeeks.toFixed(1)+'w' : '∞', cx, cy+14);
-
-  if (label && worst) {
-    label.textContent = worst.artist + ' — ' + worst.title;
-    label.style.color = color;
-  }
+  return items;
 }
+
+function renderDoomsdayClock() {
+  const el = document.getElementById('doomsday-display');
+  if (!el || !State.merged.length) return;
+  if (!_doomsdayPool || !_doomsdayPool.length) {
+    _doomsdayPool = buildDoomsdayPool();
+    _doomsdayIdx = 0;
+  }
+  if (!_doomsdayPool.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--green)">All titles healthy ✓</div>';
+    return;
+  }
+  const { p, weeks, whLabel } = _doomsdayPool[_doomsdayIdx % _doomsdayPool.length];
+  const color = weeks < 2 ? '#c0392b' : weeks < 4 ? '#E8650A' : weeks < 8 ? '#c45f00' : 'var(--text-muted)';
+  el.innerHTML =
+    '<div style="font-family:monospace;font-size:28px;font-weight:700;color:' + color + ';letter-spacing:2px;margin-bottom:4px;">'
+    + (weeks < 0.1 ? 'OUT' : weeks.toFixed(1) + '<span style="font-size:14px;font-weight:400"> wks</span>')
+    + '</div>'
+    + '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">' + esc(p.artist) + '</div>'
+    + '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">' + esc(p.title) + '</div>'
+    + '<div style="font-size:10px;color:' + color + ';margin-bottom:10px;">' + esc(p.catalog) + ' · ' + whLabel + '</div>'
+    + '<div style="display:flex;gap:6px;">'
+    + '<button onclick="doomsdayKeepIt()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;cursor:pointer;color:var(--text);">Keep It</button>'
+    + '<button onclick="doomsdayMakeMore()" style="flex:1;background:var(--accent);border:none;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;cursor:pointer;color:white;">Make More</button>'
+    + '<button class="doom-kill" data-upc="' + p.upc + '" data-artist="' + esc(p.artist) + '" data-title="' + esc(p.title) + '" style="flex:1;background:#c0392b;border:none;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;cursor:pointer;color:white;">Kill</button>'
+    + '</div>';
+}
+
+window.doomsdayKeepIt = function() {
+  _doomsdayIdx++;
+  renderDoomsdayClock();
+};
+window.doomsdayMakeMore = function() {
+  switchView('manufacturing');
+};
+window.doomsdayKill = function(upc, artist, title) {
+  suppressTitle(upc, artist, title);
+  _doomsdayPool = _doomsdayPool.filter(item => item.p.upc !== upc);
+  renderDoomsdayClock();
+};
 
 // ── MANUFACTURING QUEUE (Packiyo PO-driven) ──────────────────
 window.switchMfgTab = function(tab) {
