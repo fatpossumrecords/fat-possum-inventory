@@ -254,7 +254,11 @@ async function loadGistData() {
       State.movements = parsed.movements;
     }
     if (parsed.orchardData && parsed.orchardData.length) {
-      State.orchardData = parsed.orchardData;
+      // Expand short-key format if needed (detect by checking for 'u' key vs 'Display UPC')
+      const sample = parsed.orchardData[0];
+      State.orchardData = sample && sample.u !== undefined
+        ? parsed.orchardData.map(expandOrchardRow)
+        : parsed.orchardData;
       State.orchardLoaded = true;
       console.log('Orchard data loaded from Gist:', parsed.orchardData.length, 'products');
     }
@@ -277,19 +281,68 @@ async function loadGistData() {
 }
 
 function slimOrchardData(rows) {
-  // Only keep the fields we actually use in mergeData — cuts size by ~70%
-  const KEEP = [
-    'Display UPC', 'Product Code', 'Release Name', 'Artist Name', 'Label Name', 'Configuration',
-    'US Available', 'US MTDS#', 'US 3MS#', 'US 12MS#',
-    'CA Available', 'CA MTDS#', 'CA 3MS#', 'CA 12MS#',
-    'DPW Stock Available', 'DPW Open Orders', 'DPW Last Month Ships', 'DPW This Year Ships', 'DPW Last Year Ships',
-    'EU Stock OKL', 'EU This Month', 'EU Last Month', 'EU This Year',
-  ];
+  // Remap to short keys and drop zeros to minimize Gist storage
   return rows.map(row => {
-    const slim = {};
-    for (const k of KEEP) { if (row[k] !== undefined) slim[k] = row[k]; }
-    return slim;
-  });
+    const s = {};
+    const n = v => { const x = parseFloat(String(v||'').replace(/[^0-9.-]/g,'')); return isNaN(x) ? 0 : x; };
+    const str = v => (v||'').trim();
+    // Identity fields — always keep
+    if (str(row['Display UPC']))   s.u  = str(row['Display UPC']);
+    if (str(row['Product Code']))  s.pc = str(row['Product Code']);
+    if (str(row['Release Name']))  s.rn = str(row['Release Name']);
+    if (str(row['Artist Name']))   s.an = str(row['Artist Name']);
+    if (str(row['Label Name']))    s.ln = str(row['Label Name']);
+    if (str(row['Configuration'])) s.cf = str(row['Configuration']);
+    // Numeric fields — only save if non-zero
+    const num = (k, sk) => { const v = n(row[k]); if (v) s[sk] = v; };
+    num('US Available',          'ua');
+    num('US MTDS#',              'um');
+    num('US 3MS#',               'u3');
+    num('US 12MS#',              'u12');
+    num('CA Available',          'ca');
+    num('CA MTDS#',              'cm');
+    num('CA 3MS#',               'c3');
+    num('CA 12MS#',              'c12');
+    num('DPW Stock Available',   'da');
+    num('DPW Open Orders',       'do');
+    num('DPW Last Month Ships',  'dl');
+    num('DPW This Year Ships',   'dy');
+    num('DPW Last Year Ships',   'dly');
+    num('EU Stock OKL',          'ea');
+    num('EU This Month',         'em');
+    num('EU Last Month',         'el');
+    num('EU This Year',          'ey');
+    return s;
+  }).filter(s => s.u); // must have UPC
+}
+
+// Expand slim orchard row back to full field names for mergeData
+function expandOrchardRow(s) {
+  return {
+    'Display UPC':           s.u   || '',
+    'Product Code':          s.pc  || '',
+    'Release Name':          s.rn  || '',
+    'Artist Name':           s.an  || '',
+    'Label Name':            s.ln  || '',
+    'Configuration':         s.cf  || '',
+    'US Available':          s.ua  || 0,
+    'US MTDS#':              s.um  || 0,
+    'US 3MS#':               s.u3  || 0,
+    'US 12MS#':              s.u12 || 0,
+    'CA Available':          s.ca  || 0,
+    'CA MTDS#':              s.cm  || 0,
+    'CA 3MS#':               s.c3  || 0,
+    'CA 12MS#':              s.c12 || 0,
+    'DPW Stock Available':   s.da  || 0,
+    'DPW Open Orders':       s.do  || 0,
+    'DPW Last Month Ships':  s.dl  || 0,
+    'DPW This Year Ships':   s.dy  || 0,
+    'DPW Last Year Ships':   s.dly || 0,
+    'EU Stock OKL':          s.ea  || 0,
+    'EU This Month':         s.em  || 0,
+    'EU Last Month':         s.el  || 0,
+    'EU This Year':          s.ey  || 0,
+  };
 }
 
 async function saveFPVelocityToGist() {
