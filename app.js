@@ -2395,29 +2395,38 @@ function renderDashboard() {
 async function loadRecordOfDay() {
   const card = document.getElementById('record-of-day-card');
   if (!card || !State.merged.length) return;
-  // Pick a random title with an artist from your catalog
   const pool = State.merged.filter(p => p.artist && p.title && isVinyl(p.format||''));
-  if (!pool.length) { card.innerHTML = '<div style="font-size:11px;color:var(--text-muted)">No vinyl titles found.</div>'; return; }
+  if (!pool.length) { card.innerHTML = '<div style="font-size:11px;color:var(--text-muted)">No vinyl titles.</div>'; return; }
   const pick = pool[Math.floor(Math.random() * pool.length)];
+  card.innerHTML = '<div style="font-size:11px;color:var(--text-muted)">Loading…</div>';
   try {
     const q = encodeURIComponent(pick.artist + ' ' + pick.title);
-    const res = await fetch('https://itunes.apple.com/search?term=' + q + '&media=music&entity=album&limit=5');
-    const data = await res.json();
-    const result = data.results?.[0];
+    const url = 'https://itunes.apple.com/search?term=' + q + '&media=music&entity=album&limit=5&callback=itunesCallback';
+    // Use JSONP to avoid CORS
+    window._itunesResolve = null;
+    const promise = new Promise((resolve) => { window._itunesResolve = resolve; });
+    const script = document.createElement('script');
+    script.src = url;
+    window.itunesCallback = (data) => {
+      document.head.removeChild(script);
+      window._itunesResolve(data);
+    };
+    document.head.appendChild(script);
+    const data = await Promise.race([promise, new Promise(r => setTimeout(() => r(null), 5000))]);
+    const result = data?.results?.[0];
     if (result?.artworkUrl100) {
-      const artUrl = result.artworkUrl100.replace('100x100', '300x300');
-      card.innerHTML = `
-        <div style="text-align:center;">
-          <img src="${artUrl}" alt="${esc(pick.artist)} — ${esc(pick.title)}"
-            style="width:110px;height:110px;object-fit:cover;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);"
-            onerror="this.parentElement.innerHTML='<div style=\'font-size:10px;color:var(--text-muted)\'>No cover found</div>'" />
-          <div style="font-size:9px;color:var(--text-muted);margin-top:6px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pick.artist)}</div>
-        </div>`;
+      const artUrl = result.artworkUrl100.replace('100x100bb', '300x300bb');
+      card.innerHTML = '<div style="text-align:center;">'
+        + '<img src="' + artUrl + '" alt="' + esc(pick.artist) + '"'
+        + ' style="width:110px;height:110px;object-fit:cover;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.12);"'
+        + ' />'
+        + '<div style="font-size:9px;color:var(--text-muted);margin-top:5px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(pick.artist) + '</div>'
+        + '</div>';
     } else {
-      card.innerHTML = '<div style="font-size:10px;color:var(--text-muted);text-align:center;">' + esc(pick.artist) + '<br>' + esc(pick.title) + '</div>';
+      card.innerHTML = '<div style="font-size:10px;color:var(--text-muted);text-align:center;">' + esc(pick.artist) + '<br><span style="font-size:9px">' + esc(pick.title) + '</span></div>';
     }
   } catch(e) {
-    card.innerHTML = '<div style="font-size:10px;color:var(--text-muted)">No cover found</div>';
+    card.innerHTML = '<div style="font-size:10px;color:var(--text-muted)">—</div>';
   }
 }
 
