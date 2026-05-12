@@ -2585,6 +2585,158 @@ window.needsAttentionAction = function(upc, whKey) {
   setTimeout(trySelect, 150);
 };
 
+// ── TITLE SEARCH & REORDER CALCULATOR ───────────────────────
+window.openTitleSearch = function() {
+  const modal = document.getElementById('title-search-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('title-search-input')?.focus(), 50);
+};
+
+window.closeTitleSearch = function() {
+  const modal = document.getElementById('title-search-modal');
+  if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+};
+
+// Close on backdrop click
+document.addEventListener('click', e => {
+  const modal = document.getElementById('title-search-modal');
+  if (modal && e.target === modal) closeTitleSearch();
+});
+
+// Keyboard shortcut /
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !e.target.matches('input,textarea')) {
+    e.preventDefault();
+    openTitleSearch();
+  }
+  if (e.key === 'Escape') closeTitleSearch();
+});
+
+function renderTitleSearchResults(query) {
+  const el = document.getElementById('title-search-results');
+  if (!el) return;
+  if (!query || query.length < 2) {
+    el.innerHTML = '<p style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center">Type to search titles…</p>';
+    return;
+  }
+  const q = query.toLowerCase();
+  const matches = State.merged.filter(p =>
+    `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  if (!matches.length) {
+    el.innerHTML = '<p style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center">No results found.</p>';
+    return;
+  }
+
+  el.innerHTML = matches.map(p => buildTitleCard(p)).join('');
+}
+
+function buildTitleCard(p) {
+  const poData = State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog];
+  const poQty = poData?.qty || 0;
+  const confirmedMov = State.movements.filter(m => m.upc === p.upc && (m.status === 'confirmed' || m.status === 'shipped'));
+
+  // Warehouse stock rows
+  const warehouses = [
+    { label:'Fat Possum WH', avail: p.fp_available||0, inbound: p.fp_inbound||0, vel12: p.fp_12ms||0 },
+    { label:'Orchard US',    avail: p.us_avail||0,     inbound: 0, vel12: p.us_12ms||0 },
+    { label:'Orchard CA',    avail: p.ca_avail||0,     inbound: 0, vel12: p.ca_12ms||0 },
+    { label:'Orchard UK',    avail: p.uk_avail||0,     inbound: 0, vel12: p.uk_last_yr||0 },
+    { label:'Orchard EU',    avail: p.eu_avail||0,     inbound: 0, vel12: p.eu_this_yr||0 },
+  ];
+
+  const whRows = warehouses.map(wh => {
+    const monthly = wh.vel12 / 12;
+    const weeks = monthly > 0 ? ((wh.avail / monthly) * 4.33).toFixed(1) : '—';
+    const weeksNum = parseFloat(weeks);
+    const color = !monthly ? 'var(--text-dim)' : weeksNum < 4 ? 'var(--red)' : weeksNum < 8 ? '#c45f00' : 'var(--green)';
+    return `<tr>
+      <td style="padding:4px 8px;font-size:11px;color:var(--text-muted)">${wh.label}</td>
+      <td style="padding:4px 8px;font-size:11px;font-family:'DM Mono',monospace;text-align:right">${wh.avail.toLocaleString()}</td>
+      <td style="padding:4px 8px;font-size:11px;font-family:'DM Mono',monospace;text-align:right;color:var(--text-muted)">${monthly > 0 ? monthly.toFixed(1) : '—'}</td>
+      <td style="padding:4px 8px;font-size:11px;font-family:'DM Mono',monospace;text-align:right;color:${color};font-weight:${weeksNum < 8 ? '600' : '400'}">${weeks}</td>
+    </tr>`;
+  }).join('');
+
+  // Reorder calculator
+  const globalAnnual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0)+(p.fp_12ms||0);
+  const globalMonthly = globalAnnual / 12;
+  const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0)+(p.fp_inbound||0)+poQty;
+  const isLP = isVinyl(p.format||'');
+  const leadTime = isLP ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
+  const monthsLeft = globalMonthly > 0 ? totalStock / globalMonthly : null;
+
+  let reorderHTML = '';
+  if (globalMonthly > 0) {
+    // Suggested qty: 12 months of global demand minus current stock
+    const suggested = Math.max(0, Math.ceil(globalMonthly * 12 - totalStock));
+    const poDeadlineDays = monthsLeft !== null ? Math.round((monthsLeft - leadTime) * 30) : null;
+    const deadlineStr = poDeadlineDays !== null
+      ? poDeadlineDays < 0 ? '<span style="color:var(--red);font-weight:600">PAST DUE</span>'
+      : poDeadlineDays < 30 ? `<span style="color:var(--red);font-weight:600">in ${poDeadlineDays}d</span>`
+      : `in ${poDeadlineDays}d`
+      : '—';
+
+    reorderHTML = `
+      <div style="margin:12px 16px;padding:12px;background:var(--surface2);border-radius:4px;border-left:3px solid var(--accent);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Reorder Calculator</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">GLOBAL VELOCITY</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${globalMonthly.toFixed(1)}<span style="font-size:11px;font-weight:400">/mo</span></div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">MONTHS OF STOCK</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${monthsLeft !== null ? monthsLeft.toFixed(1) : '∞'}</div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">PO DEADLINE</div>
+            <div style="font-size:14px;font-weight:600;">${deadlineStr}</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span style="font-size:11px;color:var(--text-muted)">Suggested reorder qty </span>
+            <span style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent)">${suggested.toLocaleString()}</span>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:4px;">units (12mo demand − current stock)</span>
+          </div>
+          <span style="font-size:10px;color:var(--text-muted)">${isLP ? 'LP · 4mo lead' : 'CD · 1.5mo lead'}</span>
+        </div>
+        ${poQty > 0 ? `<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:600;">📦 ${poQty.toLocaleString()} units already on order (PO)</div>` : ''}
+        ${confirmedMov.length > 0 ? `<div style="margin-top:4px;font-size:11px;color:#3b7de8;font-weight:600;">✓ ${confirmedMov.length} transfer movement${confirmedMov.length>1?'s':''} confirmed</div>` : ''}
+      </div>`;
+  }
+
+  return `<div style="border-bottom:1px solid var(--border);padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(p.catalog)} · ${esc(p.format)} · ${esc(p.label)}</div>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">${esc(p.upc)}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="padding:4px 8px;font-size:9px;text-align:left;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Warehouse</th>
+        <th style="padding:4px 8px;font-size:9px;text-align:right;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Available</th>
+        <th style="padding:4px 8px;font-size:9px;text-align:right;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Mo. Vel</th>
+        <th style="padding:4px 8px;font-size:9px;text-align:right;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Wks Left</th>
+      </tr></thead>
+      <tbody>${whRows}</tbody>
+    </table>
+    ${reorderHTML}
+  </div>`;
+}
+
+// Wire up search input
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('title-search-input');
+  if (inp) inp.addEventListener('input', debounce(() => renderTitleSearchResults(inp.value), 200));
+});
+
 // ── NOTIFICATIONS ────────────────────────────────────────────
 function updateNotifications() {
   if (!State.merged.length) return;
@@ -2636,6 +2788,21 @@ function updateNotifications() {
     if (age < sevenDays) newMfg.push({ p, months, monthly, age });
   }
 
+  // On first ever run, baseline everything as seen so we don't spam old alerts
+  const isFirstRun = !State._notificationsInitialized;
+  if (isFirstRun) {
+    State._notificationsInitialized = true;
+    // Clear newAlerts and newMfg — nothing is "new" on first run
+    State._newAlerts = [];
+    State._newMfg = [];
+    State.seenAlerts = seenAlerts;
+    State.seenMfg = seenMfg;
+    // Update badges to 0
+    document.getElementById('notif-alerts-badge')?.classList.add('hidden');
+    document.getElementById('notif-mfg-badge')?.classList.add('hidden');
+    document.getElementById('vinyl-icon')?.classList.remove('vinyl-spinning');
+    return;
+  }
   State.seenAlerts = seenAlerts;
   State.seenMfg = seenMfg;
 
