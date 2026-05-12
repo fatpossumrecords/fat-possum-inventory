@@ -2555,7 +2555,11 @@ function buildNeedsAttentionBanner() {
   el.style.overflow = 'hidden';
   el.innerHTML = `
     <style>
-      @keyframes na-chase { 0%{transform:translateX(-420px)} 23.3%{transform:translateX(calc(100vw + 100px))} 23.3%,100%{transform:translateX(-420px)} }
+      @keyframes na-chase {
+        0%   { transform: translateX(-520px); }
+        23%  { transform: translateX(calc(100vw + 200px)); }
+        23.01%, 100% { transform: translateX(-520px); }
+      }
       @keyframes na-lf { 0%,100%{transform:rotate(30deg)} 50%{transform:rotate(-30deg)} }
       @keyframes na-lb { 0%,100%{transform:rotate(-30deg)} 50%{transform:rotate(30deg)} }
       @keyframes na-tw { 0%,100%{transform:rotate(12deg)} 50%{transform:rotate(-18deg)} }
@@ -2563,47 +2567,36 @@ function buildNeedsAttentionBanner() {
       .na-chase { animation: na-chase 30s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
       @media (max-width: 768px) { .na-chase { display: none; } }
     </style>
-    <div style="flex:1;min-width:0;position:relative;z-index:2;padding:12px 0;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:1px;opacity:0.8;margin-bottom:2px;">NEEDS ATTENTION</div>
-      <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${esc(p.artist)} — ${esc(p.title)}
-      </div>
-      <div style="font-size:11px;opacity:0.85;margin-top:2px;">
-        ${status} at ${wh.label} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo velocity · ${need.toLocaleString()} units needed
-      </div>
-    </div>
-    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-left:12px;position:relative;z-index:2;">
-      <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
-      <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
-    </div>
-    <svg class="na-chase" width="800" height="120" viewBox="0 0 400 60" style="z-index:1;">
-      <!-- TRUCK -->
-      <g transform="translate(0,8)">
-        <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.6)" rx="2"/>
-        <line x1="45" y1="12" x2="45" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
-        <line x1="70" y1="12" x2="70" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
-        <line x1="95" y1="12" x2="95" y2="40" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
-        <rect x="128" y="34" width="12" height="4" fill="rgba(255,255,255,0.2)" rx="1"/>
+    <svg class="na-chase" width="520" height="100" viewBox="0 0 520 100">
+      <!-- TRUCK at 2x scale via transform -->
+      <g transform="scale(1.6) translate(0,6)">
+        <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.35)" rx="2"/>
+        <line x1="45" y1="12" x2="45" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+        <line x1="70" y1="12" x2="70" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+        <line x1="95" y1="12" x2="95" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+        <rect x="128" y="34" width="12" height="4" fill="rgba(255,255,255,0.25)" rx="1"/>
         <rect x="138" y="15" width="40" height="24" fill="rgba(255,255,255,0.45)" rx="2"/>
-        <rect x="152" y="17" width="18" height="11" fill="rgba(255,255,255,0.35)" rx="1"/>
-        <rect x="138" y="28" width="40" height="4" fill="rgba(255,255,255,0.15)"/>
-        <rect x="170" y="5" width="3" height="11" fill="rgba(255,255,255,0.3)" rx="1"/>
-        <rect x="181" y="25" width="4" height="4" fill="rgba(255,255,255,0.7)" rx="1"/>
-        <g style="transform-origin:40px 44px;animation:na-spin 0.5s linear infinite"><circle cx="40" cy="44" r="7" fill="rgba(0,0,0,0.45)"/><circle cx="40" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="40" y1="37" x2="40" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="33" y1="44" x2="47" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
-        <g style="transform-origin:56px 44px;animation:na-spin 0.5s linear infinite"><circle cx="56" cy="44" r="7" fill="rgba(0,0,0,0.45)"/><circle cx="56" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="56" y1="37" x2="56" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="49" y1="44" x2="63" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
-        <g style="transform-origin:90px 44px;animation:na-spin 0.5s linear infinite"><circle cx="90" cy="44" r="7" fill="rgba(0,0,0,0.45)"/><circle cx="90" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="90" y1="37" x2="90" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="83" y1="44" x2="97" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
-        <g style="transform-origin:143px 44px;animation:na-spin 0.5s linear infinite"><circle cx="143" cy="44" r="7" fill="rgba(0,0,0,0.45)"/><circle cx="143" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="143" y1="37" x2="143" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="136" y1="44" x2="150" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
-        <g style="transform-origin:157px 44px;animation:na-spin 0.5s linear infinite"><circle cx="157" cy="44" r="7" fill="rgba(0,0,0,0.45)"/><circle cx="157" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="157" y1="37" x2="157" y2="51" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="150" y1="44" x2="164" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
-        <g style="transform-origin:176px 44px;animation:na-spin 0.5s linear infinite"><circle cx="176" cy="44" r="6" fill="rgba(0,0,0,0.45)"/><circle cx="176" cy="44" r="3" fill="rgba(255,255,255,0.3)"/><line x1="176" y1="38" x2="176" y2="50" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/><line x1="170" y1="44" x2="182" y2="44" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></g>
+        <rect x="152" y="17" width="18" height="11" fill="rgba(255,255,255,0.6)" rx="1"/>
+        <rect x="138" y="28" width="40" height="4" fill="rgba(255,255,255,0.2)"/>
+        <rect x="170" y="5" width="3" height="11" fill="rgba(255,255,255,0.35)" rx="1"/>
+        <rect x="181" y="25" width="4" height="4" fill="rgba(255,255,255,0.8)" rx="1"/>
+        <g style="transform-origin:40px 44px;animation:na-spin 0.5s linear infinite"><circle cx="40" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="40" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="40" y1="37" x2="40" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="33" y1="44" x2="47" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:56px 44px;animation:na-spin 0.5s linear infinite"><circle cx="56" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="56" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="56" y1="37" x2="56" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="49" y1="44" x2="63" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:90px 44px;animation:na-spin 0.5s linear infinite"><circle cx="90" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="90" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="90" y1="37" x2="90" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="83" y1="44" x2="97" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:143px 44px;animation:na-spin 0.5s linear infinite"><circle cx="143" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="143" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="143" y1="37" x2="143" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="136" y1="44" x2="150" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:157px 44px;animation:na-spin 0.5s linear infinite"><circle cx="157" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="157" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="157" y1="37" x2="157" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="150" y1="44" x2="164" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:176px 44px;animation:na-spin 0.5s linear infinite"><circle cx="176" cy="44" r="6" fill="rgba(0,0,0,0.5)"/><circle cx="176" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="176" y1="38" x2="176" y2="50" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="170" y1="44" x2="182" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
       </g>
-      <!-- POSSUM 260px ahead -->
-      <g transform="translate(260,32)">
+      <!-- POSSUM at original scale, 260px ahead of truck front -->
+      <g transform="translate(320,52)">
         <ellipse cx="0" cy="2" rx="30" ry="18" fill="#cccccc"/>
         <ellipse cx="2" cy="8" rx="18" ry="10" fill="#eeeeee"/>
         <circle cx="30" cy="-6" r="15" fill="#cccccc"/>
         <ellipse cx="33" cy="-4" rx="11" ry="12" fill="#e8e8e8"/>
         <path d="M38,-8 Q52,-6 60,-4 Q52,-2 38,0 Z" fill="#e8c0c0"/>
         <ellipse cx="60" cy="-4" rx="3" ry="2" fill="#d66"/>
+        <circle cx="59" cy="-5" r="0.8" fill="#a33"/>
+        <circle cx="59" cy="-3" r="0.8" fill="#a33"/>
         <circle cx="43" cy="-13" r="3.5" fill="#111"/>
         <circle cx="44" cy="-14" r="1.2" fill="white"/>
         <ellipse cx="22" cy="-19" rx="6" ry="7" fill="#cccccc"/>
