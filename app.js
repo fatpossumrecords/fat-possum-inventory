@@ -2204,10 +2204,8 @@ function buildMovementsSummaryHTML() {
 function renderDashboard() {
   const el = document.getElementById('dashboard-body');
   if (!el) return;
-  if (!State.merged.length) {
-    el.innerHTML = '<div class="loading-cell">Loading data…</div>';
-    return;
-  }
+  // Never wipe dashboard if no data — keep existing content
+  if (!State.merged.length) return;
 
   const totalProducts = State.merged.length;
   const totalStock    = State.merged.reduce((s,p) => s+(p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0), 0);
