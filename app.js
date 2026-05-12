@@ -2611,14 +2611,14 @@ window.needsAttentionAction = function(upc, whKey) {
 window.openTitleSearch = function() {
   const modal = document.getElementById('title-search-modal');
   if (!modal) return;
-  modal.classList.remove('hidden');
   modal.style.display = 'flex';
   setTimeout(() => document.getElementById('title-search-input')?.focus(), 50);
+  renderTitleSearchResults('');
 };
 
 window.closeTitleSearch = function() {
   const modal = document.getElementById('title-search-modal');
-  if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+  if (modal) modal.style.display = 'none';
 };
 
 // Close on backdrop click
