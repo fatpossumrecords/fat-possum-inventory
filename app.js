@@ -2920,6 +2920,9 @@ function switchView(viewName) {
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
+  // Show needs attention banner only on dashboard
+  const banner = document.getElementById('needs-attention-banner');
+  if (banner) banner.style.display = viewName === 'dashboard' ? '' : 'none';
   if (viewName === 'dashboard') {
     if (State.merged.length) {
       renderDashboard();
