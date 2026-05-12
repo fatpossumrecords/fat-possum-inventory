@@ -121,7 +121,7 @@ nav { padding: 8px 0; flex: 1; }
 #main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .view { display: none; }
 .view.hidden { display: none !important; }
-.view.active { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.view.active { display: flex; flex-direction: column; min-height: 0; overflow: hidden; height: 100%; }
 /* Sticky headers — each scroll container handles its own */
 .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .table-wrap thead th.is-pinned { z-index: 20 !important; }
@@ -144,6 +144,7 @@ nav { padding: 8px 0; flex: 1; }
   overflow: auto;
   flex: 1;
   min-height: 0;
+  height: 0; /* forces flex child to respect parent height */
 }
 .inv-body-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .inv-body-wrap thead th.is-pinned { z-index: 20 !important; }
@@ -508,7 +509,7 @@ td { overflow: hidden; }
 .tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .mfg-tab { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
 .mfg-tab.active { display: flex; }
-.mfg-tab .table-wrap { flex: 1; overflow: auto; min-height: 0; }
+.mfg-tab .table-wrap { flex: 1; overflow: auto; min-height: 0; height: 0; }
 .mfg-tab .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 
 
