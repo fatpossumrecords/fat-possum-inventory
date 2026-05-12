@@ -122,6 +122,9 @@ nav { padding: 8px 0; flex: 1; }
 .view { display: none; }
 .view.hidden { display: none !important; }
 .view.active { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+/* Sticky headers — stick to table-wrap scroll container */
+.table-wrap thead th { position: sticky; top: 0; z-index: 10; }
+.table-wrap thead th.is-pinned { z-index: 20 !important; }
 
 .view-header {
   padding: 16px 24px 14px; border-bottom: 1px solid var(--border);
@@ -134,13 +137,16 @@ nav { padding: 8px 0; flex: 1; }
 .view-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── TABLE ── */
-.table-wrap { overflow: auto; flex: 1; }
+.table-wrap { overflow: auto; flex: 1; max-height: 100%; }
 
 /* Inventory single-table scrolling container */
 .inv-body-wrap {
   overflow: auto;
   flex: 1;
+  max-height: 100%;
 }
+.inv-body-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
+.inv-body-wrap thead th.is-pinned { z-index: 20 !important; }
 .inv-body-wrap table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -317,8 +323,9 @@ select { cursor: pointer; }
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px;
   color: var(--text-muted); margin-bottom: 10px; padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg); z-index: 30; padding-top: 12px;
 }
-.alert-section .table-wrap { border: 1px solid var(--border); }
+.alert-section .table-wrap { border: 1px solid var(--border); max-height: 340px; }
 .suggest-qty { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--accent); }
 
 /* ── TOAST ── */
