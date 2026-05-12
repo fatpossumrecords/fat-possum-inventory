@@ -2553,75 +2553,482 @@ function buildNeedsAttentionBanner() {
   el.style.display = 'flex';
   el.style.position = 'relative';
   el.style.overflow = 'hidden';
-  el.style.height = '80px';
-  el.style.alignItems = 'center';
   el.innerHTML = `
     <style>
       @keyframes na-chase {
         0%   { transform: translateX(-520px); }
         23%  { transform: translateX(calc(100vw + 200px)); }
-        23.01%,100% { transform: translateX(-520px); }
+        23.01%, 100% { transform: translateX(-520px); }
       }
       @keyframes na-lf { 0%,100%{transform:rotate(30deg)} 50%{transform:rotate(-30deg)} }
       @keyframes na-lb { 0%,100%{transform:rotate(-30deg)} 50%{transform:rotate(30deg)} }
       @keyframes na-tw { 0%,100%{transform:rotate(12deg)} 50%{transform:rotate(-18deg)} }
       @keyframes na-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-      .na-chase { animation: na-chase 30s linear infinite; position:absolute; top:0; left:0; pointer-events:none; }
-      @media (max-width: 768px) { .na-chase { display:none; } }
+      .na-chase { animation: na-chase 30s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
+      @media (max-width: 768px) { .na-chase { display: none; } }
     </style>
-    <!-- Animation layer -->
-    <svg class="na-chase" width="560" height="80" viewBox="0 0 560 80" style="z-index:1;">
-      <!-- TRUCK scaled 1.6x -->
-      <g transform="translate(0,0) scale(1.5)">
-        <rect x="20" y="8" width="115" height="28" fill="rgba(255,255,255,0.3)" rx="2"/>
-        <line x1="45" y1="8" x2="45" y2="36" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
-        <line x1="70" y1="8" x2="70" y2="36" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
-        <line x1="95" y1="8" x2="95" y2="36" stroke="rgba(255,255,255,0.12)" stroke-width="0.8"/>
-        <rect x="128" y="30" width="12" height="4" fill="rgba(255,255,255,0.2)" rx="1"/>
-        <rect x="138" y="11" width="40" height="24" fill="rgba(255,255,255,0.4)" rx="2"/>
-        <rect x="152" y="13" width="18" height="11" fill="rgba(255,255,255,0.55)" rx="1"/>
-        <rect x="138" y="24" width="40" height="4" fill="rgba(255,255,255,0.18)"/>
-        <rect x="170" y="2" width="3" height="10" fill="rgba(255,255,255,0.35)" rx="1"/>
-        <rect x="181" y="22" width="4" height="4" fill="rgba(255,255,255,0.85)" rx="1"/>
-        <g style="transform-origin:40px 40px;animation:na-spin 0.5s linear infinite"><circle cx="40" cy="40" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="40" cy="40" r="3" fill="rgba(255,255,255,0.4)"/><line x1="40" y1="33" x2="40" y2="47" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="33" y1="40" x2="47" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
-        <g style="transform-origin:56px 40px;animation:na-spin 0.5s linear infinite"><circle cx="56" cy="40" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="56" cy="40" r="3" fill="rgba(255,255,255,0.4)"/><line x1="56" y1="33" x2="56" y2="47" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="49" y1="40" x2="63" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
-        <g style="transform-origin:90px 40px;animation:na-spin 0.5s linear infinite"><circle cx="90" cy="40" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="90" cy="40" r="3" fill="rgba(255,255,255,0.4)"/><line x1="90" y1="33" x2="90" y2="47" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="83" y1="40" x2="97" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
-        <g style="transform-origin:143px 40px;animation:na-spin 0.5s linear infinite"><circle cx="143" cy="40" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="143" cy="40" r="3" fill="rgba(255,255,255,0.4)"/><line x1="143" y1="33" x2="143" y2="47" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="136" y1="40" x2="150" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
-        <g style="transform-origin:157px 40px;animation:na-spin 0.5s linear infinite"><circle cx="157" cy="40" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="157" cy="40" r="3" fill="rgba(255,255,255,0.4)"/><line x1="157" y1="33" x2="157" y2="47" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="150" y1="40" x2="164" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
-        <g style="transform-origin:176px 40px;animation:na-spin 0.5s linear infinite"><circle cx="176" cy="40" r="6" fill="rgba(0,0,0,0.5)"/><circle cx="176" cy="40" r="3" fill="rgba(255,255,255,0.4)"/><line x1="176" y1="34" x2="176" y2="46" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="170" y1="40" x2="182" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+    <svg class="na-chase" width="520" height="90" viewBox="0 0 520 90">
+      <!-- TRUCK at 2x scale via transform -->
+      <g transform="scale(1.6) translate(0,6)">
+        <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.35)" rx="2"/>
+        <line x1="45" y1="12" x2="45" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+        <line x1="70" y1="12" x2="70" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+        <line x1="95" y1="12" x2="95" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="0.8"/>
+        <rect x="128" y="34" width="12" height="4" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="138" y="15" width="40" height="24" fill="rgba(255,255,255,0.45)" rx="2"/>
+        <rect x="152" y="17" width="18" height="11" fill="rgba(255,255,255,0.6)" rx="1"/>
+        <rect x="138" y="28" width="40" height="4" fill="rgba(255,255,255,0.2)"/>
+        <rect x="170" y="5" width="3" height="11" fill="rgba(255,255,255,0.35)" rx="1"/>
+        <rect x="181" y="25" width="4" height="4" fill="rgba(255,255,255,0.8)" rx="1"/>
+        <g style="transform-origin:40px 44px;animation:na-spin 0.5s linear infinite"><circle cx="40" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="40" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="40" y1="37" x2="40" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="33" y1="44" x2="47" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:56px 44px;animation:na-spin 0.5s linear infinite"><circle cx="56" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="56" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="56" y1="37" x2="56" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="49" y1="44" x2="63" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:90px 44px;animation:na-spin 0.5s linear infinite"><circle cx="90" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="90" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="90" y1="37" x2="90" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="83" y1="44" x2="97" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:143px 44px;animation:na-spin 0.5s linear infinite"><circle cx="143" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="143" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="143" y1="37" x2="143" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="136" y1="44" x2="150" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:157px 44px;animation:na-spin 0.5s linear infinite"><circle cx="157" cy="44" r="7" fill="rgba(0,0,0,0.5)"/><circle cx="157" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="157" y1="37" x2="157" y2="51" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="150" y1="44" x2="164" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
+        <g style="transform-origin:176px 44px;animation:na-spin 0.5s linear infinite"><circle cx="176" cy="44" r="6" fill="rgba(0,0,0,0.5)"/><circle cx="176" cy="44" r="3" fill="rgba(255,255,255,0.4)"/><line x1="176" y1="38" x2="176" y2="50" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><line x1="170" y1="44" x2="182" y2="44" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g>
       </g>
-      <!-- POSSUM original size, ahead of truck -->
-      <g transform="translate(340,46)">
+      <!-- POSSUM at original scale, 260px ahead of truck front -->
+      <g transform="translate(320,52)">
         <ellipse cx="0" cy="2" rx="30" ry="18" fill="#cccccc"/>
         <ellipse cx="2" cy="8" rx="18" ry="10" fill="#eeeeee"/>
         <circle cx="30" cy="-6" r="15" fill="#cccccc"/>
         <ellipse cx="33" cy="-4" rx="11" ry="12" fill="#e8e8e8"/>
         <path d="M38,-8 Q52,-6 60,-4 Q52,-2 38,0 Z" fill="#e8c0c0"/>
         <ellipse cx="60" cy="-4" rx="3" ry="2" fill="#d66"/>
+        <circle cx="59" cy="-5" r="0.8" fill="#a33"/>
+        <circle cx="59" cy="-3" r="0.8" fill="#a33"/>
         <circle cx="43" cy="-13" r="3.5" fill="#111"/>
         <circle cx="44" cy="-14" r="1.2" fill="white"/>
         <ellipse cx="22" cy="-19" rx="6" ry="7" fill="#cccccc"/>
         <ellipse cx="22" cy="-19" rx="4" ry="5" fill="#e89696"/>
-        <g style="transform-origin:-28px 6px;animation:na-tw 0.3s ease-in-out infinite"><path d="M-28,6 Q-50,2 -56,-6 Q-60,-14 -52,-20 Q-46,-24 -44,-18" fill="none" stroke="#e8a0a0" stroke-width="5" stroke-linecap="round"/></g>
-        <g style="transform-origin:18px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M18,14 L22,26" fill="none" stroke="#aaa" stroke-width="4" stroke-linecap="round"/></g>
-        <g style="transform-origin:8px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M8,14 L4,26" fill="none" stroke="#aaa" stroke-width="4" stroke-linecap="round"/></g>
-        <g style="transform-origin:-10px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M-10,14 L-8,26" fill="none" stroke="#aaa" stroke-width="4" stroke-linecap="round"/></g>
-        <g style="transform-origin:-20px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M-20,14 L-24,26" fill="none" stroke="#aaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:-28px 6px;animation:na-tw 0.3s ease-in-out infinite">
+          <path d="M-28,6 Q-50,2 -56,-6 Q-60,-14 -52,-20 Q-46,-24 -44,-18" fill="none" stroke="#e8a0a0" stroke-width="5" stroke-linecap="round"/>
+        </g>
+        <g style="transform-origin:18px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M18,14 L22,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:8px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M8,14 L4,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:-10px 14px;animation:na-lb 0.18s ease-in-out infinite"><path d="M-10,14 L-8,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
+        <g style="transform-origin:-20px 14px;animation:na-lf 0.18s ease-in-out infinite"><path d="M-20,14 L-24,26" fill="none" stroke="#aaaaaa" stroke-width="4" stroke-linecap="round"/></g>
       </g>
     </svg>
-    <!-- Text layer on top -->
-    <div style="flex:1;min-width:0;position:relative;z-index:3;padding:0 16px;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:1px;opacity:0.8;margin-bottom:3px;">NEEDS ATTENTION</div>
-      <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${esc(p.artist)} — ${esc(p.title)}
-      </div>
-      <div style="font-size:11px;opacity:0.85;margin-top:2px;">
-        ${status} at ${wh.label} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo velocity · ${need.toLocaleString()} units needed
-      </div>
-    </div>
-    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-right:16px;position:relative;z-index:3;">
-      <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:6px 14px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
-      <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:6px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
-    </div>
   `;
+}
+
+window.needsAttentionDismiss = function() {
+  const el = document.getElementById('needs-attention-banner');
+  if (el) el.style.display = 'none';
 };
+
+window.needsAttentionAction = function(upc, whKey) {
+  switchView('alerts');
+  // Retry a few times to wait for alerts to render
+  let attempts = 0;
+  const trySelect = () => {
+    const section = document.getElementById('alert-section-' + whKey);
+    const cb = document.querySelector('.alert-check[data-upc="'+upc+'"][data-wh="'+whKey+'"]');
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (cb) {
+      cb.checked = true;
+      const row = cb.closest('tr');
+      if (row) {
+        row.style.background = 'rgba(255,255,255,0.15)';
+        setTimeout(() => { row.style.background = ''; }, 3000);
+      }
+    } else if (attempts++ < 5) {
+      setTimeout(trySelect, 300);
+    }
+  };
+  setTimeout(trySelect, 150);
+};
+
+// ── TITLE SEARCH & REORDER CALCULATOR ───────────────────────
+window.openTitleSearch = function() {
+  const modal = document.getElementById('title-search-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('title-search-input')?.focus(), 50);
+  renderTitleSearchResults('');
+};
+
+window.closeTitleSearch = function() {
+  const modal = document.getElementById('title-search-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+// Close on backdrop click
+document.addEventListener('click', e => {
+  const modal = document.getElementById('title-search-modal');
+  if (modal && e.target === modal) closeTitleSearch();
+});
+
+// Keyboard shortcut /
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !e.target.matches('input,textarea')) {
+    e.preventDefault();
+    openTitleSearch();
+  }
+  if (e.key === 'Escape') closeTitleSearch();
+});
+
+function renderTitleSearchResults(query) {
+  const el = document.getElementById('title-search-results');
+  if (!el) return;
+  if (!query || query.length < 2) {
+    el.innerHTML = '<p style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center">Type to search titles…</p>';
+    return;
+  }
+  const q = query.toLowerCase();
+  const matches = State.merged.filter(p =>
+    `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  if (!matches.length) {
+    el.innerHTML = '<p style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center">No results found.</p>';
+    return;
+  }
+
+  el.innerHTML = matches.map(p => buildTitleCard(p)).join('');
+}
+
+function buildTitleCard(p) {
+  const poData = State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog];
+  const poQty = poData?.qty || 0;
+  const confirmedMov = State.movements.filter(m => m.upc === p.upc && (m.status === 'confirmed' || m.status === 'shipped'));
+
+  // Warehouse stock rows
+  const warehouses = [
+    { label:'Fat Possum WH', avail: p.fp_available||0, inbound: p.fp_inbound||0, vel12: p.fp_12ms||0 },
+    { label:'Orchard US',    avail: p.us_avail||0,     inbound: 0, vel12: p.us_12ms||0 },
+    { label:'Orchard CA',    avail: p.ca_avail||0,     inbound: 0, vel12: p.ca_12ms||0 },
+    { label:'Orchard UK',    avail: p.uk_avail||0,     inbound: 0, vel12: p.uk_last_yr||0 },
+    { label:'Orchard EU',    avail: p.eu_avail||0,     inbound: 0, vel12: p.eu_this_yr||0 },
+  ];
+
+  const whRows = warehouses.map(wh => {
+    const monthly = wh.vel12 / 12;
+    const weeks = monthly > 0 ? ((wh.avail / monthly) * 4.33).toFixed(1) : '—';
+    const weeksNum = parseFloat(weeks);
+    const color = !monthly ? 'var(--text-dim)' : weeksNum < 4 ? 'var(--red)' : weeksNum < 8 ? '#c45f00' : 'var(--green)';
+    return `<tr>
+      <td style="padding:4px 8px;font-size:11px;color:var(--text-muted)">${wh.label}</td>
+      <td style="padding:4px 8px;font-size:11px;font-family:'DM Mono',monospace;text-align:right">${wh.avail.toLocaleString()}</td>
+      <td style="padding:4px 8px;font-size:11px;font-family:'DM Mono',monospace;text-align:right;color:var(--text-muted)">${monthly > 0 ? monthly.toFixed(1) : '—'}</td>
+      <td style="padding:4px 8px;font-size:11px;font-family:'DM Mono',monospace;text-align:right;color:${color};font-weight:${weeksNum < 8 ? '600' : '400'}">${weeks}</td>
+    </tr>`;
+  }).join('');
+
+  // Reorder calculator
+  const globalAnnual = (p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0)+(p.fp_12ms||0);
+  const globalMonthly = globalAnnual / 12;
+  const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0)+(p.fp_inbound||0)+poQty;
+  const isLP = isVinyl(p.format||'');
+  const leadTime = isLP ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
+  const monthsLeft = globalMonthly > 0 ? totalStock / globalMonthly : null;
+
+  let reorderHTML = '';
+  if (globalMonthly > 0) {
+    // Suggested qty: 12 months of global demand minus current stock
+    const suggested = Math.max(0, Math.ceil(globalMonthly * 12 - totalStock));
+    const poDeadlineDays = monthsLeft !== null ? Math.round((monthsLeft - leadTime) * 30) : null;
+    const deadlineStr = poDeadlineDays !== null
+      ? poDeadlineDays < 0 ? '<span style="color:var(--red);font-weight:600">PAST DUE</span>'
+      : poDeadlineDays < 30 ? `<span style="color:var(--red);font-weight:600">in ${poDeadlineDays}d</span>`
+      : `in ${poDeadlineDays}d`
+      : '—';
+
+    reorderHTML = `
+      <div style="margin:12px 16px;padding:12px;background:var(--surface2);border-radius:4px;border-left:3px solid var(--accent);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Reorder Calculator</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">GLOBAL VELOCITY</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${globalMonthly.toFixed(1)}<span style="font-size:11px;font-weight:400">/mo</span></div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">MONTHS OF STOCK</div>
+            <div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${monthsLeft !== null ? monthsLeft.toFixed(1) : '∞'}</div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">PO DEADLINE</div>
+            <div style="font-size:14px;font-weight:600;">${deadlineStr}</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span style="font-size:11px;color:var(--text-muted)">Suggested reorder qty </span>
+            <span style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent)">${suggested.toLocaleString()}</span>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:4px;">units (12mo demand − current stock)</span>
+          </div>
+          <span style="font-size:10px;color:var(--text-muted)">${isLP ? 'LP · 4mo lead' : 'CD · 1.5mo lead'}</span>
+        </div>
+        ${poQty > 0 ? `<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:600;">📦 ${poQty.toLocaleString()} units already on order (PO)</div>` : ''}
+        ${confirmedMov.length > 0 ? `<div style="margin-top:4px;font-size:11px;color:#3b7de8;font-weight:600;">✓ ${confirmedMov.length} transfer movement${confirmedMov.length>1?'s':''} confirmed</div>` : ''}
+      </div>`;
+  }
+
+  return `<div style="border-bottom:1px solid var(--border);padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(p.catalog)} · ${esc(p.format)} · ${esc(p.label)}</div>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">${esc(p.upc)}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="padding:4px 8px;font-size:9px;text-align:left;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Warehouse</th>
+        <th style="padding:4px 8px;font-size:9px;text-align:right;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Available</th>
+        <th style="padding:4px 8px;font-size:9px;text-align:right;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Mo. Vel</th>
+        <th style="padding:4px 8px;font-size:9px;text-align:right;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Wks Left</th>
+      </tr></thead>
+      <tbody>${whRows}</tbody>
+    </table>
+    ${reorderHTML}
+  </div>`;
+}
+
+// Wire up search input
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('title-search-input');
+  if (inp) inp.addEventListener('input', debounce(() => renderTitleSearchResults(inp.value), 200));
+});
+
+// ── NOTIFICATIONS ────────────────────────────────────────────
+function updateNotifications() {
+  if (!State.merged.length) return;
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 3600 * 1000;
+
+  // Load seen state from State (persisted in Gist)
+  const seenAlerts = State.seenAlerts || {};
+  const seenMfg = State.seenMfg || {};
+
+  // ── New reorder alerts ──
+  const WAREHOUSES_N = [
+    { key:'fp', avail:'fp_available', vel:'fp_12ms' },
+    { key:'us', avail:'us_avail',     vel:'us_12ms' },
+    { key:'ca', avail:'ca_avail',     vel:'ca_12ms' },
+    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr' },
+    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr' },
+  ];
+  const newAlerts = [];
+  for (const p of State.merged) {
+    for (const wh of WAREHOUSES_N) {
+      const avail = p[wh.avail] || 0;
+      const monthly = (p[wh.vel]||0) / 12;
+      if (monthly <= 0) continue;
+      const weeks = (avail / monthly) * 4.33;
+      if (weeks >= CONFIG.REORDER_WEEKS) continue;
+      const key = p.upc + '|' + wh.key;
+      // Check if actioned (confirmed movement)
+      const actioned = State.movements.some(m => m.upc === p.upc && m.to === wh.key && (m.status === 'confirmed' || m.status === 'shipped'));
+      if (actioned) { delete seenAlerts[key]; continue; }
+      if (!seenAlerts[key]) seenAlerts[key] = now;
+      const age = now - seenAlerts[key];
+      if (age < sevenDays) newAlerts.push({ p, wh, weeks, monthly, age });
+    }
+  }
+
+  // ── New manufacturing alerts ──
+  const newMfg = [];
+  for (const p of State.merged) {
+    const poQty = (State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty || 0;
+    if (poQty > 0) { delete seenMfg[p.upc]; continue; } // has PO — not new
+    const monthly = ((p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0))/12;
+    if (monthly <= 0) continue;
+    const total = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0)+(p.fp_inbound||0);
+    const months = total / monthly;
+    if (months > 12) continue;
+    if (!seenMfg[p.upc]) seenMfg[p.upc] = now;
+    const age = now - seenMfg[p.upc];
+    if (age < sevenDays) newMfg.push({ p, months, monthly, age });
+  }
+
+  // On first ever run, baseline everything as seen so we don't spam old alerts
+  const isFirstRun = !State._notificationsInitialized;
+  if (isFirstRun) {
+    State._notificationsInitialized = true;
+    // Clear newAlerts and newMfg — nothing is "new" on first run
+    State._newAlerts = [];
+    State._newMfg = [];
+    State.seenAlerts = seenAlerts;
+    State.seenMfg = seenMfg;
+    // Update badges to 0
+    document.getElementById('notif-alerts-badge')?.classList.add('hidden');
+    document.getElementById('notif-mfg-badge')?.classList.add('hidden');
+    document.getElementById('vinyl-icon')?.classList.remove('vinyl-spinning');
+    return;
+  }
+  State.seenAlerts = seenAlerts;
+  State.seenMfg = seenMfg;
+
+  // Update badges
+  const alertBadge = document.getElementById('notif-alerts-badge');
+  const mfgBadge = document.getElementById('notif-mfg-badge');
+  const bell = document.getElementById('bell-icon');
+  const vinyl = document.getElementById('vinyl-icon');
+
+  if (alertBadge) {
+    alertBadge.textContent = newAlerts.length;
+    if (newAlerts.length > 0) {
+      alertBadge.classList.remove('hidden');
+      bell?.classList.add('bell-ringing');
+      setTimeout(() => bell?.classList.remove('bell-ringing'), 1000);
+    } else {
+      alertBadge.classList.add('hidden');
+    }
+  }
+  if (mfgBadge) {
+    mfgBadge.textContent = newMfg.length;
+    if (newMfg.length > 0) {
+      mfgBadge.classList.remove('hidden');
+      vinyl?.classList.add('vinyl-spinning');
+    } else {
+      mfgBadge.classList.add('hidden');
+      vinyl?.classList.remove('vinyl-spinning');
+    }
+  }
+
+  State._newAlerts = newAlerts;
+  State._newMfg = newMfg;
+}
+
+window.showAlertNotifications = function() {
+  const popup = document.getElementById('notif-popup');
+  const title = document.getElementById('notif-popup-title');
+  const body = document.getElementById('notif-popup-body');
+  if (!popup) return;
+  const WH = { fp:'Fat Possum WH', us:'Orchard US', ca:'Orchard Canada', uk:'Orchard UK', eu:'Orchard EU' };
+  title.textContent = `New Reorder Alerts (${(State._newAlerts||[]).length})`;
+  const alerts = State._newAlerts || [];
+  if (!alerts.length) { body.innerHTML = '<p style="padding:16px;color:var(--text-muted);font-size:12px">No new alerts.</p>'; }
+  else {
+    body.innerHTML = alerts.map(({p, wh, weeks, monthly}) => `
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${WH[wh.key]} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo</div>
+        </div>
+        <button onclick="popup.classList.add('hidden');needsAttentionAction('${p.upc}','${wh.key}')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Action</button>
+      </div>`).join('');
+  }
+  popup.classList.toggle('hidden');
+};
+
+window.showMfgNotifications = function() {
+  const popup = document.getElementById('notif-popup');
+  const title = document.getElementById('notif-popup-title');
+  const body = document.getElementById('notif-popup-body');
+  if (!popup) return;
+  title.textContent = `New Manufacturing Alerts (${(State._newMfg||[]).length})`;
+  const items = State._newMfg || [];
+  if (!items.length) { body.innerHTML = '<p style="padding:16px;color:var(--text-muted);font-size:12px">No new manufacturing alerts.</p>'; }
+  else {
+    body.innerHTML = items.map(({p, months, monthly}) => `
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${months.toFixed(1)} months left · ${monthly.toFixed(0)}/mo velocity · ${esc(p.format)}</div>
+        </div>
+        <button onclick="document.getElementById('notif-popup').classList.add('hidden');switchView('manufacturing')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">View</button>
+      </div>`).join('');
+  }
+  popup.classList.toggle('hidden');
+};
+
+// Close popup when clicking outside
+document.addEventListener('click', e => {
+  const popup = document.getElementById('notif-popup');
+  if (popup && !popup.classList.contains('hidden') &&
+      !popup.contains(e.target) &&
+      !document.getElementById('notif-alerts-btn')?.contains(e.target) &&
+      !document.getElementById('notif-mfg-btn')?.contains(e.target)) {
+    popup.classList.add('hidden');
+  }
+});
+
+// ── JUMP TO TITLE ────────────────────────────────────────────
+window.jumpToTitle = function(catalog) {
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.value = catalog;
+  switchView('inventory');
+  renderInventory();
+  // Highlight the matching row briefly
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#inventory-tbody tr');
+    for (const row of rows) {
+      const cell = row.querySelector('td');
+      if (cell && row.textContent.includes(catalog)) {
+        row.style.outline = '2px solid var(--accent)';
+        row.scrollIntoView({ behavior:'smooth', block:'center' });
+        setTimeout(() => row.style.outline = '', 2000);
+        break;
+      }
+    }
+  }, 150);
+};
+
+// ── VIEW SWITCHING ────────────────────────────────────────────
+function switchView(viewName) {
+  document.querySelectorAll('.view').forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
+  document.getElementById(`view-${viewName}`)?.classList.add('active');
+  document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
+  // Show needs attention banner only on dashboard
+  const banner = document.getElementById('needs-attention-banner');
+  if (banner) banner.style.display = viewName === 'dashboard' ? '' : 'none';
+  if (viewName === 'dashboard') {
+    if (State.merged.length) {
+      renderDashboard();
+      buildNeedsAttentionBanner();
+      updateNotifications();
+    } else {
+      setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
+    }
+    // Force browser repaint — fixes CSS rendering bug on view switch
+    const dv = document.getElementById('view-dashboard');
+    if (dv) {
+      dv.style.transform = 'translateZ(0)';
+      requestAnimationFrame(() => {
+        dv.style.transform = '';
+        dv.style.opacity = '0.99';
+        requestAnimationFrame(() => { dv.style.opacity = ''; });
+      });
+    }
+  }
+  // Always show search in header
+  document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
+  if (viewName === 'suppressed') renderSuppressedLog();
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function setStatus(which, state, label) {
+  const dot = document.getElementById(`${which}-dot`);
+  const txt = document.getElementById(`${which}-status-text`);
+  if (dot) dot.className = 'status-dot ' + state;
+  if (txt) txt.textContent = label;
+}
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function catalogLink(catalog) {
+  const ec = esc(catalog);
+  return `<a href="#" onclick="event.preventDefault();jumpToTitle('${ec}')" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--text-dim);" title="View in inventory">${ec}</a>`;
+}
+function safeNum(v) {
+  const n = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
+  if (isNaN(n) || !isFinite(n)) return 0;
+  if (n < 0) return 0;          // no negative inventory
+  if (n > 9999999) return 0;    // anything over 10M is clearly a bad value
+  return n;
+}
+function numCell(n) { return (!n||n===0)?`<span class="num-zero">0</span>`:String(n); }
+function isVinyl(s) { const l=(s||'').toLowerCase(); return l.includes('vinyl')||l.includes(' lp')||l.includes('12"')||l.includes('10"')||l.includes('7"'); }
+function guessFormat(name) { if(isVinyl(name)) return '12" Vinyl'; if(name.toLowerCase().includes('cd')) return 'CD'; return name; }
+function formatDate(d) { return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); }
+function dateStr() { return new Date().toISOString().slice(0,10).replace(/-/g,''); }
+function debounce(fn,ms) { let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),ms); }; }
+function toast(msg,type='') {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast'+(type?` toast-${type}`:'');
+  el.classList.remove('hidden'); clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.add('hidden'),3500);
+}
