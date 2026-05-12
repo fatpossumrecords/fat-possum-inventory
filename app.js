@@ -2560,7 +2560,7 @@ function buildNeedsAttentionBanner() {
       @keyframes na-lb { 0%,100%{transform:rotate(-30deg)} 50%{transform:rotate(30deg)} }
       @keyframes na-tw { 0%,100%{transform:rotate(12deg)} 50%{transform:rotate(-18deg)} }
       @keyframes na-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-      .na-chase { animation: na-chase 7s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
+      .na-chase { animation: na-chase 30s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
       @media (max-width: 768px) { .na-chase { display: none; } }
     </style>
     <div style="flex:1;min-width:0;position:relative;z-index:2;padding:12px 0;">
@@ -2576,7 +2576,7 @@ function buildNeedsAttentionBanner() {
       <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:5px 12px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
       <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:5px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
     </div>
-    <svg class="na-chase" width="400" height="60" viewBox="0 0 400 60">
+    <svg class="na-chase" width="800" height="120" viewBox="0 0 400 60">
       <!-- TRUCK -->
       <g transform="translate(0,8)">
         <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.6)" rx="2"/>
