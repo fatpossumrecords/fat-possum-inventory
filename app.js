@@ -1648,7 +1648,7 @@ function renderAlerts() {
               <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.transferQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
               <td style="position:sticky;left:32px;z-index:3;${bg};width:160px;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.artist)}</td>
               <td style="position:sticky;left:192px;z-index:3;${bg};width:220px;min-width:220px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.title)}</td>
-              <td style="position:sticky;left:412px;z-index:3;${bg};width:100px;min-width:100px;box-shadow:3px 0 5px rgba(0,0,0,0.07);white-space:nowrap;"><code>${esc(p.catalog)}</code></td>
+              <td style="position:sticky;left:412px;z-index:3;${bg};width:100px;min-width:100px;box-shadow:3px 0 5px rgba(0,0,0,0.07);white-space:nowrap;">${catalogLink(p.catalog)}</td>
               <td style="color:var(--text-muted);font-size:11px">${esc(p.label)}</td>
               <td>${esc(p.format)}</td>
               <td class="num">${numCell(p.avail)}</td>
@@ -1923,7 +1923,7 @@ function renderMovementsTable() {
       html += `<tr>
         <td style="padding-left:24px;">${esc(m.artist)}</td>
         <td>${esc(m.title)}</td>
-        <td style="color:var(--text-muted);font-size:11px">${esc(m.catalog)}</td>
+        <td style="color:var(--text-muted);font-size:11px">${catalogLink(m.catalog)}</td>
         <td>${esc(m.format)}</td>
         <td class="num" style="white-space:nowrap">
           <input type="number" min="1" value="${m.qty}" data-idx="${m._idx}"
