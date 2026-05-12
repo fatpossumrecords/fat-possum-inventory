@@ -2289,6 +2289,11 @@ function renderDashboard() {
         <div class="dash-num">${mfgUrgent + mfgSoon}</div>
         <div class="dash-sub">${mfgUrgent > 0 ? mfgUrgent+' urgent · ' : ''}${mfgWithPO} with open PO</div>
       </div>
+      <div class="dash-card dash-card-green">
+        <div class="dash-label">Resolved (30d)</div>
+        <div class="dash-num" id="resolved-count">0</div>
+        <div class="dash-sub">movements actioned</div>
+      </div>
     </div>
 
     <div class="dash-row">
