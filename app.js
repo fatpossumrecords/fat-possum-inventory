@@ -2935,6 +2935,27 @@ document.addEventListener('click', e => {
   }
 });
 
+// ── JUMP TO TITLE ────────────────────────────────────────────
+window.jumpToTitle = function(catalog) {
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.value = catalog;
+  switchView('inventory');
+  renderInventory();
+  // Highlight the matching row briefly
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#inventory-tbody tr');
+    for (const row of rows) {
+      const cell = row.querySelector('td');
+      if (cell && row.textContent.includes(catalog)) {
+        row.style.outline = '2px solid var(--accent)';
+        row.scrollIntoView({ behavior:'smooth', block:'center' });
+        setTimeout(() => row.style.outline = '', 2000);
+        break;
+      }
+    }
+  }, 150);
+};
+
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
   document.querySelectorAll('.view').forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
@@ -2977,6 +2998,10 @@ function setStatus(which, state, label) {
   if (txt) txt.textContent = label;
 }
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function catalogLink(catalog) {
+  const ec = esc(catalog);
+  return `<a href="#" onclick="event.preventDefault();jumpToTitle('${ec}')" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--text-dim);" title="View in inventory">${ec}</a>`;
+}
 function safeNum(v) {
   const n = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
   if (isNaN(n) || !isFinite(n)) return 0;
