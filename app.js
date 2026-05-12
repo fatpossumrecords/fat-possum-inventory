@@ -2552,7 +2552,30 @@ function buildNeedsAttentionBanner() {
 
   el.style.display = 'flex';
   el.style.alignItems = 'center';
+  el.style.position = 'relative';
+  el.style.overflow = 'hidden';
   el.innerHTML = `
+    <div id="na-possum-wrap" style="position:absolute;bottom:0;left:0;pointer-events:none;transform:translateX(-160px);">
+      <svg width="140" height="52" viewBox="0 0 140 52">
+        <g transform="translate(0,40)">
+          <ellipse cx="0" cy="2" rx="26" ry="15" fill="rgba(200,200,200,0.85)"/>
+          <ellipse cx="2" cy="8" rx="15" ry="8" fill="rgba(235,235,235,0.9)"/>
+          <circle cx="25" cy="-5" r="12" fill="rgba(200,200,200,0.9)"/>
+          <ellipse cx="28" cy="-3" rx="9" ry="10" fill="rgba(232,232,232,0.95)"/>
+          <path d="M32,-6 Q44,-4 52,-2 Q44,0 32,2 Z" fill="#e8c0c0"/>
+          <ellipse cx="52" cy="-2" rx="2.5" ry="1.8" fill="#d66"/>
+          <circle cx="36" cy="-10" r="3" fill="#111"/>
+          <circle cx="37" cy="-11" r="1" fill="white"/>
+          <ellipse cx="18" cy="-16" rx="5" ry="6" fill="rgba(200,200,200,0.9)"/>
+          <ellipse cx="18" cy="-16" rx="3" ry="4" fill="#e89696"/>
+          <path d="M-22,5 Q-40,1 -46,-6 Q-50,-12 -43,-16" fill="none" stroke="#e8a0a0" stroke-width="3.5" stroke-linecap="round"/>
+          <line id="l1" x1="14" y1="12" x2="17" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
+          <line id="l2" x1="5" y1="12" x2="2" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
+          <line id="l3" x1="-8" y1="12" x2="-6" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
+          <line id="l4" x1="-17" y1="12" x2="-20" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
+        </g>
+      </svg>
+    </div>
     <div style="flex:1;min-width:0;position:relative;z-index:2;padding:12px 20px;">
       <div style="font-size:10px;font-weight:700;letter-spacing:1px;opacity:0.8;margin-bottom:2px;">NEEDS ATTENTION</div>
       <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
@@ -2562,11 +2585,39 @@ function buildNeedsAttentionBanner() {
         ${status} at ${wh.label} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo velocity · ${need.toLocaleString()} units needed
       </div>
     </div>
-    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-right:20px;">
+    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-right:20px;position:relative;z-index:3;">
       <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:6px 14px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
       <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:6px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
     </div>
   `;
+  // Animate possum with JS (avoids CSS animation issues)
+  function runPossum() {
+    const wrap = document.getElementById('na-possum-wrap');
+    if (!wrap) return;
+    const bannerW = el.offsetWidth + 200;
+    let x = -160;
+    let legAngle = 0;
+    const speed = 4;
+    const interval = setInterval(() => {
+      x += speed;
+      legAngle = (legAngle + 15) % 360;
+      const s = Math.sin(legAngle * Math.PI / 180);
+      wrap.style.transform = 'translateX(' + x + 'px)';
+      const svg = wrap.querySelector('svg');
+      if (svg) {
+        const l1 = svg.getElementById('l1'); if(l1) { l1.setAttribute('x2', 17 + s*6); l1.setAttribute('y2', 22); }
+        const l2 = svg.getElementById('l2'); if(l2) { l2.setAttribute('x2', 2 - s*6); l2.setAttribute('y2', 22); }
+        const l3 = svg.getElementById('l3'); if(l3) { l3.setAttribute('x2', -6 + s*6); l3.setAttribute('y2', 22); }
+        const l4 = svg.getElementById('l4'); if(l4) { l4.setAttribute('x2', -20 - s*6); l4.setAttribute('y2', 22); }
+      }
+      if (x > bannerW) {
+        clearInterval(interval);
+        wrap.style.transform = 'translateX(-160px)';
+        setTimeout(runPossum, 60000);
+      }
+    }, 16);
+  }
+  setTimeout(runPossum, 500);
 }
 
 window.needsAttentionDismiss = function() {
