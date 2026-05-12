@@ -745,6 +745,7 @@ async function loadFPVelocity() {
     checkMovementStatuses();
     renderAlerts();
     renderDashboard();
+    buildNeedsAttentionBanner();
     renderInventory();
   } catch(e) {
     console.warn('FP velocity load failed:', e.message);
