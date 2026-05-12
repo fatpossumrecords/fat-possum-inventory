@@ -2567,7 +2567,7 @@ function buildNeedsAttentionBanner() {
       .na-chase { animation: na-chase 30s linear infinite; position:absolute; bottom:0; left:0; pointer-events:none; }
       @media (max-width: 768px) { .na-chase { display: none; } }
     </style>
-    <svg class="na-chase" width="520" height="100" viewBox="0 0 520 100">
+    <svg class="na-chase" width="520" height="90" viewBox="0 0 520 90">
       <!-- TRUCK at 2x scale via transform -->
       <g transform="scale(1.6) translate(0,6)">
         <rect x="20" y="12" width="115" height="28" fill="rgba(255,255,255,0.35)" rx="2"/>
