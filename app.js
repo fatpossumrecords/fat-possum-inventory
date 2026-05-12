@@ -2355,6 +2355,9 @@ function renderDashboard() {
         <div class="dash-label" style="margin-bottom:8px;">Inbound to FP WH</div>
         ${buildInboundHTML()}
       </div>
+      <div class="dash-card" id="record-of-day-card" style="display:flex;align-items:center;justify-content:center;min-height:120px;padding:8px;">
+        <div style="font-size:11px;color:var(--text-muted)">Loading…</div>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-top:0">
@@ -2386,6 +2389,36 @@ function renderDashboard() {
       </div>
     </div>
   `;
+}
+
+// ── RECORD OF THE DAY ───────────────────────────────────────
+async function loadRecordOfDay() {
+  const card = document.getElementById('record-of-day-card');
+  if (!card || !State.merged.length) return;
+  // Pick a random title with an artist from your catalog
+  const pool = State.merged.filter(p => p.artist && p.title && isVinyl(p.format||''));
+  if (!pool.length) { card.innerHTML = '<div style="font-size:11px;color:var(--text-muted)">No vinyl titles found.</div>'; return; }
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  try {
+    const q = encodeURIComponent(pick.artist + ' ' + pick.title);
+    const res = await fetch('https://itunes.apple.com/search?term=' + q + '&media=music&entity=album&limit=5');
+    const data = await res.json();
+    const result = data.results?.[0];
+    if (result?.artworkUrl100) {
+      const artUrl = result.artworkUrl100.replace('100x100', '300x300');
+      card.innerHTML = `
+        <div style="text-align:center;">
+          <img src="${artUrl}" alt="${esc(pick.artist)} — ${esc(pick.title)}"
+            style="width:110px;height:110px;object-fit:cover;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);"
+            onerror="this.parentElement.innerHTML='<div style=\'font-size:10px;color:var(--text-muted)\'>No cover found</div>'" />
+          <div style="font-size:9px;color:var(--text-muted);margin-top:6px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pick.artist)}</div>
+        </div>`;
+    } else {
+      card.innerHTML = '<div style="font-size:10px;color:var(--text-muted);text-align:center;">' + esc(pick.artist) + '<br>' + esc(pick.title) + '</div>';
+    }
+  } catch(e) {
+    card.innerHTML = '<div style="font-size:10px;color:var(--text-muted)">No cover found</div>';
+  }
 }
 
 // ── MANUFACTURING QUEUE (Packiyo PO-driven) ──────────────────
@@ -2969,6 +3002,7 @@ function switchView(viewName) {
       renderDashboard();
       buildNeedsAttentionBanner();
       updateNotifications();
+      loadRecordOfDay();
     } else {
       setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
     }
