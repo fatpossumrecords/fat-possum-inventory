@@ -756,6 +756,7 @@ async function loadFPVelocity() {
     renderAlerts();
     renderDashboard();
     buildNeedsAttentionBanner();
+    updateNotifications();
     renderInventory();
   } catch(e) {
     console.warn('FP velocity load failed:', e.message);
@@ -2583,6 +2584,145 @@ window.needsAttentionAction = function(upc, whKey) {
   };
   setTimeout(trySelect, 150);
 };
+
+// ── NOTIFICATIONS ────────────────────────────────────────────
+function updateNotifications() {
+  if (!State.merged.length) return;
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 3600 * 1000;
+
+  // Load seen state from State (persisted in Gist)
+  const seenAlerts = State.seenAlerts || {};
+  const seenMfg = State.seenMfg || {};
+
+  // ── New reorder alerts ──
+  const WAREHOUSES_N = [
+    { key:'fp', avail:'fp_available', vel:'fp_12ms' },
+    { key:'us', avail:'us_avail',     vel:'us_12ms' },
+    { key:'ca', avail:'ca_avail',     vel:'ca_12ms' },
+    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr' },
+    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr' },
+  ];
+  const newAlerts = [];
+  for (const p of State.merged) {
+    for (const wh of WAREHOUSES_N) {
+      const avail = p[wh.avail] || 0;
+      const monthly = (p[wh.vel]||0) / 12;
+      if (monthly <= 0) continue;
+      const weeks = (avail / monthly) * 4.33;
+      if (weeks >= CONFIG.REORDER_WEEKS) continue;
+      const key = p.upc + '|' + wh.key;
+      // Check if actioned (confirmed movement)
+      const actioned = State.movements.some(m => m.upc === p.upc && m.to === wh.key && (m.status === 'confirmed' || m.status === 'shipped'));
+      if (actioned) { delete seenAlerts[key]; continue; }
+      if (!seenAlerts[key]) seenAlerts[key] = now;
+      const age = now - seenAlerts[key];
+      if (age < sevenDays) newAlerts.push({ p, wh, weeks, monthly, age });
+    }
+  }
+
+  // ── New manufacturing alerts ──
+  const newMfg = [];
+  for (const p of State.merged) {
+    const poQty = (State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty || 0;
+    if (poQty > 0) { delete seenMfg[p.upc]; continue; } // has PO — not new
+    const monthly = ((p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0))/12;
+    if (monthly <= 0) continue;
+    const total = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0)+(p.fp_inbound||0);
+    const months = total / monthly;
+    if (months > 12) continue;
+    if (!seenMfg[p.upc]) seenMfg[p.upc] = now;
+    const age = now - seenMfg[p.upc];
+    if (age < sevenDays) newMfg.push({ p, months, monthly, age });
+  }
+
+  State.seenAlerts = seenAlerts;
+  State.seenMfg = seenMfg;
+
+  // Update badges
+  const alertBadge = document.getElementById('notif-alerts-badge');
+  const mfgBadge = document.getElementById('notif-mfg-badge');
+  const bell = document.getElementById('bell-icon');
+  const vinyl = document.getElementById('vinyl-icon');
+
+  if (alertBadge) {
+    alertBadge.textContent = newAlerts.length;
+    if (newAlerts.length > 0) {
+      alertBadge.classList.remove('hidden');
+      bell?.classList.add('bell-ringing');
+      setTimeout(() => bell?.classList.remove('bell-ringing'), 1000);
+    } else {
+      alertBadge.classList.add('hidden');
+    }
+  }
+  if (mfgBadge) {
+    mfgBadge.textContent = newMfg.length;
+    if (newMfg.length > 0) {
+      mfgBadge.classList.remove('hidden');
+      vinyl?.classList.add('vinyl-spinning');
+    } else {
+      mfgBadge.classList.add('hidden');
+      vinyl?.classList.remove('vinyl-spinning');
+    }
+  }
+
+  State._newAlerts = newAlerts;
+  State._newMfg = newMfg;
+}
+
+window.showAlertNotifications = function() {
+  const popup = document.getElementById('notif-popup');
+  const title = document.getElementById('notif-popup-title');
+  const body = document.getElementById('notif-popup-body');
+  if (!popup) return;
+  const WH = { fp:'Fat Possum WH', us:'Orchard US', ca:'Orchard Canada', uk:'Orchard UK', eu:'Orchard EU' };
+  title.textContent = `New Reorder Alerts (${(State._newAlerts||[]).length})`;
+  const alerts = State._newAlerts || [];
+  if (!alerts.length) { body.innerHTML = '<p style="padding:16px;color:var(--text-muted);font-size:12px">No new alerts.</p>'; }
+  else {
+    body.innerHTML = alerts.map(({p, wh, weeks, monthly}) => `
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${WH[wh.key]} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo</div>
+        </div>
+        <button onclick="popup.classList.add('hidden');needsAttentionAction('${p.upc}','${wh.key}')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Action</button>
+      </div>`).join('');
+  }
+  popup.classList.toggle('hidden');
+};
+
+window.showMfgNotifications = function() {
+  const popup = document.getElementById('notif-popup');
+  const title = document.getElementById('notif-popup-title');
+  const body = document.getElementById('notif-popup-body');
+  if (!popup) return;
+  title.textContent = `New Manufacturing Alerts (${(State._newMfg||[]).length})`;
+  const items = State._newMfg || [];
+  if (!items.length) { body.innerHTML = '<p style="padding:16px;color:var(--text-muted);font-size:12px">No new manufacturing alerts.</p>'; }
+  else {
+    body.innerHTML = items.map(({p, months, monthly}) => `
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${months.toFixed(1)} months left · ${monthly.toFixed(0)}/mo velocity · ${esc(p.format)}</div>
+        </div>
+        <button onclick="document.getElementById('notif-popup').classList.add('hidden');switchView('manufacturing')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">View</button>
+      </div>`).join('');
+  }
+  popup.classList.toggle('hidden');
+};
+
+// Close popup when clicking outside
+document.addEventListener('click', e => {
+  const popup = document.getElementById('notif-popup');
+  if (popup && !popup.classList.contains('hidden') &&
+      !popup.contains(e.target) &&
+      !document.getElementById('notif-alerts-btn')?.contains(e.target) &&
+      !document.getElementById('notif-mfg-btn')?.contains(e.target)) {
+    popup.classList.add('hidden');
+  }
+});
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
 function switchView(viewName) {
