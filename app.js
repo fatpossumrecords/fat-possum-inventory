@@ -380,12 +380,13 @@ async function saveFPVelocityToGist() {
 async function saveOrchardToGist() {
   if (!State.orchardData.length) return;
   try {
-    // Read current Gist first to preserve existing data
-    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
-      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
-    });
-    const current = await res.json();
-    const existing = JSON.parse(current.files?.[CONFIG.GIST_FILE]?.content || '{}');
+    // Use raw URL to read existing data (same as other save functions)
+    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
+    let existing = {};
+    try {
+      const r = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) existing = await r.json();
+    } catch(e) {}
     // Merge orchard data into existing payload
     const payload = {
       ...existing,
