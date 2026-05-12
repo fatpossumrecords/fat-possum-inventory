@@ -1906,7 +1906,7 @@ function renderMovementsTable() {
 
     const exportSid = encodeURIComponent(group.key);
     html += `<tr style="background:var(--surface2);border-top:2px solid var(--border2);">
-      <td colspan="5" style="padding:8px 12px;font-weight:600;font-size:12px;">
+      <td colspan="6" style="padding:8px 12px;font-weight:600;font-size:12px;">
         ${WH_LABELS[group.from]} <span style="color:var(--text-dim);margin:0 6px">→</span> ${WH_LABELS[group.to]}
         <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px">${group.items.length} item${group.items.length!==1?'s':''} · ${totalQty.toLocaleString()} units</span>
         ${poNumber ? `<span style="font-size:10px;color:var(--accent);margin-left:8px;font-weight:600">${esc(poNumber)}</span>` : ''}
@@ -1935,6 +1935,7 @@ function renderMovementsTable() {
         <td><input type="text" class="mov-notes" data-idx="${m._idx}" value="${esc(m.notes||'')}"
           style="width:200px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
           onchange="updateMovementNotes(${m._idx}, this.value)" placeholder="Notes…" /></td>
+        <td style="font-size:10px;color:var(--text-muted);white-space:nowrap;">${m.confirmedAt ? new Date(m.confirmedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—'}</td>
         <td style="width:32px;text-align:center;"><button class="btn-danger btn-sm" onclick="removeMovement(${m._idx})" style="padding:2px 6px;">×</button></td>
       </tr>`;
     });
