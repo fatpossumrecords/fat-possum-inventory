@@ -2405,9 +2405,7 @@ function buildDoomsdayPool() {
   const WHS = [
     { key:'fp', avail:'fp_available', vel:'fp_12ms',    label:'FP WH' },
     { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
-    { key:'ca', avail:'ca_avail',     vel:'ca_12ms',    label:'Orchard CA' },
     { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
-    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr', label:'Orchard EU' },
   ];
   const seen = new Set();
   const items = [];
