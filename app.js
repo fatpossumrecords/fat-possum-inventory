@@ -1502,7 +1502,7 @@ function renderManufacturing() {
     return `<tr style="${rowStyle}" ${rowHoverClass}>
       <td>${esc(p.artist)}</td>
       <td>${esc(p.title)}</td>
-      <td><code>${esc(p.catalog)}</code></td>
+      <td>${catalogLink(p.catalog)}</td>
       <td>${esc(p.format)}</td>
       <td class="num">${numCell(p.totalStock)}</td>
       <td class="num">${inboundCell}</td>
@@ -1923,7 +1923,7 @@ function renderMovementsTable() {
       html += `<tr>
         <td style="padding-left:24px;">${esc(m.artist)}</td>
         <td>${esc(m.title)}</td>
-        <td style="color:var(--text-muted);font-size:11px">${catalogLink(m.catalog)}</td>
+        <td style="color:var(--text-muted);font-size:11px">${esc(m.catalog)}</td>
         <td>${esc(m.format)}</td>
         <td class="num" style="white-space:nowrap">
           <input type="number" min="1" value="${m.qty}" data-idx="${m._idx}"
