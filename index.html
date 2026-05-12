@@ -115,6 +115,9 @@
 
   <!-- MAIN CONTENT -->
   <main id="main-content" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+    <!-- Needs attention banner — above top bar, only shows on dashboard -->
+    <div id="needs-attention-banner" style="display:none;background:#E8650A;color:white;padding:12px 20px;align-items:center;gap:12px;border-bottom:2px solid #C4540A;overflow:hidden;position:relative;"></div>
+
     <!-- Top bar — aligned with sidebar header height -->
     <div style="height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;gap:8px;border-bottom:1px solid var(--border);background:var(--surface);">
       <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;width:280px;">
@@ -143,12 +146,13 @@
         </button>
         <!-- Vinyl record -->
         <button id="notif-mfg-btn" onclick="showMfgNotifications()" title="New manufacturing alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
-          <svg id="vinyl-icon" width="26" height="26" viewBox="0 0 26 26" fill="none" style="color:var(--text-muted)">
-            <circle cx="13" cy="13" r="12" fill="currentColor" opacity="0.15" stroke="currentColor" stroke-width="1.5"/>
-            <circle cx="13" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.4"/>
-            <circle cx="13" cy="13" r="5" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.4"/>
-            <circle cx="13" cy="13" r="2.5" fill="currentColor" opacity="0.6"/>
-            <circle cx="13" cy="13" r="1" fill="currentColor"/>
+          <svg id="vinyl-icon" width="26" height="26" viewBox="0 0 26 26" fill="none">
+            <circle cx="13" cy="13" r="12" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
+            <circle cx="13" cy="13" r="9.5" fill="none" stroke="#333" stroke-width="0.7"/>
+            <circle cx="13" cy="13" r="7" fill="none" stroke="#333" stroke-width="0.7"/>
+            <circle cx="13" cy="13" r="4.5" fill="none" stroke="#333" stroke-width="0.7"/>
+            <circle cx="13" cy="13" r="3" fill="#c41" stroke="none"/>
+            <circle cx="13" cy="13" r="1.2" fill="#111"/>
           </svg>
           <span id="notif-mfg-badge" class="notif-badge hidden">0</span>
         </button>
@@ -158,7 +162,6 @@
 
     <!-- DASHBOARD VIEW -->
     <div id="view-dashboard" class="view active">
-      <div id="needs-attention-banner" style="display:none;background:#E8650A;color:white;padding:12px 20px;align-items:center;gap:12px;border-bottom:2px solid #C4540A;"></div>
       <div class="view-header">
         <div>
           <h2>Dashboard</h2>
