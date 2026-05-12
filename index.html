@@ -137,6 +137,16 @@
         </div>
         <div class="view-actions">
           <input type="text" id="search-input" placeholder="Search artist, title, UPC, catalog…" class="search-input" />
+      <div style="display:flex;gap:8px;align-items:center;margin-left:8px;">
+        <button id="notif-alerts-btn" onclick="showAlertNotifications()" title="New reorder alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
+          <svg id="bell-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="notif-alerts-badge" class="notif-badge hidden">0</span>
+        </button>
+        <button id="notif-mfg-btn" onclick="showMfgNotifications()" title="New manufacturing alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
+          <svg id="vinyl-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+          <span id="notif-mfg-badge" class="notif-badge hidden">0</span>
+        </button>
+      </div>
           <select id="filter-config" class="select-sm">
             <option value="">All formats</option>
             <option value="LP">LP / Vinyl</option>
