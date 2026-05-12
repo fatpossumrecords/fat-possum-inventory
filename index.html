@@ -37,35 +37,15 @@
 
 <!-- MAIN APP -->
 <div id="app" class="hidden" style="display:flex;flex-direction:column;height:100vh;overflow:hidden;">
-  <!-- Persistent global search & notification bar — right-aligned -->
-  <div style="display:flex;align-items:center;justify-content:flex-end;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:50;gap:8px;">
-    <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;width:26%;">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="search-input" placeholder="Search… ( / )" autocomplete="off"
-        style="border:none;background:transparent;font-size:12px;color:var(--text);outline:none;font-family:inherit;width:100%;" />
-    </div>
-    <button id="title-search-btn" onclick="openTitleSearch()" title="Title detail & reorder calculator" style="background:none;border:none;cursor:pointer;padding:3px;color:var(--text-muted);display:flex;align-items:center;gap:3px;font-size:11px;white-space:nowrap;">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      Detail
-    </button>
-    <div style="display:flex;gap:4px;align-items:center;">
-      <button id="notif-alerts-btn" onclick="showAlertNotifications()" title="New reorder alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:3px;">
-        <svg id="bell-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        <span id="notif-alerts-badge" class="notif-badge hidden">0</span>
-      </button>
-      <button id="notif-mfg-btn" onclick="showMfgNotifications()" title="New manufacturing alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:3px;">
-        <svg id="vinyl-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
-        <span id="notif-mfg-badge" class="notif-badge hidden">0</span>
-      </button>
-    </div>
-  </div>
   <div style="display:flex;flex:1;overflow:hidden;">
 
   <!-- SIDEBAR -->
   <aside id="sidebar">
-    <div class="sidebar-header">
-      <img src="FP-Logo_Submark-Black.jpg" alt="FP" style="width:28px;height:28px;object-fit:contain;" />
-      <span class="sidebar-title">Inventory</span>
+    <div class="sidebar-header" style="height:52px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="FP-Logo_Submark-Black.jpg" alt="FP" style="width:28px;height:28px;object-fit:contain;" />
+        <span class="sidebar-title">Inventory</span>
+      </div>
     </div>
     <nav>
       <a href="#" class="nav-item active" data-view="dashboard">
@@ -134,7 +114,30 @@
   </aside>
 
   <!-- MAIN CONTENT -->
-  <main id="main-content">
+  <main id="main-content" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+    <!-- Top bar — aligned with sidebar header height -->
+    <div style="height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;gap:8px;border-bottom:1px solid var(--border);background:var(--surface);">
+      <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;width:280px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="Search… ( / )" autocomplete="off"
+          style="border:none;background:transparent;font-size:12px;color:var(--text);outline:none;font-family:inherit;width:100%;" />
+      </div>
+      <button id="title-search-btn" onclick="openTitleSearch()" title="Title detail & reorder calculator" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:4px 8px;color:var(--text-muted);display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Reorder Calc
+      </button>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <button id="notif-alerts-btn" onclick="showAlertNotifications()" title="New reorder alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
+          <svg id="bell-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="notif-alerts-badge" class="notif-badge hidden">0</span>
+        </button>
+        <button id="notif-mfg-btn" onclick="showMfgNotifications()" title="New manufacturing alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
+          <svg id="vinyl-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+          <span id="notif-mfg-badge" class="notif-badge hidden">0</span>
+        </button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;">
 
     <!-- DASHBOARD VIEW -->
     <div id="view-dashboard" class="view active">
@@ -406,6 +409,7 @@
       </div>
     </div>
 
+    </div>
   </main>
 </div>
 
