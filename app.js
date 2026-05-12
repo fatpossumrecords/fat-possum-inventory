@@ -2242,7 +2242,7 @@ function renderDashboard() {
   const totalStock    = State.merged.reduce((s,p) => s+(p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0), 0);
   const fpStock       = State.merged.reduce((s,p) => s+(p.fp_available||0), 0);
 
-  // Alerts count
+  // Alerts count — same logic as renderAlerts so numbers match
   const WAREHOUSES_D = [
     { key:'fp', avail:'fp_available', vel:'fp_12ms',   velDiv:12 },
     { key:'us', avail:'us_avail',     vel:'us_12ms',   velDiv:12 },
@@ -2252,9 +2252,17 @@ function renderDashboard() {
   ];
   let alertCount = 0, criticalCount = 0;
   WAREHOUSES_D.forEach(wh => {
+    // Apply confirmed inbound same as renderAlerts
+    const confirmedInbound = {};
+    for (const m of State.movements) {
+      if ((m.status === 'confirmed' || m.status === 'shipped') && m.to === wh.key) {
+        confirmedInbound[m.upc] = (confirmedInbound[m.upc] || 0) + (m.qty || 0);
+      }
+    }
     State.merged.forEach(p => {
-      const avail = p[wh.avail]||0, monthly = (p[wh.vel]||0)/wh.velDiv;
-      if (monthly <= 0) return;
+      const avail = (p[wh.avail]||0) + (confirmedInbound[p.upc]||0);
+      const monthly = (p[wh.vel]||0)/wh.velDiv;
+      if (monthly <= 0 || avail < 0) return;
       const weeks = (avail/monthly)*4.33;
       if (weeks < CONFIG.REORDER_WEEKS) { alertCount++; if (weeks < 4) criticalCount++; }
     });
@@ -2555,9 +2563,9 @@ function buildNeedsAttentionBanner() {
   el.style.position = 'relative';
   el.style.overflow = 'hidden';
   el.innerHTML = `
-    <div id="na-possum-wrap" style="position:absolute;bottom:0;left:0;pointer-events:none;transform:translateX(-160px);">
-      <svg width="140" height="52" viewBox="0 0 140 52">
-        <g transform="translate(0,40)">
+    <div id="na-possum-wrap" style="position:absolute;bottom:0;left:0;pointer-events:none;transform:translateX(-180px);">
+      <svg width="180" height="56" viewBox="0 0 180 56" overflow="visible">
+        <g transform="translate(80,38)">
           <ellipse cx="0" cy="2" rx="26" ry="15" fill="rgba(200,200,200,0.85)"/>
           <ellipse cx="2" cy="8" rx="15" ry="8" fill="rgba(235,235,235,0.9)"/>
           <circle cx="25" cy="-5" r="12" fill="rgba(200,200,200,0.9)"/>
@@ -2568,7 +2576,7 @@ function buildNeedsAttentionBanner() {
           <circle cx="37" cy="-11" r="1" fill="white"/>
           <ellipse cx="18" cy="-16" rx="5" ry="6" fill="rgba(200,200,200,0.9)"/>
           <ellipse cx="18" cy="-16" rx="3" ry="4" fill="#e89696"/>
-          <path d="M-22,5 Q-40,1 -46,-6 Q-50,-12 -43,-16" fill="none" stroke="#e8a0a0" stroke-width="3.5" stroke-linecap="round"/>
+          <path d="M-22,5 Q-42,1 -48,-6 Q-52,-14 -44,-18" fill="none" stroke="#e8a0a0" stroke-width="3.5" stroke-linecap="round"/>
           <line id="l1" x1="14" y1="12" x2="17" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
           <line id="l2" x1="5" y1="12" x2="2" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
           <line id="l3" x1="-8" y1="12" x2="-6" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
