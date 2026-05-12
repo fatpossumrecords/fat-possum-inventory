@@ -2201,6 +2201,18 @@ function buildMovementsSummaryHTML() {
   return '<table class="dash-table"><thead><tr><th>Route</th><th class="num">Items</th><th class="num">Units</th><th>Status</th><th>PO#</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
+function countUp(el, target, duration=800) {
+  if (!el) return;
+  const start = performance.now();
+  const step = ts => {
+    const progress = Math.min((ts - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    el.textContent = Math.round(ease * target).toLocaleString();
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function renderDashboard() {
   const el = document.getElementById('dashboard-body');
   if (!el) return;
