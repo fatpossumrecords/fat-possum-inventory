@@ -1948,6 +1948,14 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('grp-export')) {
     exportGroup(decodeURIComponent(e.target.dataset.sid));
   }
+  if (e.target.classList.contains('dash-cat-link')) {
+    e.preventDefault();
+    jumpToTitle(e.target.dataset.cat);
+  }
+  if (e.target.classList.contains('dash-po-link')) {
+    e.preventDefault();
+    switchView('movements');
+  }
   if (e.target.classList.contains('mov-recalc')) {
     const idx = parseInt(e.target.dataset.idx);
     const qtyInput = e.target.previousElementSibling;
@@ -2183,7 +2191,7 @@ function buildMovementsSummaryHTML() {
   const groups = {};
   State.movements.forEach(m => {
     const sid = m.shipmentId || (m.from+'-'+m.to+'-legacy');
-    if (!groups[sid]) groups[sid] = { from:m.from, to:m.to, items:[], status:m.status||'draft', poNumber:m.poNumber||'' };
+    if (!groups[sid]) groups[sid] = { from:m.from, to:m.to, items:[], status:m.status||'draft', poNumber:m.poNumber||'', shipmentId:sid };
     groups[sid].items.push(m);
   });
   const STATUS_COLOR = { draft:'var(--text-muted)', confirmed:'#3b7de8', shipped:'var(--orange)', processed:'var(--green)' };
@@ -2191,15 +2199,25 @@ function buildMovementsSummaryHTML() {
   const rows = Object.values(groups).map(g => {
     const totalQty = g.items.reduce((s,m) => s+(m.qty||0), 0);
     const color = STATUS_COLOR[g.status] || 'var(--text-muted)';
+    // Top catalog by qty
+    const topItem = g.items.reduce((a,b) => (b.qty||0) > (a.qty||0) ? b : a, g.items[0]);
+    const topCat = topItem?.catalog || '—';
+    const extraCount = g.items.length - 1;
+    const catCell = `<a href='#' class='dash-cat-link' data-cat='${esc(topCat)}' style='font-size:11px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent);'>${esc(topCat)}</a>`
+      + (extraCount > 0 ? `<span style='color:var(--text-dim);font-size:9px'> +${extraCount}</span>` : '');
+    // PO# links to movements page
+    const poCell = g.poNumber
+      ? `<a href='#' class='dash-po-link' style='font-size:10px;color:var(--accent);font-weight:600;text-decoration:none;'>${esc(g.poNumber)}</a>`
+      : '<span style="color:var(--text-muted);font-size:10px">—</span>';
     return '<tr>'
       + '<td style="font-size:11px">' + (WH_LABELS[g.from]||g.from) + ' → ' + (WH_LABELS[g.to]||g.to) + '</td>'
-      + '<td class="num">' + g.items.length + '</td>'
+      + '<td style="font-family:monospace">' + catCell + '</td>'
       + '<td class="num">' + totalQty.toLocaleString() + '</td>'
       + '<td style="color:' + color + ';font-weight:600;font-size:11px">' + (STATUS_LABEL[g.status]||g.status) + '</td>'
-      + '<td style="font-size:10px;color:var(--text-muted)">' + esc(g.poNumber||'—') + '</td>'
+      + '<td>' + poCell + '</td>'
       + '</tr>';
   }).join('');
-  return '<table class="dash-table"><thead><tr><th>Route</th><th class="num">Items</th><th class="num">Units</th><th>Status</th><th>PO#</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  return '<table class="dash-table"><thead><tr><th>Route</th><th>Catalog #</th><th class="num">Units</th><th>Status</th><th>PO#</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function countUp(el, target, duration=800) {
