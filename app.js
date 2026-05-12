@@ -2284,25 +2284,7 @@ function renderDashboard() {
         <h3>Active Movements</h3>
         ${buildMovementsSummaryHTML()}
       </div>
-      <div class="dash-section">
-        <h3>Warehouse Snapshot</h3>
-        <table class="dash-table">
-          <thead><tr><th>Warehouse</th><th class="num">Available</th><th class="num">Alerts</th></tr></thead>
-          <tbody>
-            ${[
-              { label:'Fat Possum WH', avail: State.merged.reduce((s,p)=>s+(p.fp_available||0),0), alerts: State.merged.filter(p=>{ const m=(p.fp_12ms||0)/12; return m>0 && ((p.fp_available||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
-              { label:'Orchard US',    avail: State.merged.reduce((s,p)=>s+(p.us_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.us_12ms||0)/12; return m>0 && ((p.us_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
-              { label:'Orchard Canada',avail: State.merged.reduce((s,p)=>s+(p.ca_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.ca_12ms||0)/12; return m>0 && ((p.ca_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
-              { label:'Orchard UK',    avail: State.merged.reduce((s,p)=>s+(p.uk_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.uk_last_yr||0)/12; return m>0 && ((p.uk_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
-              { label:'Orchard EU',    avail: State.merged.reduce((s,p)=>s+(p.eu_avail||0),0),     alerts: State.merged.filter(p=>{ const m=(p.eu_this_yr||0)/12; return m>0 && ((p.eu_avail||0)/m)*4.33 < CONFIG.REORDER_WEEKS; }).length },
-            ].map(w => `<tr>
-              <td>${w.label}</td>
-              <td class="num">${w.avail.toLocaleString()}</td>
-              <td class="num">${w.alerts > 0 ? `<span style="color:var(--red);font-weight:600">${w.alerts}</span>` : '<span style="color:var(--green)">✓</span>'}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
+
 
       
       </div>
