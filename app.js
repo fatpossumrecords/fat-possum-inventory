@@ -1155,6 +1155,7 @@ const INV_COLS = [
   { id:'upc',        label:'UPC',         num:false, group:'meta',  always:true  },
   { id:'format',     label:'Format',      num:false, group:'meta',  always:true  },
   { id:'status',     label:'Status',      num:false, group:'meta',  always:true  },
+  { id:'open_po',    label:'Open PO',     num:false, group:'meta',  always:true  },
   // FP WH
   { id:'fp_available', label:'FP Avail',  num:true,  group:'fp',    always:true  },
   { id:'fp_inbound',   label:'FP Inbound',num:true,  group:'fp',    always:false },
@@ -1308,6 +1309,7 @@ window.handleInvSort = function(col) {
 function getVal(p, colId) {
   if (colId === 'total') return (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
   if (colId === 'status') return stockStatus(p);
+  if (colId === 'open_po') return '';
   return p[colId] ?? '';
 }
 
@@ -1388,6 +1390,12 @@ function renderInventory() {
       }
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
+      if (col.id === 'open_po') {
+        const hasMov = State.movements.some(m => m.upc === p.upc && (m.status === 'confirmed' || m.status === 'shipped'));
+        const hasPO  = !!(State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty;
+        const mark = (hasMov || hasPO) ? '<span style="color:var(--green);font-size:14px;" title="' + (hasPO ? 'Open PO' : '') + (hasMov && hasPO ? ' + ' : '') + (hasMov ? 'Movement confirmed' : '') + '">✓</span>' : '';
+        return `<td class="${pinnedClass}" style="text-align:center;${style}">${mark}</td>`;
+      }
       if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
       if (col.id === 'catalog') return `<td class="mob-catalog${pinnedClass}" style="${style}"><code>${esc(v)}</code></td>`;
       if (col.id === 'upc')     return `<td class="${pinnedClass}" style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
