@@ -148,6 +148,16 @@ function bootApp() {
   } catch(e) {}
 
   // Load Gist FIRST — has orchard data, suppressions, manual artists, movements
+  // Poll until banner has candidates and dashboard is active
+  let _bannerInterval = setInterval(() => {
+    if (State.merged.length > 0) {
+      buildNeedsAttentionBanner();
+      const el = document.getElementById('needs-attention-banner');
+      if (el && el.style.display === 'flex') clearInterval(_bannerInterval);
+    }
+  }, 1000);
+  setTimeout(() => clearInterval(_bannerInterval), 30000); // stop after 30s
+
   loadGistData().then(() => {
     if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
@@ -2456,6 +2466,7 @@ window.updateFPSales = async function() {
 function buildNeedsAttentionBanner() {
   const el = document.getElementById('needs-attention-banner');
   if (!el) return;
+  if (!State.merged.length) return;
 
   // Find candidates: velocity >= 10/mo, under 4 weeks at any warehouse, not in movements or mfg queue
   const WAREHOUSES_NA = [
