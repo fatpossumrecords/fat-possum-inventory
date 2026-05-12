@@ -999,7 +999,7 @@ window.saveManualLabel = async function(upc, value) {
 window.initSheetsAuth = function() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CONFIG.GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
     callback: (resp) => {
       if (resp.access_token) {
         State.sheetsToken = resp.access_token;
@@ -1061,6 +1061,9 @@ async function syncToSheets() {
     // Write header if sheet is empty
     if (existingRows.length === 0) {
       appends.unshift(HEADER);
+    } else if (existingRows.length === 1) {
+      // Only header row — first real sync
+      // no-op, appends will add data below header
     }
 
     // Batch update existing rows
