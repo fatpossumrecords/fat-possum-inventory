@@ -173,8 +173,9 @@ th {
   padding: 9px 10px;
   border-bottom: 2px solid var(--border);
   border-right: 1px solid var(--border);
-  white-space: nowrap; text-align: left; user-select: none;
+  white-space: normal; text-align: left; user-select: none;
   overflow: hidden;
+  word-break: break-word;
 }
 /* Frozen columns always have solid background */
 th.is-pinned { background: var(--surface2) !important; }
