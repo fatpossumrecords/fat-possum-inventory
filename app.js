@@ -2455,11 +2455,12 @@ function buildMovementsSummaryHTML() {
     if (!groups[sid]) groups[sid] = { from:m.from, to:m.to, items:[], status:m.status||'draft', poNumber:m.poNumber||'', shipmentId:sid };
     groups[sid].items.push(m);
   });
-  const STATUS_COLOR = { draft:'var(--text-muted)', confirmed:'#3b7de8', shipped:'var(--orange)', processed:'var(--green)' };
+  const STATUS_COLOR = { draft:'var(--text-muted)', confirmed:'#3b7de8', shipped:'var(--green)', processed:'var(--green)' };
   const STATUS_LABEL = { draft:'Draft', confirmed:'Confirmed', shipped:'Shipped', processed:'Processed' };
   const rows = Object.values(groups).map(g => {
     const totalQty = g.items.reduce((s,m) => s+(m.qty||0), 0);
     const color = STATUS_COLOR[g.status] || 'var(--text-muted)';
+    const rowBg = g.status === 'shipped' ? 'background:rgba(39,174,96,0.08);' : '';
     // Top catalog by qty
     const topItem = g.items.reduce((a,b) => (b.qty||0) > (a.qty||0) ? b : a, g.items[0]);
     const topCat = topItem?.catalog || '—';
@@ -2470,11 +2471,20 @@ function buildMovementsSummaryHTML() {
     const poCell = g.poNumber
       ? `<a href='#' class='dash-po-link' style='font-size:10px;color:var(--accent);font-weight:600;text-decoration:none;'>${esc(g.poNumber)}</a>`
       : '<span style="color:var(--text-muted);font-size:10px">—</span>';
-    return '<tr>'
+    // Status with date
+    const dateRef = g.items[0];
+    const dateStr = g.status === 'shipped' && dateRef?.shippedAt
+      ? ' (' + new Date(dateRef.shippedAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'}) + ')'
+      : g.status === 'confirmed' && dateRef?.confirmedAt
+      ? ' (' + new Date(dateRef.confirmedAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'}) + ')'
+      : g.status === 'processed' && dateRef?.processedAt
+      ? ' (' + new Date(dateRef.processedAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric'}) + ')'
+      : '';
+    return '<tr style="' + rowBg + '">'
       + '<td style="font-size:11px">' + (WH_LABELS[g.from]||g.from) + ' → ' + (WH_LABELS[g.to]||g.to) + '</td>'
       + '<td style="font-family:monospace">' + catCell + '</td>'
       + '<td class="num">' + totalQty.toLocaleString() + '</td>'
-      + '<td style="color:' + color + ';font-weight:600;font-size:11px">' + (STATUS_LABEL[g.status]||g.status) + '</td>'
+      + '<td style="color:' + color + ';font-weight:600;font-size:11px">' + (STATUS_LABEL[g.status]||g.status) + dateStr + '</td>'
       + '<td>' + poCell + '</td>'
       + '</tr>';
   }).join('');
