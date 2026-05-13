@@ -1526,22 +1526,20 @@ function renderInventory() {
       }
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'label') {
-        const lblVal = State.manualLabels[p.upc] || v;
+        const lblVal = State.manualLabels[p.upc] || v || '';
+        const isManual = !!State.manualLabels[p.upc];
+        const listId = 'lbl-' + p.upc;
         const labels = [...new Set(State.merged.map(x => normalizeLabel(x.label)).filter(Boolean))].sort();
-        const opts = labels.map(l => `<option value="${esc(l)}"${l===lblVal?' selected':''}>${esc(l)}</option>`).join('');
-        return `<td class="${pinnedClass}" style="${style}">
-          <div style="display:flex;gap:3px;align-items:center;">
-            <select data-upc="${p.upc}" onchange="saveManualLabel('${p.upc}',this.value)"
-              style="font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);max-width:90px;">
-              <option value="">—</option>
-              ${opts}
-            </select>
-            <input type="text" placeholder="+" data-upc="${p.upc}"
-              style="width:28px;font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);"
-              title="Add new label name"
-              onkeydown="if(event.key==='Enter'&&this.value.trim()){saveManualLabel('${p.upc}',this.value.trim());this.value='';}" />
-          </div>
-        </td>`;
+        const dataopts = labels.map(l => '<option value="' + esc(l) + '">').join('');
+        return '<td class="' + pinnedClass + '" style="' + style + '">'
+          + '<datalist id="' + listId + '">' + dataopts + '</datalist>'
+          + '<input type="text" list="' + listId + '" value="' + esc(lblVal) + '" data-upc="' + p.upc + '" data-orig="' + esc(lblVal) + '"'
+          + ' class="label-input"'
+          + ' style="width:105px;font-size:10px;padding:2px 5px;background:' + (isManual ? 'var(--surface)' : 'var(--surface2)') + ';border:1px solid ' + (isManual ? 'var(--border2)' : 'transparent') + ';border-radius:2px;color:var(--text);"'
+          + ' onfocus="this.style.border=\'1px solid var(--accent)\'"'
+          + ' onblur="handleLabelBlur(this)"'
+          + ' oncontextmenu="event.preventDefault();clearManualLabel(\''+p.upc+'\')" />'
+          + '</td>';
       }
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
       if (col.id === 'open_po') {
