@@ -1046,8 +1046,14 @@ async function syncToSheets() {
       const fmt    = State.manualFormats[p.upc] || p.format || '';
       const lbl    = State.manualLabels[p.upc]  || p.label  || '';
       const boxLot = State.boxLots[p.upc] || '';
-      const status = stockStatus(p);
-      return [p.artist, p.title, p.catalog, p.upc, boxLot, fmt, lbl, status, p.fp_available||0];
+      // FP-only status for sheet
+      const fpMonthly = (p.fp_12ms||0) / 12;
+      const fpStatus = (p.fp_available||0) === 0 ? 'out'
+        : fpMonthly <= 0 ? 'ok'
+        : ((p.fp_available||0) / fpMonthly) * 4.33 < 4 ? 'critical'
+        : ((p.fp_available||0) / fpMonthly) * 4.33 < CONFIG.REORDER_WEEKS ? 'low'
+        : 'ok';
+      return [p.artist, p.title, p.catalog, p.upc, boxLot, fmt, lbl, fpStatus, p.fp_available||0];
     });
 
   const HEADER = ['Artist','Title','Catalog #','UPC','Box Lot','Format','Label','Status','FP Available'];
