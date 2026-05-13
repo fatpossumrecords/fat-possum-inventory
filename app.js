@@ -1982,7 +1982,18 @@ function renderAlerts() {
                 if (!totalNeed) return '<td></td><td></td>';
                 const canCover = (p.fp_available||0) >= totalNeed;
                 const nc = canCover ? '<td class="num" style="font-weight:700;color:var(--accent)">'+totalNeed.toLocaleString()+'</td>' : '<td class="num" style="font-size:10px;color:var(--text-muted)">FP insufficient</td>';
-                const fc = '<td style="font-size:10px;color:var(--text-muted);white-space:nowrap;">'+needingWhs.join(' · ')+'</td>';
+                // 2x2 grid box for For Who
+                const WH_ALL = ['US','CA','UK','EU'];
+                const grid = WH_ALL.map(w => {
+                  const active = needingWhs.includes(w);
+                  return '<span style="display:inline-block;padding:1px 5px;margin:1px;border-radius:2px;font-size:9px;font-weight:700;'
+                    + (active ? 'background:var(--accent);color:white;' : 'background:var(--surface2);color:var(--text-dim);')
+                    + '">' + w + '</span>';
+                });
+                const fc = '<td style="white-space:normal;">'
+                  + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;width:52px;">'
+                  + grid.join('')
+                  + '</div></td>';
                 return nc+fc;
               })()}
             </tr>`;
