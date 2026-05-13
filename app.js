@@ -1927,7 +1927,7 @@ function renderAlerts() {
           ${sortTh('suggestQty','12M Need',true)}
           ${sortTh('transferQty','Can Transfer',true)}
           <th>Replenish From</th>
-          ${wh.key === 'fp' ? '<th class="num">Global Supply Need</th><th>For Who</th>' : ''}
+          ${wh.key !== 'fp' ? '<th class="num">Global Supply Need</th><th>For Who</th>' : ''}
         </tr></thead>
         <tbody>
           ${alerts.map(p => {
@@ -1964,7 +1964,27 @@ function renderAlerts() {
               <td class="num" style="font-weight:600;color:var(--accent)">${p.suggestQty > 0 ? p.suggestQty.toLocaleString() : '<span class="num-zero">—</span>'}</td>
               <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}</td>
               ${repCell}
-
+              ${(()=>{
+                if (wh.key === 'fp') return '';
+                const OWH = [
+                  { key:'us', avail: p.us_avail||0, vel12: p.us_12ms||0 },
+                  { key:'ca', avail: p.ca_avail||0, vel12: p.ca_12ms||0 },
+                  { key:'uk', avail: p.uk_avail||0, vel12: p.uk_last_yr||0 },
+                  { key:'eu', avail: p.eu_avail||0, vel12: p.eu_this_yr||0 },
+                ];
+                const W2 = { us:'US', ca:'CA', uk:'UK', eu:'EU' };
+                let totalNeed = 0; const needingWhs = [];
+                for (const owh of OWH) {
+                  const mo = owh.vel12/12; if (mo<=0) continue;
+                  const wks = (owh.avail/mo)*4.33; if (wks>=CONFIG.REORDER_WEEKS) continue;
+                  const nd = Math.max(0,Math.ceil(mo*12-owh.avail)); totalNeed+=nd; needingWhs.push(W2[owh.key]);
+                }
+                if (!totalNeed) return '<td></td><td></td>';
+                const canCover = (p.fp_available||0) >= totalNeed;
+                const nc = canCover ? '<td class="num" style="font-weight:700;color:var(--accent)">'+totalNeed.toLocaleString()+'</td>' : '<td class="num" style="font-size:10px;color:var(--text-muted)">FP insufficient</td>';
+                const fc = '<td style="font-size:10px;color:var(--text-muted);white-space:nowrap;">'+needingWhs.join(' · ')+'</td>';
+                return nc+fc;
+              })()}
             </tr>`;
           }).join('')}
         </tbody>
