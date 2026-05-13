@@ -2955,9 +2955,7 @@ function buildNeedsAttentionBanner() {
   const WAREHOUSES_NA = [
     { key:'fp', avail:'fp_available', vel:'fp_12ms',    label:'Fat Possum WH' },
     { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
-    { key:'ca', avail:'ca_avail',     vel:'ca_12ms',    label:'Orchard Canada' },
     { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
-    { key:'eu', avail:'eu_avail',     vel:'eu_this_yr', label:'Orchard EU' },
   ];
 
   const addressedUpcs = new Set([
