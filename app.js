@@ -987,6 +987,25 @@ window.saveManualFormat = async function(upc, value) {
   syncToSheets();
 };
 
+window.handleLabelBlur = async function(input) {
+  const upc = input.dataset.upc;
+  const orig = input.dataset.orig;
+  const val = input.value.trim();
+  input.style.border = '1px solid ' + (val ? 'var(--border2)' : 'transparent');
+  if (val === orig) return; // no change
+  await saveManualLabel(upc, val);
+};
+
+window.clearManualLabel = async function(upc) {
+  if (!confirm('Clear manual label for this title?')) return;
+  delete State.manualLabels[upc];
+  const p = State.merged.find(x => x.upc === upc);
+  if (p) p.label = p._origLabel || '';
+  await saveGistData();
+  renderInventory();
+  toast('Label cleared.', '');
+};
+
 window.saveManualLabel = async function(upc, value) {
   if (value) State.manualLabels[upc] = value;
   else delete State.manualLabels[upc];
