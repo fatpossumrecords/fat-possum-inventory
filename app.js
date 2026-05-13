@@ -1927,7 +1927,6 @@ function renderAlerts() {
           ${sortTh('suggestQty','12M Need',true)}
           ${sortTh('transferQty','Can Transfer',true)}
           <th>Replenish From</th>
-          <th></th>
         </tr></thead>
         <tbody>
           ${alerts.map(p => {
@@ -1951,6 +1950,7 @@ function renderAlerts() {
               <td class="num">${numCell(p.avail)}</td>
               <td class="num">${p.monthly.toFixed(1)}</td>
               <td><span class="pill ${cls}">${weeks} wks</span>
+                ${p.sourceAvail < p.suggestQty && p.suggestQty > 0 ? '<div style="margin-top:3px;"><button onclick="openAllocModal(\''+p.upc+'\')" style="background:var(--red);border:none;border-radius:10px;padding:1px 8px;font-size:9px;font-weight:700;cursor:pointer;color:white;">⚑ Allocate</button></div>' : ''}
                 ${(()=>{
                   const _po = State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog];
                   const _mov = State.movements.find(m => m.upc === p.upc && (m.status==='confirmed'||m.status==='shipped'));
@@ -1963,7 +1963,7 @@ function renderAlerts() {
               <td class="num" style="font-weight:600;color:var(--accent)">${p.suggestQty > 0 ? p.suggestQty.toLocaleString() : '<span class="num-zero">—</span>'}</td>
               <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}</td>
               ${repCell}
-              <td style="white-space:nowrap;"><button onclick="openAllocModal('${p.upc}')" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;color:var(--text-muted);" title="Open allocation planner">Allocate</button></td>
+
             </tr>`;
           }).join('')}
         </tbody>
