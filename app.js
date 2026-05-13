@@ -1189,7 +1189,7 @@ function mergeData() {
       orchard_catalog: row['Product Code'] || '',
       orchard_title:   row['Release Name'] || '',
       artist:          row['Artist Name'] || '',
-      label:           row['Label Name'] || '',
+      label:           normalizeLabel(row['Label Name'] || ''),
       format:          row['Configuration'] || '',
       us_avail:   safeNum(row['US Available']),
       us_mtd:     safeNum(row['US MTDS#']),
@@ -1220,7 +1220,7 @@ function mergeData() {
       products.set(upc, {
         upc, catalog: o.orchard_catalog, title: o.orchard_title,
         packiyo_sku: '',
-        artist: o.artist, label: o.label, format: o.format,
+        artist: o.artist, label: normalizeLabel(o.label), format: o.format,
         fromPackiyo: false, fp_available: 0, fp_onhand: 0, fp_inbound: 0, fp_allocated: 0,
         fp_12ms: 0,
         ...o,
@@ -1508,14 +1508,20 @@ function renderInventory() {
       if (col.id === 'title')   return `<td class="mob-title${pinnedClass}" style="${style}">${esc(v)}</td>`;
       if (col.id === 'label') {
         const lblVal = State.manualLabels[p.upc] || v;
-        const labels = [...new Set(State.merged.map(x=>x.label).filter(Boolean))].sort();
+        const labels = [...new Set(State.merged.map(x => normalizeLabel(x.label)).filter(Boolean))].sort();
         const opts = labels.map(l => `<option value="${esc(l)}"${l===lblVal?' selected':''}>${esc(l)}</option>`).join('');
         return `<td class="${pinnedClass}" style="${style}">
-          <select data-upc="${p.upc}" onchange="saveManualLabel('${p.upc}',this.value)"
-            style="font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);max-width:110px;">
-            <option value="">—</option>
-            ${opts}
-          </select>
+          <div style="display:flex;gap:3px;align-items:center;">
+            <select data-upc="${p.upc}" onchange="saveManualLabel('${p.upc}',this.value)"
+              style="font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);max-width:90px;">
+              <option value="">—</option>
+              ${opts}
+            </select>
+            <input type="text" placeholder="+" data-upc="${p.upc}"
+              style="width:28px;font-size:10px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);"
+              title="Add new label name"
+              onkeydown="if(event.key==='Enter'&&this.value.trim()){saveManualLabel('${p.upc}',this.value.trim());this.value='';}" />
+          </div>
         </td>`;
       }
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
@@ -3370,6 +3376,15 @@ function setStatus(which, state, label) {
   if (dot) dot.className = 'status-dot ' + state;
   if (txt) txt.textContent = label;
 }
+function normalizeLabel(label) {
+  if (!label) return '';
+  const l = label.toLowerCase();
+  if (l.includes('fat possum')) return 'Fat Possum';
+  if (l.includes('grand jury')) return 'Grand Jury';
+  if (l.includes('epitaph')) return 'Epitaph';
+  return label;
+}
+
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function catalogLink(catalog) {
   const ec = esc(catalog);
