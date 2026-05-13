@@ -1927,6 +1927,7 @@ function renderAlerts() {
           ${sortTh('suggestQty','12M Need',true)}
           ${sortTh('transferQty','Can Transfer',true)}
           <th>Replenish From</th>
+          <th></th>
         </tr></thead>
         <tbody>
           ${alerts.map(p => {
@@ -1962,6 +1963,7 @@ function renderAlerts() {
               <td class="num" style="font-weight:600;color:var(--accent)">${p.suggestQty > 0 ? p.suggestQty.toLocaleString() : '<span class="num-zero">—</span>'}</td>
               <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}</td>
               ${repCell}
+              <td style="white-space:nowrap;"><button onclick="openAllocModal('${p.upc}')" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;color:var(--text-muted);" title="Open allocation planner">Allocate</button></td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -3360,6 +3362,206 @@ document.addEventListener('click', e => {
 });
 
 // ── JUMP TO TITLE ────────────────────────────────────────────
+// ── STOCK ALLOCATION PLANNER ─────────────────────────────────
+let _allocUpc = null;
+let _allocInputs = {};
+
+window.openAllocModal = function(upc) {
+  const p = State.merged.find(x => x.upc === upc);
+  if (!p) return;
+  _allocUpc = upc;
+  _allocInputs = {};
+
+  const modal = document.getElementById('alloc-modal');
+  document.getElementById('alloc-title').textContent = (p.artist||'') + ' — ' + (p.title||'');
+  document.getElementById('alloc-subtitle').textContent = (p.catalog||'') + ' · ' + (p.format||'');
+
+  // Warehouse definitions with stock and velocity
+  const WHS = [
+    { key:'fp', label:'Fat Possum WH',  avail: p.fp_available||0, vel12: p.fp_12ms||0,    source: null },
+    { key:'us', label:'Orchard US',     avail: p.us_avail||0,     vel12: p.us_12ms||0,    source: 'fp' },
+    { key:'uk', label:'Orchard UK',     avail: p.uk_avail||0,     vel12: p.uk_last_yr||0, source: 'us' },
+    { key:'eu', label:'Orchard EU',     avail: p.eu_avail||0,     vel12: p.eu_this_yr||0, source: 'us' },
+  ];
+
+  // Calculate needs for each warehouse
+  const needs = {};
+  WHS.forEach(wh => {
+    const monthly = wh.vel12 / 12;
+    const weeksLeft = monthly > 0 ? (wh.avail / monthly) * 4.33 : Infinity;
+    const need12mo = monthly > 0 ? Math.max(0, Math.ceil(monthly * 12 - wh.avail)) : 0;
+    needs[wh.key] = { monthly, weeksLeft, need12mo, ...wh };
+  });
+
+  // Running balances — start with current stock
+  const balances = { fp: p.fp_available||0, us: p.us_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
+
+  const body = document.getElementById('alloc-body');
+
+  // Sort by urgency (lowest weeks first, skip FP — it sources from manufacturing)
+  const alertWhs = WHS.filter(wh => wh.key !== 'fp' && needs[wh.key].need12mo > 0)
+    .sort((a,b) => needs[a.key].weeksLeft - needs[b.key].weeksLeft);
+
+  let html = '';
+
+  // FP stock summary header
+  const fpMonthly = (p.fp_12ms||0)/12;
+  const fpWeeks = fpMonthly > 0 ? ((p.fp_available||0)/fpMonthly*4.33).toFixed(1) : '∞';
+  const fpColor = parseFloat(fpWeeks) < 4 ? 'var(--red)' : parseFloat(fpWeeks) < 8 ? 'var(--orange)' : 'var(--green)';
+  html += '<div style="background:var(--surface2);border-radius:6px;padding:12px 14px;margin-bottom:16px;display:flex;gap:24px;align-items:center;">'
+    + '<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px;">FP WH Stock</div>'
+    + '<div style="font-size:22px;font-weight:700;font-family:monospace;color:var(--text)">' + (p.fp_available||0).toLocaleString() + '</div></div>'
+    + '<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px;">FP Weeks Left</div>'
+    + '<div style="font-size:22px;font-weight:700;font-family:monospace;color:' + fpColor + '">' + fpWeeks + '</div></div>'
+    + '<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px;">FP Inbound</div>'
+    + '<div style="font-size:22px;font-weight:700;font-family:monospace;color:var(--text-muted)">' + (p.fp_inbound||0).toLocaleString() + '</div></div>'
+    + '<div style="flex:1;text-align:right;font-size:10px;color:var(--text-muted)">Orchard US: ' + (p.us_avail||0).toLocaleString() + ' · UK: ' + (p.uk_avail||0).toLocaleString() + ' · EU: ' + (p.eu_avail||0).toLocaleString() + '</div>'
+    + '</div>';
+
+  if (!alertWhs.length) {
+    html += '<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:12px;">No active alerts for this title across warehouses.</div>';
+    body.innerHTML = html;
+    modal.style.display = 'flex';
+    return;
+  }
+
+  html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Allocate Stock — drag or type quantities</div>';
+
+  // One row per alerting warehouse, sorted by urgency
+  alertWhs.forEach(wh => {
+    const n = needs[wh.key];
+    const sourceKey = wh.source;
+    const sourceLabel = WH_LABELS[sourceKey] || sourceKey;
+    const sourceAvail = sourceKey ? (balances[sourceKey]||0) : 0;
+    const suggested = Math.min(n.need12mo, sourceAvail);
+    const weeksColor = n.weeksLeft < 4 ? 'var(--red)' : n.weeksLeft < 8 ? 'var(--orange)' : 'var(--text-muted)';
+    const inputId = 'alloc-qty-' + wh.key;
+
+    html += '<div style="border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:10px;" id="alloc-row-' + wh.key + '">'
+      + '<div style="display:flex;align-items:flex-start;gap:12px;">'
+      // Left: warehouse info
+      + '<div style="flex:1;">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">' + wh.label + '</div>'
+      + '<div style="display:flex;gap:16px;font-size:11px;">'
+      + '<span>Current: <b>' + wh.avail.toLocaleString() + '</b></span>'
+      + '<span style="color:' + weeksColor + '">Weeks left: <b>' + (isFinite(n.weeksLeft) ? n.weeksLeft.toFixed(1) : '∞') + '</b></span>'
+      + '<span>Mo. velocity: <b>' + n.monthly.toFixed(1) + '</b></span>'
+      + '<span>12M need: <b style="color:var(--accent)">' + n.need12mo.toLocaleString() + '</b></span>'
+      + '</div>'
+      + '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Source: ' + sourceLabel + ' (' + sourceAvail.toLocaleString() + ' available)</div>'
+      + '</div>'
+      // Right: qty input
+      + '<div style="flex-shrink:0;text-align:center;">'
+      + '<div style="font-size:9px;color:var(--text-muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Send</div>'
+      + '<input type="number" id="' + inputId + '" min="0" max="' + sourceAvail + '" value="' + suggested + '"'
+      + ' style="width:80px;text-align:center;font-size:18px;font-weight:700;font-family:monospace;padding:6px;background:var(--surface2);border:2px solid var(--accent);border-radius:4px;color:var(--text);"'
+      + ' oninput="updateAllocBalance()"'
+      + ' data-wh="' + wh.key + '" data-source="' + (sourceKey||'') + '" />'
+      + '<div style="font-size:9px;color:var(--text-muted);margin-top:3px;" id="alloc-leaves-' + wh.key + '">leaves ' + (sourceAvail - suggested).toLocaleString() + ' at source</div>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  });
+
+  // Running balance summary
+  html += '<div id="alloc-balance-summary" style="background:var(--surface2);border-radius:4px;padding:10px 14px;font-size:11px;color:var(--text-muted);margin-top:4px;"></div>';
+
+  body.innerHTML = html;
+  modal.style.display = 'flex';
+  updateAllocBalance();
+};
+
+window.updateAllocBalance = function() {
+  const p = State.merged.find(x => x.upc === _allocUpc);
+  if (!p) return;
+  const balances = { fp: p.fp_available||0, us: p.us_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
+
+  // Process each input and update running balances
+  document.querySelectorAll('[id^="alloc-qty-"]').forEach(input => {
+    const whKey = input.dataset.wh;
+    const sourceKey = input.dataset.source;
+    const qty = parseInt(input.value)||0;
+    _allocInputs[whKey] = qty;
+
+    // Deduct from source
+    if (sourceKey) balances[sourceKey] = Math.max(0, (balances[sourceKey]||0) - qty);
+
+    // Update leaves note
+    const leavesEl = document.getElementById('alloc-leaves-' + whKey);
+    if (leavesEl && sourceKey) {
+      const sourceAfter = balances[sourceKey] !== undefined ? balances[sourceKey] : 0;
+      const color = sourceAfter < 0 ? 'var(--red)' : sourceAfter === 0 ? 'var(--orange)' : 'var(--text-muted)';
+      leavesEl.style.color = color;
+      leavesEl.textContent = 'leaves ' + Math.max(0, sourceAfter).toLocaleString() + ' at source';
+      // Highlight if over-allocating
+      input.style.borderColor = qty > (parseInt(input.max)||0) ? 'var(--red)' : 'var(--accent)';
+    }
+  });
+
+  // Summary bar
+  const summary = document.getElementById('alloc-balance-summary');
+  if (summary) {
+    summary.innerHTML = 'After allocation — '
+      + 'FP: <b>' + balances.fp.toLocaleString() + '</b> · '
+      + 'US: <b>' + balances.us.toLocaleString() + '</b> · '
+      + 'UK: <b>' + balances.uk.toLocaleString() + '</b> · '
+      + 'EU: <b>' + balances.eu.toLocaleString() + '</b>';
+  }
+};
+
+window.commitAllocation = function() {
+  const p = State.merged.find(x => x.upc === _allocUpc);
+  if (!p) return;
+
+  // Source map for each destination
+  const sourceMap = { us: 'fp', uk: 'us', eu: 'us' };
+  let added = 0;
+
+  for (const [whKey, qty] of Object.entries(_allocInputs)) {
+    if (!qty || qty <= 0) continue;
+    const from = sourceMap[whKey];
+    if (!from) continue;
+    // Find or create draft shipment for this route
+    const existing = State.movements.find(m => m.from === from && m.to === whKey && m.status === 'draft');
+    const shipmentId = existing ? existing.shipmentId : from + '→' + whKey + '-' + Date.now();
+    const srcMap = { fp: p.fp_available||0, us: p.us_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
+    const leaves = Math.max(0, (srcMap[from]||0) - qty);
+    const WH_SHORT = { fp:'FP WH', us:'Orchard US', uk:'Orchard UK', eu:'Orchard EU' };
+    State.movements.push({
+      from, to: whKey, shipmentId,
+      artist: p.artist, title: p.title,
+      catalog: p.orchard_catalog || p.catalog,
+      upc: p.upc, format: p.format, label: p.label,
+      qty, notes: 'Leaves ' + leaves + ' at ' + (WH_SHORT[from]||from),
+      status: 'draft', poNumber: '',
+      confirmedAt: null, processedAt: null,
+      timestamp: new Date().toISOString(),
+    });
+    added++;
+  }
+
+  if (added) {
+    saveGistData();
+    renderMovementsTable();
+    toast(added + ' movement' + (added>1?'s':'') + ' added to queue.', 'success');
+    closeAllocModal();
+    switchView('movements');
+  } else {
+    toast('No quantities entered.', 'error');
+  }
+};
+
+window.closeAllocModal = function() {
+  document.getElementById('alloc-modal').style.display = 'none';
+  _allocUpc = null;
+  _allocInputs = {};
+};
+
+// Close on backdrop click
+document.addEventListener('click', e => {
+  if (e.target.id === 'alloc-modal') closeAllocModal();
+});
+
 window.jumpToTitle = function(catalog) {
   const searchInput = document.getElementById('search-input');
   if (searchInput) searchInput.value = catalog;
