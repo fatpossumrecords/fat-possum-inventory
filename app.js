@@ -1035,66 +1035,24 @@ async function syncToSheets() {
   const sheetRange = CONFIG.SHEET_NAME + '!A1';
 
   try {
-    // First get existing data to build UPC→row index map
-    const getRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A:D')}`,
-      { headers: { 'Authorization': 'Bearer ' + State.sheetsToken } }
+    // Clear entire sheet then rewrite from scratch
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME)}:clear`,
+      { method: 'POST', headers: { 'Authorization': 'Bearer ' + State.sheetsToken } }
     );
-    const existing = await getRes.json();
-    const existingRows = existing.values || [];
-    // Build map: UPC (col D = index 3) → row number (1-based)
-    const upcToRow = {};
-    existingRows.forEach((row, i) => {
-      if (i === 0) return; // skip header
-      const upc = (row[3] || '').trim();
-      if (upc) upcToRow[upc] = i + 1; // 1-based sheet row
-    });
 
-    // Separate into updates (existing rows) and appends (new rows)
-    const updates = [];
-    const appends = [];
-    for (const row of rows) {
-      const upc = row[3];
-      if (upcToRow[upc]) {
-        updates.push({ range: `${CONFIG.SHEET_NAME}!A${upcToRow[upc]}`, values: [row] });
-      } else {
-        appends.push(row);
+    // Write header + all rows in one call
+    const allRows = [HEADER, ...rows];
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A1')}?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: allRows }),
       }
-    }
+    );
 
-    // Write header if sheet is empty
-    if (existingRows.length === 0) {
-      appends.unshift(HEADER);
-    } else if (existingRows.length === 1) {
-      // Only header row — first real sync
-      // no-op, appends will add data below header
-    }
-
-    // Batch update existing rows
-    if (updates.length) {
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values:batchUpdate`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ valueInputOption: 'RAW', data: updates }),
-        }
-      );
-    }
-
-    // Append new rows
-    if (appends.length) {
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A1')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: appends }),
-        }
-      );
-    }
-
-    console.log('Sheets sync OK — updated:', updates.length, 'appended:', appends.length);
+    console.log('Sheets sync OK — rows written:', rows.length);
     setStatus('sheets', 'ok', 'Synced ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}));
   } catch(e) {
     console.warn('Sheets sync failed:', e.message);
