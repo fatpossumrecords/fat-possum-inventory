@@ -1860,7 +1860,23 @@ function renderAlerts() {
       const transferQty = Math.min(suggestQty, sourceAvail);
       const shortfall   = Math.max(0, suggestQty - sourceAvail);
       const leavesAtSource = isFinite(sourceAvail) ? Math.max(0, sourceAvail - transferQty) : null;
-      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail, leavesAtSource };
+      // Calculate global supply need (sum of all Orchard shortfalls) for non-FP warehouses
+      let globalNeed = 0;
+      if (wh.key !== 'fp') {
+        const ONWHS = [
+          { avail: p.us_avail||0, vel12: p.us_12ms||0 },
+          { avail: p.ca_avail||0, vel12: p.ca_12ms||0 },
+          { avail: p.uk_avail||0, vel12: p.uk_last_yr||0 },
+          { avail: p.eu_avail||0, vel12: p.eu_this_yr||0 },
+        ];
+        for (const owh of ONWHS) {
+          const mo = owh.vel12/12; if (mo<=0) continue;
+          const wks = (owh.avail/mo)*4.33; if (wks>=CONFIG.REORDER_WEEKS) continue;
+          globalNeed += Math.max(0, Math.ceil(mo*12-owh.avail));
+        }
+      }
+      const effectiveQty = Math.max(transferQty, globalNeed);
+      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail, leavesAtSource, globalNeed, effectiveQty };
     }).filter(Boolean);
 
     // Apply label filter
@@ -1942,7 +1958,7 @@ function renderAlerts() {
               ? '<td style="color:var(--text-muted);font-size:11px">' + repLabel + leavesNote + '</td>'
               : '<td style="font-size:11px"><a href="#" onclick="event.preventDefault();switchView(\'manufacturing\')" style="color:var(--accent);font-weight:600;">Order more?</a></td>';
             return `<tr>
-              <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.transferQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
+              <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.effectiveQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
               <td style="position:sticky;left:32px;z-index:3;${bg};width:160px;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.artist)}</td>
               <td style="position:sticky;left:192px;z-index:3;${bg};width:220px;min-width:220px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.title)}</td>
               <td style="position:sticky;left:412px;z-index:3;${bg};width:100px;min-width:100px;box-shadow:3px 0 5px rgba(0,0,0,0.07);white-space:nowrap;">${catalogLink(p.catalog)}</td>
