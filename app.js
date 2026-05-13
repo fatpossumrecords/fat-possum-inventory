@@ -1016,7 +1016,7 @@ async function syncToSheets() {
   if (!State.sheetsToken) return; // not authed yet — skip silently
   const availableWarehouseUpcs = new Set(
     State.packiyoProducts
-      .filter(p => (p.tags||'').toLowerCase().includes('available warehouse'))
+      .filter(p => (p.tags||'').toLowerCase().includes('available wholesale'))
       .map(p => (p.barcode||'').replace(/[^0-9]/g,'').replace(/^0+/,''))
       .filter(Boolean)
   );
