@@ -1851,7 +1851,7 @@ function renderAlerts() {
       if (weeksLeft >= CONFIG.REORDER_WEEKS) return null;
       const suggestQty = Math.max(0, Math.ceil(monthly * 12 - avail));
       // Cap transfer at what the source warehouse actually has available
-      const sourceAvail = wh.key === 'fp' ? Infinity  // FP sources from manufacturing, not transfer
+      const sourceAvail = wh.key === 'fp' ? (p.us_avail||0)  // FP replenishes from Orchard US
                         : wh.key === 'us' ? (p.fp_available||0)
                         : wh.key === 'ca' ? (p.us_avail||0)
                         : wh.key === 'uk' ? (p.us_avail||0)
