@@ -1579,7 +1579,8 @@ function renderInventory() {
           <input type="text" value="${esc(bl)}" placeholder="—"
             data-upc="${p.upc}"
             style="width:80px;font-size:11px;padding:2px 5px;background:${bl?'var(--surface)':'var(--surface2)'};border:1px solid ${bl?'var(--border2)':'transparent'};border-radius:2px;color:var(--text);font-family:'DM Mono',monospace;"
-            onchange="saveBoxLot('${p.upc}',this.value)"
+            onchange="saveBoxLot('${p.upc}',this.value).then(()=>{this.style.background='#e8f5e9';setTimeout(()=>this.style.background=this.value?'var(--surface)':'var(--surface2)',600)})"
+            onkeydown="if(event.key==='Enter'){saveBoxLot('${p.upc}',this.value).then(()=>{this.style.background='#e8f5e9';setTimeout(()=>this.style.background=this.value?'var(--surface)':'var(--surface2)',600)});this.blur()}"
             onfocus="this.style.border='1px solid var(--accent)'"
             onblur="this.style.border='1px solid '+(this.value?'var(--border2)':'transparent')" />
         </td>`;
