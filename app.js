@@ -1042,6 +1042,7 @@ async function syncToSheets() {
   console.log('Available Warehouse SKUs for sheet:', availableWarehouseUpcs.size);
   const rows = State.merged
     .filter(p => availableWarehouseUpcs.has(p.upc))
+    .sort((a, b) => (a.artist||'').toLowerCase().localeCompare((b.artist||'').toLowerCase()))
     .map(p => {
       const fmt    = State.manualFormats[p.upc] || p.format || '';
       const lbl    = State.manualLabels[p.upc]  || p.label  || '';
