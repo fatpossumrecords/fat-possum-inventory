@@ -1909,11 +1909,10 @@ function renderAlerts() {
           <col style="width:80px">
           <col style="width:70px">
           <col style="width:70px">
-          <col style="width:70px">
-          <col style="width:70px">
-          <col style="width:100px">
+          <col style="width:80px">
           <col style="width:90px">
-          <col style="width:100px">
+          <col style="width:90px">
+          <col style="width:110px">
         </colgroup>
         <thead><tr>
           <th style="position:sticky;left:0;z-index:11;background:var(--surface2);width:32px;min-width:32px;text-align:center;"><input type="checkbox" title="Select all" onchange="toggleAllAlerts('${wh.key}',this.checked)" /></th>
@@ -1924,18 +1923,23 @@ function renderAlerts() {
           ${sortTh('format','Format')}
           ${sortTh('avail','Avail',true)}
           ${sortTh('monthly','Mo. Velocity',true)}
-          ${sortTh('weeksLeft','Weeks Left',true)}
           <th>Status</th>
+          ${sortTh('suggestQty','12M Need',true)}
           ${sortTh('transferQty','Can Transfer',true)}
-          ${sortTh('shortfall','Mfg Shortfall',true)}
           <th>Replenish From</th>
         </tr></thead>
         <tbody>
           ${alerts.map(p => {
             const weeks = p.weeksLeft.toFixed(1);
             const cls = p.weeksLeft < 2 ? 'pill-critical' : p.weeksLeft < 4 ? 'pill-urgent' : 'pill-low';
-            const rowKey = `${wh.key}|${p.upc}`;
             const bg = 'background:var(--surface)';
+            // Replenish from cell
+            const leavesNote = p.leavesAtSource !== null
+              ? '<div style="font-size:9px;color:' + (p.leavesAtSource===0 ? 'var(--red)' : 'var(--text-muted)') + ';font-weight:400;">leaves ' + p.leavesAtSource + ' at source</div>'
+              : '';
+            const repCell = p.sourceAvail > 0
+              ? '<td style="color:var(--text-muted);font-size:11px">' + repLabel + leavesNote + '</td>'
+              : '<td style="font-size:11px"><a href="#" onclick="event.preventDefault();switchView(\'manufacturing\')" style="color:var(--accent);font-weight:600;">Order more?</a></td>';
             return `<tr>
               <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.transferQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
               <td style="position:sticky;left:32px;z-index:3;${bg};width:160px;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.artist)}</td>
@@ -1945,7 +1949,6 @@ function renderAlerts() {
               <td>${esc(p.format)}</td>
               <td class="num">${numCell(p.avail)}</td>
               <td class="num">${p.monthly.toFixed(1)}</td>
-              <td class="num" style="font-weight:600">${weeks}</td>
               <td><span class="pill ${cls}">${weeks} wks</span>
                 ${(()=>{
                   const _po = State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog];
@@ -1956,9 +1959,9 @@ function renderAlerts() {
                   return _f;
                 })()}
               </td>
-              <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}${p.leavesAtSource !== null ? `<div style="font-size:9px;color:${p.leavesAtSource === 0 ? 'var(--red)' : 'var(--text-muted)'};font-weight:400;">leaves ${p.leavesAtSource} at source</div>` : ''}</td>
-              <td class="num">${p.shortfall > 0 ? `<span style="color:var(--red);font-weight:600">${p.shortfall}</span>` : '<span style="color:var(--green);font-size:11px">✓ covered</span>'}</td>
-              <td style="color:var(--text-muted);font-size:11px">${repLabel}</td>
+              <td class="num" style="font-weight:600;color:var(--accent)">${p.suggestQty > 0 ? p.suggestQty.toLocaleString() : '<span class="num-zero">—</span>'}</td>
+              <td class="num suggest-qty">${p.transferQty > 0 ? p.transferQty : '<span class="num-zero">—</span>'}</td>
+              ${repCell}
             </tr>`;
           }).join('')}
         </tbody>
