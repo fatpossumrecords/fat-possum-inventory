@@ -597,7 +597,7 @@ async function loadPackiyo() {
     // Load all products paginated
     let page = 1, allProducts = [];
     while (true) {
-      const data = await packiyoFetch('/products', { 'page[number]': page, 'page[size]': 100, 'include': 'tags' });
+      const data = await packiyoFetch('/products', { 'page[number]': page, 'page[size]': 100 });
       const items = data.data || [];
       if (!Array.isArray(items) || items.length === 0) break;
       allProducts = allProducts.concat(items);
@@ -606,11 +606,7 @@ async function loadPackiyo() {
       page++;
       await sleep(150); // avoid rate limit
     }
-    State.packiyoProducts = allProducts.map(p => ({
-      id: p.id,
-      ...p.attributes,
-      tags: (p.attributes?.tags || []),
-    }));
+    State.packiyoProducts = allProducts.map(p => ({ id: p.id, ...p.attributes }));
     State.packiyoLoaded = true;
     setStatus('packiyo', 'ok', `${State.packiyoProducts.length} items`);
     syncToSheets();
@@ -620,7 +616,7 @@ async function loadPackiyo() {
         id: p.id, sku: p.sku, name: p.name, barcode: p.barcode,
         quantity_available: p.quantity_available, quantity_on_hand: p.quantity_on_hand,
         quantity_inbound: p.quantity_inbound, quantity_allocated: p.quantity_allocated,
-        tags: p.tags || [],
+        tags: p.tags || '',
       }));
       localStorage.setItem('fp_packiyo_products', JSON.stringify(slim));
     } catch(e) { console.warn('Products cache failed:', e.message); }
@@ -1020,8 +1016,8 @@ async function syncToSheets() {
   if (!State.sheetsToken) return; // not authed yet — skip silently
   const availableWarehouseUpcs = new Set(
     State.packiyoProducts
-      .filter(p => (p.tags||[]).some(t => (t.name||t||'').toLowerCase().includes('available warehouse')))
-      .map(p => (p.barcode||'').replace(/\D/g,'').replace(/^0+/,''))
+      .filter(p => (p.tags||'').toLowerCase().includes('available warehouse'))
+      .map(p => (p.barcode||'').replace(/[^0-9]/g,'').replace(/^0+/,''))
       .filter(Boolean)
   );
   console.log('Available Warehouse SKUs for sheet:', availableWarehouseUpcs.size);
