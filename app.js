@@ -83,6 +83,15 @@ window.addEventListener('DOMContentLoaded', () => {
     item.addEventListener('click', e => { e.preventDefault(); switchView(item.dataset.view); });
   });
 
+  // Handle browser back/forward
+  window.addEventListener('popstate', e => {
+    const view = e.state?.view || 'dashboard';
+    switchView(view, false);
+  });
+  // Set initial history state
+  const initialView = location.hash.replace('#','') || 'dashboard';
+  history.replaceState({ view: initialView }, '', '#' + initialView);
+
   document.getElementById('search-input').addEventListener('input', () => {
     const val = document.getElementById('search-input').value;
     if (val.length > 0) switchView('inventory');
@@ -138,7 +147,11 @@ function bootApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   const ur = document.getElementById('user-row');
-  if (State.user) ur.textContent = State.user.email;
+  if (State.user) {
+    const firstName = State.user.email.split('@')[0].split('.')[0];
+    const display = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+    ur.textContent = 'Hi ' + display;
+  }
   loadColumnLayout();
   // Restore hidden mfg items from localStorage
   try {
@@ -1053,7 +1066,7 @@ async function syncToSheets() {
         : fpAvail <= 15 ? 'critical'
         : fpAvail <= 50 ? 'low'
         : 'ok';
-      return [p.artist, p.title, p.catalog, p.upc, boxLot, fmt, lbl, fpStatus, fpAvail];
+      return [p.artist, p.title, p.catalog, p.upc, boxLot, fmt, lbl, fpStatus, fpAvail > 300 ? 300 : fpAvail];
     });
 
   const HEADER = ['Artist','Title','Catalog #','UPC','Box Lot','Format','Label','Status','FP Available'];
@@ -1066,8 +1079,11 @@ async function syncToSheets() {
       { method: 'POST', headers: { 'Authorization': 'Bearer ' + State.sheetsToken } }
     );
 
-    // Write header + all rows in one call
-    const allRows = [HEADER, ...rows];
+    // Write last updated row + header + all rows
+    const now = new Date();
+    const dateLabel = 'Last updated: ' + (now.getMonth()+1) + '/' + now.getDate() + '/' + String(now.getFullYear()).slice(2)
+      + ' ' + now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const allRows = [[dateLabel], HEADER, ...rows];
     await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A1')}?valueInputOption=RAW`,
       {
@@ -2913,14 +2929,17 @@ window.exportMfgQueue = function() {
 };
 
 // ── UPLOAD HISTORY SIDEBAR ───────────────────────────────────
-window.toggleUploadHistory = function() {
-  const panel = document.getElementById('upload-history-panel');
-  const arrow = document.getElementById('upload-history-arrow');
+window.toggleUploadHistory = function() { toggleSidebarSection('history'); };
+
+window.toggleSidebarSection = function(id) {
+  const panel = document.getElementById(id + '-panel');
+  const arrow = document.getElementById(id + '-arrow');
   if (!panel) return;
-  const open = panel.style.display === 'none';
-  panel.style.display = open ? 'block' : 'none';
+  const open = panel.style.display === 'none' || panel.style.display === '';
+  panel.style.display = open ? 'flex' : 'none';
+  if (id === 'actions') panel.style.flexDirection = 'column';
   if (arrow) arrow.textContent = open ? '▾' : '▸';
-  if (open) renderUploadHistory();
+  if (id === 'history' && open) renderUploadHistory();
 };
 
 function renderUploadHistory() {
@@ -3357,12 +3376,15 @@ window.jumpToTitle = function(catalog) {
 };
 
 // ── VIEW SWITCHING ────────────────────────────────────────────
-function switchView(viewName) {
+function switchView(viewName, pushHistory=true) {
   document.querySelectorAll('.view').forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`view-${viewName}`)?.classList.remove('hidden');
   document.getElementById(`view-${viewName}`)?.classList.add('active');
   document.querySelector(`[data-view="${viewName}"]`)?.classList.add('active');
+  if (pushHistory && history.state?.view !== viewName) {
+    history.pushState({ view: viewName }, '', '#' + viewName);
+  }
   const banner = document.getElementById('needs-attention-banner');
   if (banner) banner.style.display = viewName === 'dashboard' ? '' : 'none';
   if (viewName === 'dashboard') {
