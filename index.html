@@ -74,16 +74,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
         Suppressed
       </a>
-      <div style="border-top:1px solid var(--border);padding:8px 16px;">
-        <div onclick="toggleUploadHistory()" style="cursor:pointer;font-size:10px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;user-select:none;">
-          <span>CSV Upload History</span>
-          <span id="upload-history-arrow">▸</span>
-        </div>
-        <div id="upload-history-panel" style="display:none;margin-top:8px;font-size:10px;color:var(--text-muted);">
-          <div id="upload-history-list">No uploads yet.</div>
-        </div>
-      </div>
     <div class="sidebar-footer">
+
+      <!-- STATUS -->
       <div class="data-status">
         <div class="status-row">
           <span class="status-dot" id="packiyo-dot"></span>
@@ -100,38 +93,78 @@
           <span>Shopify</span>
           <span id="shopify-status-text" class="status-label">—</span>
         </div>
-        <div class="status-row" style="margin-top:6px;flex-direction:column;align-items:flex-start;gap:3px;">
+        <div class="status-row" style="flex-direction:column;align-items:flex-start;gap:3px;">
           <div style="display:flex;align-items:center;gap:6px;width:100%;">
             <span class="status-dot" id="gist-dot"></span>
             <span>Gist Storage</span>
             <span id="gist-status-text" class="status-label">—</span>
           </div>
-          <div style="width:100%;height:4px;background:var(--border2);border-radius:2px;overflow:hidden;">
+          <div style="width:100%;height:3px;background:var(--border2);border-radius:2px;overflow:hidden;">
             <div id="gist-bar" style="height:100%;width:0%;border-radius:2px;background:var(--green);transition:width 0.4s;"></div>
           </div>
         </div>
-        <div class="status-row" style="margin-top:6px;">
+        <div class="status-row">
           <span class="status-dot" id="sheets-dot"></span>
-          <span>Google Sheets</span>
+          <span>Sheets</span>
           <span id="sheets-status-text" class="status-label">—</span>
         </div>
-        <button onclick="initSheetsAuth()" class="btn-secondary btn-sm" style="margin-top:4px;width:100%;font-size:10px;">⟳ Sync to Sheets</button>
       </div>
-      <div id="orchard-last-upload" style="font-size:10px;color:var(--text-dim);margin-top:-4px"></div>
-      <button id="upload-csv-btn" class="btn-secondary btn-sm">Upload Orchard CSV</button>
-      <input type="file" id="csv-file-input" accept=".csv" class="hidden" />
-      <button id="upload-shopify-btn" class="btn-secondary btn-sm">Upload Shopify CSV</button>
-      <input type="file" id="shopify-file-input" accept=".csv" class="hidden" />
-      <button id="refresh-packiyo-btn" class="btn-secondary btn-sm">Refresh Packiyo</button>
-      <button id="update-sales-btn" class="btn-secondary btn-sm" onclick="updateFPSales()">Update FP Sales</button>
-      <div class="user-row" id="user-row"></div>
-      <button id="logout-btn" class="btn-ghost btn-sm">Sign out</button>
-      <a href="https://claude.ai" target="_blank" rel="noopener"
-        style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:8px;padding:7px 10px;background:linear-gradient(135deg,#b83228,#8B4513);border-radius:4px;color:white;font-size:11px;font-weight:700;text-decoration:none;letter-spacing:0.5px;opacity:0.9;transition:opacity 0.15s;"
-        onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.9'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-        Ask Claude
-      </a>
+
+      <!-- SYNC + SHEET LINK -->
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button onclick="initSheetsAuth()" title="Sync to Google Sheets"
+          style="flex:1;padding:4px 8px;font-size:10px;font-weight:600;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+          Sync Sheet
+        </button>
+        <a href="https://docs.google.com/spreadsheets/d/1idqsNpDe1qoBDY9X5m7nPalGvfEusmuO0DpOWtByaOQ/edit" target="_blank" rel="noopener" title="Open Google Sheet"
+          style="flex:1;padding:4px 8px;font-size:10px;font-weight:600;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;text-decoration:none;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Jump to Sheet
+        </a>
+      </div>
+
+      <!-- ACTIONS (expandable) -->
+      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:6px;">
+        <div onclick="toggleSidebarSection('actions')" style="cursor:pointer;font-size:10px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;user-select:none;text-transform:uppercase;letter-spacing:0.8px;">
+          <span>Actions</span>
+          <span id="actions-arrow">▸</span>
+        </div>
+        <div id="actions-panel" style="display:none;margin-top:6px;flex-direction:column;gap:4px;">
+          <button id="upload-csv-btn" class="btn-secondary btn-sm" style="font-size:10px;">Upload Orchard CSV</button>
+          <input type="file" id="csv-file-input" accept=".csv" class="hidden" />
+          <button id="upload-shopify-btn" class="btn-secondary btn-sm" style="font-size:10px;">Upload Shopify CSV</button>
+          <input type="file" id="shopify-file-input" accept=".csv" class="hidden" />
+          <button id="refresh-packiyo-btn" class="btn-secondary btn-sm" style="font-size:10px;">Refresh Packiyo</button>
+          <button id="update-sales-btn" class="btn-secondary btn-sm" style="font-size:10px;" onclick="updateFPSales()">Update FP Sales</button>
+        </div>
+      </div>
+
+      <!-- UPLOAD HISTORY (expandable) -->
+      <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
+        <div onclick="toggleSidebarSection('history')" style="cursor:pointer;font-size:10px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;user-select:none;text-transform:uppercase;letter-spacing:0.8px;">
+          <span>Upload History</span>
+          <span id="history-arrow">▸</span>
+        </div>
+        <div id="history-panel" style="display:none;margin-top:6px;font-size:10px;color:var(--text-muted);">
+          <div id="orchard-last-upload" style="font-size:10px;color:var(--text-dim);margin-bottom:4px;"></div>
+          <div id="upload-history-list">No uploads yet.</div>
+        </div>
+      </div>
+
+      <!-- HI NAME + SIGN OUT + ASK CLAUDE -->
+      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
+        <div id="user-row" style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-style:italic;"></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <a href="https://claude.ai" target="_blank" rel="noopener" title="Ask Claude"
+            style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:linear-gradient(135deg,#b83228,#8B4513);border-radius:4px;color:white;text-decoration:none;flex-shrink:0;"
+            onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          </a>
+          <button id="logout-btn" class="btn-ghost btn-sm" style="flex:1;text-align:left;font-size:10px;">Sign out</button>
+        </div>
+      </div>
+
     </div>
   </aside>
 
