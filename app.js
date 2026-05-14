@@ -1852,6 +1852,7 @@ function renderAlerts() {
   const labelFilter = (document.getElementById('alert-filter-label')?.value || '').toLowerCase().trim();
   let totalAlerts = 0;
   let html = '';
+  _expandedAlertWh = null; // reset so first warehouse auto-expands
 
   for (const wh of WAREHOUSES) {
     // Sum confirmed/shipped movement quantities inbound to this warehouse per UPC
@@ -1935,9 +1936,16 @@ function renderAlerts() {
         onclick="sortAlerts('${wh.key}','${col}')">${label}${arrow}</th>`;
     };
 
+    // Auto-expand first warehouse section
+    if (_expandedAlertWh === null) _expandedAlertWh = wh.key;
+    const isExpanded = _expandedAlertWh === wh.key;
     html += `<div class="alert-section" id="alert-section-${wh.key}">
-      <h3>${wh.label} — ${alerts.length} item${alerts.length>1?'s':''} below ${CONFIG.REORDER_WEEKS} weeks
-        <span style="font-weight:400;margin-left:12px">
+      <h3 onclick="toggleAlertSection('${wh.key}')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+        <span>
+          <span class="alert-arrow" style="font-size:10px;margin-right:6px;color:var(--text-dim)">${isExpanded ? '▾' : '▸'}</span>
+          ${wh.label} — ${alerts.length} item${alerts.length>1?'s':''} below ${CONFIG.REORDER_WEEKS} weeks
+        </span>
+        <span style="font-weight:400;" onclick="event.stopPropagation()">
           <a href="#" onclick="event.preventDefault();selectAllAlerts('${wh.key}')" style="color:var(--accent);font-size:10px">Select all</a>
           &nbsp;·&nbsp;
           <a href="#" onclick="event.preventDefault();deselectAllAlerts('${wh.key}')" style="color:var(--text-muted);font-size:10px">Deselect all</a>
@@ -1945,7 +1953,7 @@ function renderAlerts() {
           <a href="#" onclick="event.preventDefault();clearSelectedAlerts('${wh.key}')" style="color:var(--accent);font-size:10px;font-weight:600;">Clear alert</a>
         </span>
       </h3>
-      <div class="table-wrap"><table id="alert-table-${wh.key}" style="table-layout:fixed;min-width:1100px;">
+      <div class="alert-table-wrap" style="display:${isExpanded ? 'block' : 'none'}"><div class="table-wrap"><table id="alert-table-${wh.key}" style="table-layout:fixed;min-width:1100px;">
         <colgroup>
           <col style="width:32px">
           <col style="width:160px">
@@ -2045,7 +2053,7 @@ function renderAlerts() {
             </tr>`;
           }).join('')}
         </tbody>
-      </table></div>
+      </table></div></div>
     </div>`;
   }
 
@@ -2075,6 +2083,21 @@ window.clearSelectedAlerts = async function(whKey) {
   renderAlerts();
   updateNotifications();
   toast(checked.length + ' alert' + (checked.length>1?'s':'') + ' cleared. Will restore if stock increases.', 'success');
+};
+
+// Track expanded alert section
+let _expandedAlertWh = null; // will be set to first warehouse with alerts on render
+
+window.toggleAlertSection = function(whKey) {
+  _expandedAlertWh = _expandedAlertWh === whKey ? null : whKey;
+  // Show/hide table-wrap for each section
+  document.querySelectorAll('.alert-section').forEach(sec => {
+    const key = sec.id.replace('alert-section-','');
+    const wrap = sec.querySelector('.alert-table-wrap');
+    const arrow = sec.querySelector('.alert-arrow');
+    if (wrap) wrap.style.display = key === _expandedAlertWh ? 'block' : 'none';
+    if (arrow) arrow.textContent = key === _expandedAlertWh ? '▾' : '▸';
+  });
 };
 
 window.sortAlerts = function(whKey, col) {
