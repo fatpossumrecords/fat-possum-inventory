@@ -185,9 +185,9 @@ function bootApp() {
   } catch(e) {}
 
   // Load Gist FIRST — has orchard data, suppressions, manual artists, movements
-  // Poll until banner has candidates and dashboard is active
+  // Poll until banner has candidates and dashboard is active — wait for POs too
   let _bannerInterval = setInterval(() => {
-    if (State.merged.length > 0) {
+    if (State.merged.length > 0 && Object.keys(State.packiyoPOs).length > 0) {
       buildNeedsAttentionBanner();
       const el = document.getElementById('needs-attention-banner');
       if (el && el.style.display === 'flex') clearInterval(_bannerInterval);
