@@ -3085,20 +3085,23 @@ function buildNeedsAttentionBanner() {
     { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
   ];
 
-  const addressedUpcs = new Set([
-    ...State.movements.filter(m => m.status === 'confirmed' || m.status === 'shipped').map(m => m.upc),
-  ]);
-  // Also exclude titles with open Packiyo POs
+  // Track addressed alerts per upc|wh combo
+  const addressedKeys = new Set();
+  for (const m of State.movements) {
+    if (m.status === 'confirmed' || m.status === 'shipped') {
+      addressedKeys.add(m.upc + '|' + m.to);
+    }
+  }
+  // Also exclude titles with open Packiyo POs (these are inbound to FP)
   for (const [sku, po] of Object.entries(State.packiyoPOs)) {
     if ((po.qty||0) > 0) {
       const prod = State.merged.find(p => p.packiyo_sku === sku || p.catalog === sku);
-      if (prod) addressedUpcs.add(prod.upc);
+      if (prod) addressedKeys.add(prod.upc + '|fp');
     }
   }
 
   const candidates = [];
   for (const p of State.merged) {
-    if (addressedUpcs.has(p.upc)) continue;
     for (const wh of WAREHOUSES_NA) {
       const avail = p[wh.avail] || 0;
       const annual = p[wh.vel] || 0;
@@ -3106,9 +3109,11 @@ function buildNeedsAttentionBanner() {
       if (monthly < 10) continue;
       const weeks = (avail / monthly) * 4.33;
       if (weeks < 4) {
-        // Skip if this alert has been cleared
-        const clearKey = p.upc + '|' + wh.key;
-        const cleared = State.clearedAlerts[clearKey];
+        const key = p.upc + '|' + wh.key;
+        // Skip if addressed by movement or PO
+        if (addressedKeys.has(key)) break;
+        // Skip if manually cleared
+        const cleared = State.clearedAlerts[key];
         if (cleared && avail <= cleared.availAtClear) break;
         candidates.push({ p, wh, avail, monthly, weeks });
         break;
