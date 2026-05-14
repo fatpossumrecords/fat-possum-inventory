@@ -3088,6 +3088,13 @@ function buildNeedsAttentionBanner() {
   const addressedUpcs = new Set([
     ...State.movements.filter(m => m.status === 'confirmed' || m.status === 'shipped').map(m => m.upc),
   ]);
+  // Also exclude titles with open Packiyo POs
+  for (const [sku, po] of Object.entries(State.packiyoPOs)) {
+    if ((po.qty||0) > 0) {
+      const prod = State.merged.find(p => p.packiyo_sku === sku || p.catalog === sku);
+      if (prod) addressedUpcs.add(prod.upc);
+    }
+  }
 
   const candidates = [];
   for (const p of State.merged) {
