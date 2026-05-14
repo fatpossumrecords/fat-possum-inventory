@@ -3099,6 +3099,10 @@ function buildNeedsAttentionBanner() {
       if (monthly < 10) continue;
       const weeks = (avail / monthly) * 4.33;
       if (weeks < 4) {
+        // Skip if this alert has been cleared
+        const clearKey = p.upc + '|' + wh.key;
+        const cleared = State.clearedAlerts[clearKey];
+        if (cleared && avail <= cleared.availAtClear) break;
         candidates.push({ p, wh, avail, monthly, weeks });
         break;
       }
