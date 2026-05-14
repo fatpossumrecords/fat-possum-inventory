@@ -3378,8 +3378,18 @@ function updateNotifications() {
   if (!State.merged.length) return;
   const now = Date.now();
   const sevenDays = 7 * 24 * 3600 * 1000;
-  const seenAlerts = State.seenAlerts || {};
-  const seenMfg = State.seenMfg || {};
+  // Load from localStorage so seen state persists across refreshes
+  if (!State.seenAlerts || !Object.keys(State.seenAlerts).length) {
+    try { State.seenAlerts = JSON.parse(localStorage.getItem('fp_seen_alerts') || '{}'); } catch(e) {}
+  }
+  if (!State.seenMfg || !Object.keys(State.seenMfg).length) {
+    try { State.seenMfg = JSON.parse(localStorage.getItem('fp_seen_mfg') || '{}'); } catch(e) {}
+  }
+  if (!State._notificationsInitialized) {
+    try { State._notificationsInitialized = !!localStorage.getItem('fp_notif_init'); } catch(e) {}
+  }
+  const seenAlerts = State.seenAlerts;
+  const seenMfg = State.seenMfg;
   const WAREHOUSES_N = [
     { key:'fp', avail:'fp_available', vel:'fp_12ms' },
     { key:'us', avail:'us_avail',     vel:'us_12ms' },
@@ -3423,6 +3433,11 @@ function updateNotifications() {
     State._newMfg = [];
     State.seenAlerts = seenAlerts;
     State.seenMfg = seenMfg;
+    try {
+      localStorage.setItem('fp_seen_alerts', JSON.stringify(seenAlerts));
+      localStorage.setItem('fp_seen_mfg', JSON.stringify(seenMfg));
+      localStorage.setItem('fp_notif_init', '1');
+    } catch(e) {}
     document.getElementById('notif-alerts-badge')?.classList.add('hidden');
     document.getElementById('notif-mfg-badge')?.classList.add('hidden');
     document.getElementById('vinyl-icon')?.classList.remove('vinyl-spinning');
@@ -3430,6 +3445,11 @@ function updateNotifications() {
   }
   State.seenAlerts = seenAlerts;
   State.seenMfg = seenMfg;
+  try {
+    localStorage.setItem('fp_seen_alerts', JSON.stringify(seenAlerts));
+    localStorage.setItem('fp_seen_mfg', JSON.stringify(seenMfg));
+    localStorage.setItem('fp_notif_init', '1');
+  } catch(e) {}
   const alertBadge = document.getElementById('notif-alerts-badge');
   const mfgBadge = document.getElementById('notif-mfg-badge');
   const bell = document.getElementById('bell-icon');
