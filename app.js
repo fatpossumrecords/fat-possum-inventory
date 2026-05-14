@@ -122,7 +122,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('mfg-filter').addEventListener('change', renderManufacturing);
   document.getElementById('export-mfg-btn').addEventListener('click', exportManufacturing);
   document.getElementById('export-alerts-btn').addEventListener('click', exportAlerts);
-  document.getElementById('alert-filter-label').addEventListener('change', renderAlerts);
+  document.getElementById('alert-filter-label').addEventListener('change', () => renderAlerts(true));
 });
 
 // ── GOOGLE AUTH ───────────────────────────────────────────────
@@ -1847,12 +1847,12 @@ const WAREHOUSES = [
   { key:'eu', label:'Orchard EU',     avail:'eu_avail',     vel:'eu_this_yr',velDiv:12, repFrom: 'uk' },
 ];
 
-function renderAlerts() {
+function renderAlerts(preserveExpanded=false) {
   const container = document.getElementById('alerts-container');
   const labelFilter = (document.getElementById('alert-filter-label')?.value || '').toLowerCase().trim();
   let totalAlerts = 0;
   let html = '';
-  _expandedAlertWh = null; // reset so first warehouse auto-expands
+  if (!preserveExpanded) _expandedAlertWh = null; // reset so first warehouse auto-expands
 
   for (const wh of WAREHOUSES) {
     // Sum confirmed/shipped movement quantities inbound to this warehouse per UPC
@@ -2104,7 +2104,7 @@ window.sortAlerts = function(whKey, col) {
   const s = State.alertSort[whKey];
   if (s.col === col) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
   else { s.col = col; s.dir = 'asc'; }
-  renderAlerts();
+  renderAlerts(true);
 };
 
 window.jumpToAlertWarehouse = function(whKey) {
