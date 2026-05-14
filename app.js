@@ -2351,7 +2351,7 @@ function renderMovementsTable() {
           style="width:200px;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);"
           onchange="updateMovementNotes(${m._idx}, this.value)" placeholder="Notes…" /></td>
         <td style="font-size:10px;color:var(--text-muted);white-space:nowrap;">${m.confirmedAt ? new Date(m.confirmedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—'}</td>
-        <td style="width:32px;text-align:center;"><button class="btn-danger btn-sm" onclick="removeMovement(${m._idx})" style="padding:2px 6px;">×</button></td>
+        <td style="width:32px;text-align:center;">${(m.status==='draft'||m.status==='confirmed') ? '<button class="btn-danger btn-sm" onclick="removeMovement('+m._idx+')" style="padding:2px 6px;">×</button>' : ''}</td>
       </tr>`;
     });
   }
@@ -2504,7 +2504,7 @@ function getConfirmedInbound() {
   return inbound;
 }
 
-window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); };
+window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); saveGistData(); };
 
 
 window.recalcMovementNote = function(i, newQty) {
