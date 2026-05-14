@@ -2714,7 +2714,13 @@ function renderDashboard() {
       const monthly = (p[wh.vel]||0)/wh.velDiv;
       if (monthly <= 0 || avail < 0) return;
       const weeks = (avail/monthly)*4.33;
-      if (weeks < CONFIG.REORDER_WEEKS) { alertCount++; if (weeks < 4) criticalCount++; }
+      if (weeks >= CONFIG.REORDER_WEEKS) return;
+      // Skip cleared alerts
+      const clearKey = p.upc + '|' + wh.key;
+      const cleared = State.clearedAlerts[clearKey];
+      if (cleared && avail <= cleared.availAtClear) return;
+      alertCount++;
+      if (weeks < 4) criticalCount++;
     });
   });
 
