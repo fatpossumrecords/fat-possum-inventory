@@ -56,6 +56,8 @@ const State = {
   manualArtists: {},
   // Box lots by UPC
   boxLots: {},
+  // Cleared alerts: { 'upc|wh': { clearedAt, availAtClear } }
+  clearedAlerts: {},
   // Manual format overrides by UPC
   manualFormats: {},
   // Manual label overrides by UPC
@@ -285,6 +287,7 @@ async function loadGistData() {
       State.manualArtists = parsed.manualArtists;
     }
     if (parsed.boxLots)       State.boxLots       = parsed.boxLots;
+    if (parsed.clearedAlerts) State.clearedAlerts = parsed.clearedAlerts;
     if (parsed.manualFormats) State.manualFormats = parsed.manualFormats;
     if (parsed.manualLabels)  State.manualLabels  = parsed.manualLabels;
     if (parsed.movements) {
@@ -461,6 +464,7 @@ async function saveGistData() {
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
       boxLots: State.boxLots || {},
+      clearedAlerts: State.clearedAlerts || {},
       manualFormats: State.manualFormats || {},
       manualLabels: State.manualLabels || {},
     };
@@ -1272,6 +1276,19 @@ function mergeData() {
   State.merged = Array.from(products.values()).filter(p => (p.title || p.catalog) && !State.suppressedUpcs.has(p.upc));
   // Re-apply Shopify vendor artists
   applyShopifyVendors();
+  // Auto-restore cleared alerts if stock has increased
+  for (const [key, cleared] of Object.entries(State.clearedAlerts)) {
+    const [upc, whKey] = key.split('|');
+    const p = State.merged.find(x => x.upc === upc);
+    if (!p) continue;
+    const wh = WAREHOUSES.find(w => w.key === whKey);
+    if (!wh) continue;
+    const avail = p[wh.avail] || 0;
+    if (avail > cleared.availAtClear) {
+      delete State.clearedAlerts[key];
+      console.log('Auto-restored alert:', upc, whKey, 'avail now', avail, 'vs cleared at', cleared.availAtClear);
+    }
+  }
   // Apply manual format and label overrides
   for (const p of State.merged) {
     if (State.manualFormats[p.upc]) p.format = State.manualFormats[p.upc];
@@ -1844,6 +1861,14 @@ function renderAlerts() {
     }
 
     let alerts = State.merged.map(p => {
+      // Skip if alert is cleared and avail hasn't increased
+      const clearKey = p.upc + '|' + wh.key;
+      const cleared = State.clearedAlerts[clearKey];
+      if (cleared) {
+        const avail = (p[wh.avail]||0) + (confirmedInbound[p.upc]||0);
+        if (avail <= cleared.availAtClear) return null; // still cleared
+        else delete State.clearedAlerts[clearKey]; // auto-restore
+      }
       const avail   = (p[wh.avail] || 0) + (confirmedInbound[p.upc] || 0);
       const annual  = p[wh.vel] || 0;
       const monthly = annual / wh.velDiv;
@@ -1914,6 +1939,8 @@ function renderAlerts() {
           <a href="#" onclick="event.preventDefault();selectAllAlerts('${wh.key}')" style="color:var(--accent);font-size:10px">Select all</a>
           &nbsp;·&nbsp;
           <a href="#" onclick="event.preventDefault();deselectAllAlerts('${wh.key}')" style="color:var(--text-muted);font-size:10px">Deselect all</a>
+          &nbsp;·&nbsp;
+          <a href="#" onclick="event.preventDefault();clearSelectedAlerts('${wh.key}')" style="color:var(--accent);font-size:10px;font-weight:600;">Clear alert</a>
         </span>
       </h3>
       <div class="table-wrap"><table id="alert-table-${wh.key}" style="table-layout:fixed;min-width:1100px;">
@@ -2030,6 +2057,23 @@ function renderAlerts() {
   badge.textContent = totalAlerts;
   totalAlerts > 0 ? badge.classList.remove('hidden') : badge.classList.add('hidden');
 }
+
+window.clearSelectedAlerts = async function(whKey) {
+  const checked = document.querySelectorAll('.alert-check[data-wh="'+whKey+'"]:checked');
+  if (!checked.length) { toast('No items selected.', 'error'); return; }
+  const wh = WAREHOUSES.find(w => w.key === whKey);
+  checked.forEach(cb => {
+    const upc = cb.dataset.upc;
+    const p = State.merged.find(x => x.upc === upc);
+    if (!p || !wh) return;
+    const avail = (p[wh.avail]||0);
+    State.clearedAlerts[upc + '|' + whKey] = { clearedAt: new Date().toISOString(), availAtClear: avail };
+  });
+  await saveGistData();
+  renderAlerts();
+  updateNotifications();
+  toast(checked.length + ' alert' + (checked.length>1?'s':'') + ' cleared. Will restore if stock increases.', 'success');
+};
 
 window.sortAlerts = function(whKey, col) {
   const s = State.alertSort[whKey];
