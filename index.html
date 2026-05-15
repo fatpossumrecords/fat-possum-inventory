@@ -60,10 +60,16 @@
         <svg viewBox="0 0 24 24"><path d="M8 5l-1.5 1.5L10 11H3v2h7l-3.5 4.5L8 19l5-7-5-7zm8 2h-3v2h3v9h-3v2h3a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
         Stock Movements
       </a>
-      <a href="#" class="nav-item" data-view="manufacturing">
+      <a href="#" class="nav-item" data-view="manufacturing" onclick="toggleMfgNav(event)">
         <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
         Manufacturing
+        <span id="mfg-nav-arrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▸</span>
       </a>
+      <div id="mfg-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
+        <a href="#" class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;" onclick="event.preventDefault();switchView('manufacturing');switchMfgTab('runs')">Production Runs</a>
+        <a href="#" class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;" onclick="event.preventDefault();switchView('manufacturing');switchMfgTab('queue')">PO Queue</a>
+        <a href="#" class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;" onclick="event.preventDefault();switchView('manufacturing');switchMfgTab('predictions')">Predictions</a>
+      </div>
       <a href="#" class="nav-item" data-view="alerts">
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
         Alerts
