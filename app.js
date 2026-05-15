@@ -2444,12 +2444,15 @@ document.addEventListener('click', e => {
     addRunDestination(e.target.dataset.run, e.target.dataset.vid);
   }
   if (e.target.classList.contains('edit-run-btn')) {
+    e.stopPropagation();
     editRun(e.target.dataset.run);
   }
   if (e.target.classList.contains('delete-run-btn')) {
+    e.stopPropagation();
     deleteRun(e.target.dataset.run);
   }
   if (e.target.classList.contains('run-status-sel')) {
+    e.stopPropagation();
     updateRunStatus(e.target.dataset.run, e.target.value);
   }
   if (e.target.classList.contains('add-run-variant-btn')) {
@@ -3966,7 +3969,7 @@ function renderProductionRuns() {
         + '</div>';
     }).join('');
 
-    const isExpanded = run._expanded !== false; // default expanded
+    const isExpanded = run._expanded === true; // default collapsed
     return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:28px;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,0.08);">'      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:' + (isExpanded ? '6px 6px 0 0' : '6px') + ';cursor:pointer;" onclick="toggleRunExpand(\'' + run.id + '\')">'      + '<span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">' + (isExpanded ? '▾' : '▸') + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
@@ -3979,17 +3982,105 @@ function renderProductionRuns() {
       + '<select class="run-status-sel" data-run="' + run.id + '" onclick="event.stopPropagation()" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:' + statusColor + ';font-weight:600;">'
       + RUN_STATUSES.map(s => '<option value="' + s + '"' + (s===run.status?' selected':'') + '>' + s + '</option>').join('')
       + '</select>'
-      + '<button class="edit-run-btn" data-run="' + run.id + '" onclick="event.stopPropagation()" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
-      + '<button class="delete-run-btn" data-run="' + run.id + '" onclick="event.stopPropagation()" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
+      + '<button class="edit-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
+      + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
       + '</div>'
       + '</div>'
-      + (isExpanded ? '<div style="padding:0 0 12px 0;background:white;border-radius:0 0 6px 6px;overflow:hidden;border-top:1px solid var(--border);">' + variantsHtml + '</div>' : '')
+      + (isExpanded ? '<div style="padding:0 0 16px 0;background:white;border-radius:0 0 6px 6px;overflow:hidden;border-top:1px solid var(--border);"><div style="padding-bottom:4px;">' + variantsHtml + '</div></div>' : '')
       + '</div>';
   }).join('');
 }
 // ── PRODUCTION RUN MODAL ──────────────────────────────────────
 let _editRunId = null;
 let _runVariants = []; // temp state for modal
+
+// ── RUN MODAL AUTOFILL ───────────────────────────────────────
+window.runArtistSearch = function(val) {
+  const dd = document.getElementById('run-artist-dd');
+  if (!dd) return;
+  if (val.length < 2) { dd.style.display = 'none'; return; }
+  const q = val.toLowerCase();
+  const artists = [...new Set(State.merged.map(p => p.artist).filter(a => a && a.toLowerCase().includes(q)))].sort().slice(0,8);
+  if (!artists.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = artists.map(a =>
+    '<div class="run-dd-artist" data-artist="' + esc(a) + '" style="padding:7px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--border);">' + esc(a) + '</div>'
+  ).join('');
+  dd.style.display = 'block';
+};
+
+window.selectRunArtist = function(artist) {
+  const inp = document.getElementById('run-artist');
+  if (inp) inp.value = artist;
+  const dd = document.getElementById('run-artist-dd');
+  if (dd) dd.style.display = 'none';
+  _runHeader.artist = artist;
+  // Auto-populate title dropdown with this artist's titles
+  runTitleSearch('', artist);
+};
+
+window.runTitleSearch = function(val, forceArtist) {
+  const dd = document.getElementById('run-title-dd');
+  if (!dd) return;
+  const artist = forceArtist || document.getElementById('run-artist')?.value || '';
+  const q = val.toLowerCase();
+  const matches = State.merged.filter(p =>
+    (!artist || p.artist === artist) &&
+    (!q || p.title.toLowerCase().includes(q))
+  ).slice(0, 10);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(p =>
+    '<div class="run-dd-title" data-upc="' + esc(p.upc) + '" style="padding:7px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--border);">'+esc(p.title)+'<span style="color:var(--text-dim);font-size:10px;margin-left:6px;">'+esc(p.catalog)+'</span></div>'
+  ).join('');
+  dd.style.display = 'block';
+};
+
+window.selectRunTitle = function(upc) {
+  const p = State.merged.find(x => x.upc === upc);
+  if (!p) return;
+  const titleInp = document.getElementById('run-title');
+  if (titleInp) titleInp.value = p.title;
+  document.getElementById('run-title-dd').style.display = 'none';
+  _runHeader.title = p.title;
+  // Find all variants of this title in inventory (same artist+title, different SKUs)
+  const variants = State.merged.filter(x => x.artist === p.artist && x.title === p.title);
+  // Auto-populate _runVariants with inventory variants if currently empty/default
+  if (_runVariants.length === 1 && !_runVariants[0].catalog) {
+    _runVariants = variants.map(v => ({
+      id: 'v' + Date.now() + Math.random(),
+      version: v.format || '',
+      catalog: v.catalog || '',
+      upc: v.upc || '',
+      versionNotes: '',
+      qty: 0,
+      quotedAmount: '',
+      destinations: [],
+    }));
+    if (!_runVariants.length) _runVariants = [{ id: 'v'+Date.now(), version:'', catalog:'', upc:'', versionNotes:'', qty:0, quotedAmount:'', destinations:[] }];
+    renderRunModal();
+  }
+};
+
+// Dropdown item clicks
+document.addEventListener('mousedown', e => {
+  if (e.target.classList.contains('run-dd-artist')) {
+    selectRunArtist(e.target.dataset.artist);
+  }
+  if (e.target.classList.contains('run-dd-title')) {
+    selectRunTitle(e.target.dataset.upc);
+  }
+});
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('#run-artist-dd') && !e.target.id?.includes('run-artist')) {
+    const dd = document.getElementById('run-artist-dd');
+    if (dd) dd.style.display = 'none';
+  }
+  if (!e.target.closest('#run-title-dd') && !e.target.id?.includes('run-title')) {
+    const dd = document.getElementById('run-title-dd');
+    if (dd) dd.style.display = 'none';
+  }
+});
 
 window.toggleRunExpand = function(id) {
   const run = (State.productionRuns||[]).find(r => r.id === id);
@@ -4087,8 +4178,20 @@ function renderRunModal(run) {
   // Search field for title
   const titleSearchId = 'run-title-search';
   let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'
-    + field('Artist', 'run-artist', r.artist||'', 'text')
-    + field('Title', 'run-title', r.title||'', 'text')
+    + '<div style="position:relative;">'
+    + '<label style="display:block;font-size:9px;color:var(--text-dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Artist</label>'
+    + '<input type="text" id="run-artist" value="'+esc(r.artist||'')+'" placeholder="Search artist…"'
+    + ' style="width:100%;font-size:11px;padding:5px 7px;background:white;border:1px solid var(--border2);border-radius:3px;color:var(--text);box-sizing:border-box;"'
+    + ' oninput="runArtistSearch(this.value)" autocomplete="off" />'
+    + '<div id="run-artist-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:0 0 4px 4px;z-index:50;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>'
+    + '</div>'
+    + '<div style="position:relative;">'
+    + '<label style="display:block;font-size:9px;color:var(--text-dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">Title</label>'
+    + '<input type="text" id="run-title" value="'+esc(r.title||'')+'" placeholder="Search title…"'
+    + ' style="width:100%;font-size:11px;padding:5px 7px;background:white;border:1px solid var(--border2);border-radius:3px;color:var(--text);box-sizing:border-box;"'
+    + ' oninput="runTitleSearch(this.value)" autocomplete="off" />'
+    + '<div id="run-title-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:0 0 4px 4px;z-index:50;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>'
+    + '</div>'
     + field('Main SKU', 'run-mainSku', r.mainSku||'', 'text')
     + field('Part # (Manufacturer ID)', 'run-partNumber', r.partNumber||'', 'text')
     + '</div>';
@@ -4305,6 +4408,7 @@ document.addEventListener('click', e => {
 // Run status select change
 document.addEventListener('change', e => {
   if (e.target.classList.contains('run-status-sel')) {
+    e.stopPropagation();
     updateRunStatus(e.target.dataset.run, e.target.value);
   }
 });
