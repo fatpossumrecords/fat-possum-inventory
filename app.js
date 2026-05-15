@@ -59,6 +59,8 @@ const State = {
   boxLots: {},
   // Cleared alerts: { 'upc|wh': { clearedAt, availAtClear } }
   clearedAlerts: {},
+  // Production runs
+  productionRuns: [],
   // Manual format overrides by UPC
   manualFormats: {},
   // Manual label overrides by UPC
@@ -352,6 +354,7 @@ function applyConfigData(parsed) {
   if (parsed.manualFormats)  State.manualFormats  = parsed.manualFormats;
   if (parsed.manualLabels)   State.manualLabels   = parsed.manualLabels;
   if (parsed.clearedAlerts)  State.clearedAlerts  = parsed.clearedAlerts;
+  if (parsed.productionRuns) State.productionRuns = parsed.productionRuns;
   if (parsed.fpVelocity && Object.keys(parsed.fpVelocity).length) {
     State.fp_velocity = parsed.fpVelocity;
   }
@@ -466,6 +469,7 @@ async function saveGistData() {
       manualFormats: State.manualFormats || {},
       manualLabels: State.manualLabels || {},
       clearedAlerts: State.clearedAlerts || {},
+      productionRuns: State.productionRuns || [],
       fpVelocity: State.fp_velocity || {},
       fpVelocityTs: State.fp_velocity_ts || '',
     };
@@ -1924,6 +1928,12 @@ function renderAlerts(preserveExpanded=false) {
         confirmedInbound[m.upc] = (confirmedInbound[m.upc] || 0) + (m.qty || 0);
       }
     }
+    // Also include production run destinations
+    const runInbound = getRunInboundByUpcWh();
+    for (const [key, qty] of Object.entries(runInbound)) {
+      const [upc, whKey] = key.split('|');
+      if (whKey === wh.key) confirmedInbound[upc] = (confirmedInbound[upc]||0) + qty;
+    }
 
     let alerts = State.merged.map(p => {
       // Skip if alert is cleared and avail hasn't increased
@@ -2427,6 +2437,12 @@ document.addEventListener('click', e => {
     switchView('manufacturing');
     setTimeout(() => switchMfgTab('queue'), 100);
   }
+  if (e.target.classList.contains('edit-dest-btn')) {
+    editRunDestStatus(e.target.dataset.run, e.target.dataset.vid, e.target.dataset.did);
+  }
+  if (e.target.classList.contains('add-dest-btn')) {
+    addRunDestination(e.target.dataset.run, e.target.dataset.vid);
+  }
   if (e.target.classList.contains('doom-kill')) {
     doomsdayKill(e.target.dataset.upc, e.target.dataset.artist, e.target.dataset.title);
   }
@@ -2796,12 +2812,21 @@ function renderDashboard() {
         confirmedInbound[m.upc] = (confirmedInbound[m.upc] || 0) + (m.qty || 0);
       }
     }
+    // Also include production run destinations
+    const runInbound = getRunInboundByUpcWh();
+    for (const [key, qty] of Object.entries(runInbound)) {
+      const [upc, whKey] = key.split('|');
+      if (whKey === wh.key) confirmedInbound[upc] = (confirmedInbound[upc]||0) + qty;
+    }
     State.merged.forEach(p => {
       const avail = (p[wh.avail]||0) + (confirmedInbound[p.upc]||0);
       const monthly = (p[wh.vel]||0)/wh.velDiv;
       if (monthly <= 0 || avail < 0) return;
       const weeks = (avail/monthly)*4.33;
       if (weeks >= CONFIG.REORDER_WEEKS) return;
+      // Skip if production run covers this
+      const runIb = getRunInboundByUpcWh();
+      if (runIb[p.upc + '|' + wh.key]) return;
       // Skip cleared alerts
       const clearKey = p.upc + '|' + wh.key;
       const cleared = State.clearedAlerts[clearKey];
@@ -3006,6 +3031,7 @@ window.switchMfgTab = function(tab) {
   document.getElementById(`mfg-tab-${tab}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
   if (tab === 'queue') renderMfgQueue();
+  if (tab === 'runs') renderProductionRuns();
 };
 
 window.addSelectedToMfgQueue = function() {
@@ -3178,6 +3204,12 @@ function buildNeedsAttentionBanner() {
     if (m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed') {
       addressedKeys.add(m.upc + '|' + m.to);
     }
+  }
+  // Also exclude production run destinations
+  const runInboundKeys = getRunInboundByUpcWh();
+  for (const key of Object.keys(runInboundKeys)) {
+    const [upc, whKey] = key.split('|');
+    addressedKeys.add(upc + '|' + whKey);
   }
   // Also exclude titles with open Packiyo POs (these are inbound to FP)
   for (const [sku, po] of Object.entries(State.packiyoPOs)) {
@@ -3782,6 +3814,399 @@ window.closeAllocModal = function() {
 // Close on backdrop click
 document.addEventListener('click', e => {
   if (e.target.id === 'alloc-modal') closeAllocModal();
+});
+
+
+// ── PRODUCTION RUNS ───────────────────────────────────────────
+const WH_DEST = { fp:'Fat Possum WH', us:'Orchard US', uk:'Orchard UK', eu:'Orchard EU' };
+const RUN_STATUSES = ['Ordered','In Production','Shipped','Received','Cancelled'];
+
+function getRunInboundByUpcWh() {
+  // Returns { 'upc|wh': qty } for all active production run destinations
+  const inbound = {};
+  for (const run of (State.productionRuns||[])) {
+    if (run.status === 'Cancelled' || run.status === 'Received') continue;
+    for (const variant of (run.variants||[])) {
+      const upc = variant.upc ? String(variant.upc).replace(/\D/g,'').replace(/^0+/,'') : '';
+      if (!upc) continue;
+      for (const dest of (variant.destinations||[])) {
+        const key = upc + '|' + dest.wh;
+        inbound[key] = (inbound[key]||0) + (dest.qty||0);
+      }
+    }
+  }
+  return inbound;
+}
+
+function renderProductionRuns() {
+  const el = document.getElementById('runs-body');
+  if (!el) return;
+  const runs = State.productionRuns || [];
+
+  // Badge
+  const active = runs.filter(r => r.status !== 'Cancelled' && r.status !== 'Received').length;
+  const badge = document.getElementById('runs-badge');
+  if (badge) { badge.textContent = active; active > 0 ? badge.classList.remove('hidden') : badge.classList.add('hidden'); }
+  const summary = document.getElementById('runs-summary');
+  if (summary) summary.textContent = runs.length + ' run' + (runs.length!==1?'s':'') + ', ' + active + ' active';
+
+  // Check for auto-archive: Received runs where stock increased ±25 units within 60 days
+  const now = Date.now();
+  let changed = false;
+  for (const run of runs) {
+    if (run.status !== 'Received' || run._archived) continue;
+    const receivedAt = new Date(run.receivedAt||run.updatedAt||0).getTime();
+    if (now - receivedAt > 60 * 24 * 3600 * 1000) { run._archived = true; changed = true; continue; }
+    // Check if stock increased close to expected for each variant destination
+    let allReceived = true;
+    for (const v of (run.variants||[])) {
+      const upc = v.upc ? String(v.upc).replace(/\D/g,'').replace(/^0+/,'') : '';
+      const p = State.merged.find(x => x.upc === upc);
+      if (!p) continue;
+      for (const dest of (v.destinations||[])) {
+        const current = p[{fp:'fp_available',us:'us_avail',uk:'uk_avail',eu:'eu_avail'}[dest.wh]]||0;
+        // We can't perfectly detect this without a baseline — just check status
+        if (dest.status !== 'Received') allReceived = false;
+      }
+    }
+    if (allReceived) { run._archived = true; changed = true; }
+  }
+  if (changed) { saveGistData(); }
+
+  const visible = runs.filter(r => !r._archived);
+  if (!visible.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:40px;font-size:13px;">No production runs yet. Click + New Production Run to add one.</div>';
+    return;
+  }
+
+  const STATUS_COLOR = { Ordered:'#3b7de8', 'In Production':'var(--orange)', Shipped:'var(--green)', Received:'var(--text-muted)', Cancelled:'var(--text-dim)' };
+
+  el.innerHTML = visible.map(run => {
+    const totalQty = (run.variants||[]).reduce((s,v) => s+(v.qty||0), 0);
+    const totalUSD = (run.variants||[]).reduce((s,v) => s+parseFloat(v.quotedAmount||0), 0);
+    const statusColor = STATUS_COLOR[run.status] || 'var(--text-muted)';
+    const variantsHtml = (run.variants||[]).map(v => {
+      const destsHtml = (v.destinations||[]).map(d => {
+        const dStatus = d.status || 'Pending';
+        const dColor = dStatus === 'Received' ? 'var(--green)' : dStatus === 'Shipped' ? 'var(--orange)' : 'var(--text-muted)';
+        return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0 4px 16px;border-top:1px solid var(--border);font-size:11px;">'
+          + '<span style="color:var(--text-muted);width:100px;flex-shrink:0;">' + (WH_DEST[d.wh]||d.wh) + '</span>'
+          + '<span style="font-family:monospace;color:var(--text-muted);width:80px;">' + esc(d.poNumber||'—') + '</span>'
+          + '<span style="color:var(--text-muted);width:90px;">' + (d.expectedDate||'—') + '</span>'
+          + '<span style="font-weight:600;width:60px;text-align:right;">' + (d.qty||0).toLocaleString() + '</span>'
+          + '<span style="color:var(--text-muted);flex:1;font-size:10px;">' + esc(d.notes||'') + '</span>'
+          + '<span style="color:' + dColor + ';font-size:10px;font-weight:600;width:80px;text-align:right;">' + dStatus + '</span>'
+          + '<button class="edit-dest-btn" data-run="' + run.id + '" data-vid="' + v.id + '" data-did="' + d.id + '" style="background:none;border:1px solid var(--border2);border-radius:2px;padding:1px 6px;font-size:9px;cursor:pointer;color:var(--text-muted);">Edit</button>'
+          + '</div>';
+      }).join('');
+      return '<div style="border:1px solid var(--border);border-radius:4px;margin:6px 0;">'
+        + '<div style="padding:6px 10px;background:var(--surface2);display:flex;gap:12px;align-items:center;font-size:11px;">'
+        + '<span style="font-weight:600;color:var(--text)">' + esc(v.version||'') + '</span>'
+        + '<span style="color:var(--text-muted)">' + esc(v.catalog||'') + '</span>'
+        + '<span style="color:var(--text-muted);font-size:10px;">' + esc(v.upc||'') + '</span>'
+        + (v.versionNotes ? '<span style="color:var(--text-muted);font-size:10px;font-style:italic;">' + esc(v.versionNotes) + '</span>' : '')
+        + '<span style="margin-left:auto;font-weight:600;">' + (v.qty||0).toLocaleString() + ' units</span>'
+        + '<span style="color:var(--text-muted);">$' + parseFloat(v.quotedAmount||0).toLocaleString('en-US',{minimumFractionDigits:2}) + '</span>'
+      + '<button class="add-dest-btn" data-run="' + run.id + '" data-vid="' + v.id + '" style="background:none;border:1px solid var(--accent);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;color:var(--accent);">+ Destination</button>'
+        + '</div>'
+        + (destsHtml ? '<div style="padding:0 10px;">'
+          + '<div style="display:flex;gap:8px;padding:3px 0;font-size:9px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">'
+          + '<span style="width:100px;">Destination</span><span style="width:80px;">PO#</span><span style="width:90px;">Expected</span><span style="width:60px;text-align:right;">Qty</span><span style="flex:1;">Notes</span><span style="width:80px;text-align:right;">Status</span><span style="width:50px;"></span>'
+          + '</div>' + destsHtml + '</div>' : '')
+        + '</div>';
+    }).join('');
+
+    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:12px;">'
+      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;">'
+      + '<div style="flex:1;">'
+      + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
+      + esc(run.mainSku||'') + (run.partNumber ? ' · Part#: ' + esc(run.partNumber) : '')
+      + ' · ' + totalQty.toLocaleString() + ' units total'
+      + ' · $' + totalUSD.toLocaleString('en-US',{minimumFractionDigits:2}) + ' total quoted'
+      + '</div>'
+      + '</div>'
+      + '<select class="run-status-sel" data-run="' + run.id + '" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:' + statusColor + ';font-weight:600;">'
+      + RUN_STATUSES.map(s => '<option value="' + s + '"' + (s===run.status?' selected':'') + '>' + s + '</option>').join('')
+      + '</select>'
+      + '<button class="edit-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
+      + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
+      + '</div>'
+      + '<button class="edit-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
+      + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
+  }).join('');
+}
+
+// ── PRODUCTION RUN MODAL ──────────────────────────────────────
+let _editRunId = null;
+let _runVariants = []; // temp state for modal
+
+window.openNewRunModal = function() {
+  _editRunId = null;
+  _runVariants = [{ id: 'v' + Date.now(), version:'', catalog:'', upc:'', versionNotes:'', qty:0, quotedAmount:'', destinations:[] }];
+  renderRunModal();
+  document.getElementById('run-modal-title').textContent = 'New Production Run';
+  document.getElementById('run-modal').style.display = 'flex';
+};
+
+window.editRun = function(id) {
+  const run = (State.productionRuns||[]).find(r => r.id === id);
+  if (!run) return;
+  _editRunId = id;
+  _runVariants = JSON.parse(JSON.stringify(run.variants || []));
+  renderRunModal(run);
+  document.getElementById('run-modal-title').textContent = 'Edit Production Run';
+  document.getElementById('run-modal').style.display = 'flex';
+};
+
+window.closeRunModal = function() {
+  document.getElementById('run-modal').style.display = 'none';
+  _editRunId = null;
+  _runVariants = [];
+};
+
+window.addRunVariant = function() {
+  _runVariants.push({ id: 'v' + Date.now(), version:'', catalog:'', upc:'', versionNotes:'', qty:0, quotedAmount:'', destinations:[] });
+  renderRunModal();
+};
+
+window.removeRunVariant = function(vid) {
+  _runVariants = _runVariants.filter(v => v.id !== vid);
+  renderRunModal();
+};
+
+window.addRunModalDestination = function(vid) {
+  const v = _runVariants.find(x => x.id === vid);
+  if (v) v.destinations.push({ id: 'd' + Date.now(), wh:'fp', poNumber:'', expectedDate:'', qty:0, notes:'', status:'Pending' });
+  renderRunModal();
+};
+
+window.removeRunModalDest = function(vid, did) {
+  const v = _runVariants.find(x => x.id === vid);
+  if (v) v.destinations = v.destinations.filter(d => d.id !== did);
+  renderRunModal();
+};
+
+function renderRunModal(run) {
+  const body = document.getElementById('run-modal-body');
+  const r = run || {};
+
+  // Search field for title
+  const titleSearchId = 'run-title-search';
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'
+    + field('Artist', 'run-artist', r.artist||'', 'text')
+    + field('Title', 'run-title', r.title||'', 'text')
+    + field('Main SKU', 'run-mainSku', r.mainSku||'', 'text')
+    + field('Part # (Manufacturer ID)', 'run-partNumber', r.partNumber||'', 'text')
+    + '</div>';
+
+  // Variants
+  html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Variants</div>';
+  _runVariants.forEach(v => {
+    html += '<div style="border:1px solid var(--border2);border-radius:4px;padding:10px;margin-bottom:8px;">'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
+      + field('Version', 'rv-version-'+v.id, v.version||'', 'text', 'e.g. Black Vinyl')
+      + field('Catalog #', 'rv-catalog-'+v.id, v.catalog||'', 'text')
+      + field('UPC', 'rv-upc-'+v.id, v.upc||'', 'text')
+      + field('Version Notes', 'rv-notes-'+v.id, v.versionNotes||'', 'text', 'e.g. Red Vinyl, Ltd Ed')
+      + field('Qty', 'rv-qty-'+v.id, v.qty||'', 'number')
+      + field('Quoted Amount ($)', 'rv-amount-'+v.id, v.quotedAmount||'', 'number', '0.00')
+      + '</div>'
+      + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:6px;">Destinations</div>'
+      + v.destinations.map(d => '<div style="display:grid;grid-template-columns:140px 100px 120px 70px 1fr 80px 28px;gap:6px;align-items:end;margin-bottom:4px;">'
+        + '<div><label style="font-size:9px;color:var(--text-dim)">Destination</label>'
+        + '<select id="rd-wh-'+d.id+'" style="width:100%;font-size:11px;padding:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);">'
+        + Object.entries(WH_DEST).map(([k,v2]) => '<option value="'+k+'"'+(k===d.wh?' selected':'')+'>'+v2+'</option>').join('')
+        + '</select></div>'
+        + '<div>' + field('PO#', 'rd-po-'+d.id, d.poNumber||'', 'text') + '</div>'
+        + '<div>' + field('Expected Date', 'rd-date-'+d.id, d.expectedDate||'', 'date') + '</div>'
+        + '<div>' + field('Qty', 'rd-qty-'+d.id, d.qty||'', 'number') + '</div>'
+        + '<div>' + field('Notes', 'rd-notes-'+d.id, d.notes||'', 'text', 'Address or instructions') + '</div>'
+        + '<div><label style="font-size:9px;color:var(--text-dim)">Status</label>'
+        + '<select id="rd-status-'+d.id+'" style="width:100%;font-size:11px;padding:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:2px;color:var(--text);">'
+        + ['Pending','Shipped','Received'].map(s => '<option value="'+s+'"'+(s===d.status?' selected':'')+'>'+s+'</option>').join('')
+        + '</select></div>'
+        + '<div style="padding-bottom:1px;"><button class="remove-dest-modal-btn" data-vid="'+v.id+'" data-did="'+d.id+'" style="width:100%;background:none;border:1px solid var(--border2);border-radius:2px;padding:4px;cursor:pointer;color:var(--text-dim);font-size:13px;">×</button></div>'
+        + '</div>'
+      ).join('')
+      + '<div style="display:flex;gap:6px;margin-top:4px;">'
+      + '<button class="add-modal-dest-btn" data-vid="'+v.id+'" style="background:none;border:1px solid var(--accent);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;color:var(--accent);">+ Destination</button>'
+      + (_runVariants.length > 1 ? '<button class="remove-variant-btn" data-vid="'+v.id+'" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;color:var(--text-dim);">Remove Variant</button>' : '')
+      + '</div>'
+      + '</div>';
+  });
+
+  html += '<button onclick="addRunVariant()" style="background:none;border:1px dashed var(--border2);border-radius:3px;padding:6px 16px;font-size:11px;cursor:pointer;color:var(--text-muted);width:100%;margin-top:4px;">+ Add Variant</button>';
+
+  body.innerHTML = html;
+}
+
+function field(label, id, value, type='text', placeholder='') {
+  return '<div><label style="display:block;font-size:9px;color:var(--text-dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">'+label+'</label>'
+    + '<input type="'+type+'" id="'+id+'" value="'+esc(String(value))+'" placeholder="'+esc(placeholder)+'"'
+    + ' style="width:100%;font-size:11px;padding:5px 7px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);box-sizing:border-box;" /></div>';
+}
+
+window.saveRunModal = function() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const artist = get('run-artist');
+  const title  = get('run-title');
+  if (!artist || !title) { toast('Artist and Title are required.', 'error'); return; }
+
+  // Collect variants from DOM
+  const variants = _runVariants.map(v => {
+    const destinations = v.destinations.map(d => ({
+      id: d.id,
+      wh: document.getElementById('rd-wh-'+d.id)?.value || 'fp',
+      poNumber: get('rd-po-'+d.id),
+      expectedDate: get('rd-date-'+d.id),
+      qty: parseInt(get('rd-qty-'+d.id))||0,
+      notes: get('rd-notes-'+d.id),
+      status: document.getElementById('rd-status-'+d.id)?.value || 'Pending',
+    }));
+    return {
+      id: v.id,
+      version: get('rv-version-'+v.id),
+      catalog: get('rv-catalog-'+v.id),
+      upc: get('rv-upc-'+v.id),
+      versionNotes: get('rv-notes-'+v.id),
+      qty: parseInt(get('rv-qty-'+v.id))||0,
+      quotedAmount: get('rv-amount-'+v.id),
+      destinations,
+    };
+  });
+
+  if (_editRunId) {
+    const idx = State.productionRuns.findIndex(r => r.id === _editRunId);
+    if (idx >= 0) {
+      State.productionRuns[idx] = { ...State.productionRuns[idx], artist, title,
+        mainSku: get('run-mainSku'), partNumber: get('run-partNumber'),
+        variants, updatedAt: new Date().toISOString() };
+    }
+  } else {
+    if (!State.productionRuns) State.productionRuns = [];
+    State.productionRuns.push({
+      id: 'run-' + Date.now(), artist, title,
+      mainSku: get('run-mainSku'), partNumber: get('run-partNumber'),
+      status: 'Ordered', variants,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+  }
+
+  saveGistData();
+  renderProductionRuns();
+  closeRunModal();
+  toast('Production run saved.', 'success');
+};
+
+window.updateRunStatus = function(id, status) {
+  const run = (State.productionRuns||[]).find(r => r.id === id);
+  if (!run) return;
+  run.status = status;
+  run.updatedAt = new Date().toISOString();
+  if (status === 'Received') run.receivedAt = new Date().toISOString();
+  saveGistData();
+  renderProductionRuns();
+};
+
+window.deleteRun = function(id) {
+  if (!confirm('Delete this production run?')) return;
+  State.productionRuns = (State.productionRuns||[]).filter(r => r.id !== id);
+  saveGistData();
+  renderProductionRuns();
+  toast('Production run deleted.', '');
+};
+
+window.editRunDestStatus = function(runId, vid, did) {
+  const run = (State.productionRuns||[]).find(r => r.id === runId);
+  const v = (run?.variants||[]).find(x => x.id === vid);
+  const d = (v?.destinations||[]).find(x => x.id === did);
+  if (!d) return;
+  const statuses = ['Pending','Shipped','Received'];
+  const next = statuses[(statuses.indexOf(d.status)+1) % statuses.length];
+  d.status = next;
+  if (next === 'Received') d.receivedAt = new Date().toISOString();
+  saveGistData();
+  renderProductionRuns();
+};
+
+window.addRunDestination = function(runId, vid) {
+  const run = (State.productionRuns||[]).find(r => r.id === runId);
+  const v = (run?.variants||[]).find(x => x.id === vid);
+  if (!v) return;
+  v.destinations.push({ id: 'd' + Date.now(), wh:'fp', poNumber:'', expectedDate:'', qty:0, notes:'', status:'Pending' });
+  saveGistData();
+  renderProductionRuns();
+};
+
+// ── PRODUCTION RUNS SHEET SYNC ───────────────────────────────
+window.syncProductionRunsToSheet = async function() {
+  if (!State.sheetsToken) { initSheetsAuth(); return; }
+  const runs = State.productionRuns || [];
+  if (!runs.length) { toast('No production runs to sync.', 'error'); return; }
+
+  const SHEET_NAME_RUNS = 'Production Runs';
+  const HEADER = ['Artist','Title','Main SKU','Part #','Version','Cat #','UPC','Version Notes','Variant Qty','Quoted Amount','Total Run Qty','Total Quoted $','Destination','PO#','Expected Ship Date','Actual Ship Date','Dest Qty','Dest Notes','Dest Status','Run Status'];
+  const rows = [];
+
+  for (const run of runs) {
+    if (run._archived) continue;
+    const totalQty = (run.variants||[]).reduce((s,v)=>s+(v.qty||0),0);
+    const totalUSD = (run.variants||[]).reduce((s,v)=>s+parseFloat(v.quotedAmount||0),0).toFixed(2);
+    for (const v of (run.variants||[])) {
+      for (const d of (v.destinations||[])) {
+        rows.push([
+          run.artist, run.title, run.mainSku||'', run.partNumber||'',
+          v.version||'', v.catalog||'', v.upc||'', v.versionNotes||'',
+          v.qty||0, parseFloat(v.quotedAmount||0).toFixed(2),
+          totalQty, totalUSD,
+          WH_DEST[d.wh]||d.wh, d.poNumber||'', d.expectedDate||'', d.receivedAt ? new Date(d.receivedAt).toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}) : '',
+          d.qty||0, d.notes||'', d.status||'', run.status||'',
+        ]);
+      }
+      // If no destinations yet, still show variant row
+      if (!v.destinations || !v.destinations.length) {
+        rows.push([run.artist, run.title, run.mainSku||'', run.partNumber||'', v.version||'', v.catalog||'', v.upc||'', v.versionNotes||'', v.qty||0, parseFloat(v.quotedAmount||0).toFixed(2), totalQty, totalUSD, '','','','','','','', run.status||'']);
+      }
+    }
+  }
+
+  try {
+    // Ensure the sheet tab exists
+    const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}`,
+      { headers: { 'Authorization': 'Bearer ' + State.sheetsToken } });
+    const meta = await metaRes.json();
+    const sheetExists = meta.sheets?.some(s => s.properties?.title === SHEET_NAME_RUNS);
+    if (!sheetExists) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}:batchUpdate`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: SHEET_NAME_RUNS } } }] }),
+      });
+    }
+    // Clear and rewrite
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(SHEET_NAME_RUNS)}:clear`,
+      { method: 'POST', headers: { 'Authorization': 'Bearer ' + State.sheetsToken } });
+
+    const now = new Date();
+    const dateLabel = 'Last updated: ' + (now.getMonth()+1) + '/' + now.getDate() + '/' + String(now.getFullYear()).slice(2) + ' ' + now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const allRows = [[dateLabel], HEADER, ...rows];
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(SHEET_NAME_RUNS+'!A1')}?valueInputOption=RAW`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: allRows }),
+    });
+    toast('Production Runs synced to sheet ✓', 'success');
+    setStatus('sheets', 'ok', 'Synced ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}));
+  } catch(e) {
+    console.warn('Production runs sheet sync failed:', e.message);
+    toast('Sheet sync failed: ' + e.message, 'error');
+  }
+};
+
+// Close run modal on backdrop
+document.addEventListener('click', e => {
+  if (e.target.id === 'run-modal') closeRunModal();
 });
 
 window.jumpToTitle = function(catalog) {
