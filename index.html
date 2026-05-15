@@ -371,9 +371,13 @@
         </div>
         <div class="view-actions">
           <div class="tab-switcher">
-            <button class="tab-btn active" data-tab="predictions" onclick="switchMfgTab('predictions')">Predictions</button>
-            <button class="tab-btn" data-tab="queue" onclick="switchMfgTab('queue')">Queue <span id="mfg-queue-badge" class="badge hidden">0</span></button>
-            <button class="tab-btn" data-tab="runs" onclick="switchMfgTab('runs')">Production Runs <span id="runs-badge" class="badge hidden">0</span></button>
+            <select id="mfg-tab-select" class="select-sm" onchange="switchMfgTab(this.value)" style="font-size:12px;font-weight:600;padding:5px 10px;">
+              <option value="runs">Production Runs</option>
+              <option value="queue">PO Queue</option>
+              <option value="predictions">Predictions</option>
+            </select>
+            <span id="runs-badge" class="badge hidden" style="margin-left:4px;">0</span>
+            <span id="mfg-queue-badge" class="badge hidden" style="margin-left:4px;">0</span>
           </div>
         </div>
       </div>
