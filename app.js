@@ -196,9 +196,24 @@ function bootApp() {
   }, 1000);
   setTimeout(() => clearInterval(_bannerInterval), 30000); // stop after 30s
 
+  // Check if local cache has unsynced changes from a previous rate-limited session
+  const lastSync = parseInt(localStorage.getItem('fp_gist_last_sync') || '0');
+  const cacheStr = localStorage.getItem('fp_config_cache');
+  if (cacheStr && lastSync) {
+    // If cache was written after last known sync, we have unsynced changes
+    // We'll push after Gist loads to avoid overwriting with stale data
+    window._hasPendingLocalChanges = true;
+  }
+
   loadGistData().then(() => {
     if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
+    // Auto-push any unsynced local changes
+    if (window._hasPendingLocalChanges) {
+      window._hasPendingLocalChanges = false;
+      console.log('Detected unsynced local changes — pushing to Gist...');
+      saveGistData().then(() => toast('Unsynced changes pushed to Gist ✓', 'success'));
+    }
     // Render immediately with cached data while fresh loads in background
     if (State.orchardData.length || State.packiyoProducts.length) {
       mergeData();
@@ -468,15 +483,42 @@ async function saveGistData() {
     if (!res.ok) {
       const err = await res.text();
       console.warn('Config Gist save failed:', res.status, err);
-      setStatus('gist', 'error', 'Save failed');
+      const isRateLimit = res.status === 403 || res.status === 429;
+      setStatus('gist', 'error', isRateLimit ? 'Rate limited' : 'Save failed');
       const dot = document.getElementById('gist-dot');
       if (dot) dot.className = 'status-dot error';
-      toast('⚠ Gist save failed — changes saved locally only. Check your connection.', 'error');
+      // Only show toast for non-rate-limit errors — rate limit shows dot only
+      if (!isRateLimit) toast('⚠ Gist save failed — changes saved locally only.', 'error');
+      else {
+        // Get reset time from response header
+        const resetUnix = res.headers.get('X-RateLimit-Reset');
+        const resetTime = resetUnix
+          ? new Date(parseInt(resetUnix) * 1000).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+          : 'soon';
+        const retryMs = resetUnix
+          ? Math.max(0, (parseInt(resetUnix) * 1000) - Date.now()) + 5000
+          : 62 * 60 * 1000;
+        if (!window._rateLimitToastShown) {
+          window._rateLimitToastShown = true;
+          localStorage.setItem('fp_rate_limit_reset', resetUnix || '');
+          toast('⚠ GitHub rate limit reached — changes saved locally. Sync will resume at ' + resetTime + '.', 'error');
+        }
+        if (!window._rateLimitRetryTimer) {
+          window._rateLimitRetryTimer = setTimeout(() => {
+            window._rateLimitRetryTimer = null;
+            window._rateLimitToastShown = false;
+            saveGistData();
+          }, retryMs);
+        }
+      }
     } else {
       console.log('Config Gist save OK, size:', Math.round(sizeKB)+'KB');
-      // Clear any previous error state
       const dot = document.getElementById('gist-dot');
       if (dot) dot.className = 'status-dot ok';
+      // Mark successful sync time
+      localStorage.setItem('fp_gist_last_sync', Date.now().toString());
+      window._rateLimitRetryTimer = null;
+      window._rateLimitToastShown = false;
     }
   } catch(e) {
     console.warn('Config Gist save failed:', e.message);
