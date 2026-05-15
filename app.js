@@ -585,7 +585,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 let _gistSaveTimer = null;
 function saveGistDebounced() {
   clearTimeout(_gistSaveTimer);
-  _gistSaveTimer = setTimeout(() => saveGistData(), 1000);
+  _gistSaveTimer = setTimeout(() => saveGistData(), 2000);
 }
 
 async function packiyoFetch(endpoint, params = {}, retries = 3) {
@@ -990,7 +990,7 @@ document.addEventListener('keydown', e => {
 window.saveBoxLot = async function(upc, value) {
   State.boxLots[upc] = value.trim();
   if (!value.trim()) delete State.boxLots[upc];
-  await saveGistData();
+  saveGistDebounced();
   syncToSheets();
 };
 
@@ -1000,7 +1000,7 @@ window.saveManualFormat = async function(upc, value) {
   // Apply to merged product
   const p = State.merged.find(x => x.upc === upc);
   if (p && value) p.format = value;
-  await saveGistData();
+  saveGistDebounced();
   syncToSheets();
 };
 
@@ -1028,7 +1028,7 @@ window.saveManualLabel = async function(upc, value) {
   else delete State.manualLabels[upc];
   const p = State.merged.find(x => x.upc === upc);
   if (p && value) p.label = value;
-  await saveGistData();
+  saveGistDebounced();
   syncToSheets();
 };
 
@@ -1108,7 +1108,7 @@ async function syncToSheets() {
 window.saveManualArtist = async function(upc, value) {
   if (!value.trim()) return;
   State.manualArtists[upc] = value.trim();
-  await saveGistData();
+  saveGistDebounced();
   // Apply to the product in State.merged
   const p = State.merged.find(x => x.upc === upc);
   if (p) p.artist = value.trim();
@@ -2539,7 +2539,7 @@ window.updateMovementQty = function(i, val) {
 
 window.updateMovementNotes = function(i, val) {
   State.movements[i].notes = val;
-  saveGistData();
+  saveGistDebounced();
 };
 
 // ── EXPORTS ───────────────────────────────────────────────────
