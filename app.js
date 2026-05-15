@@ -16,6 +16,7 @@ const CONFIG = {
   GIST_ID:    'e79a142da6ddbc0a77560802db1ce780',
   GIST_TOKEN: (()=>'github_pat_11CDQQ5RA0yhSrJMafd3Fy_SuJsZtHRLaCo'+'J2KPwApkIdS76CaxEo9xLuHEo96bkTiZ7D546A7KzhWglV5')(),
   GIST_FILE:  'fp_data.json',
+  GIST_CONFIG_FILE: 'fp_config.json',
 };
 
 const State = {
@@ -268,57 +269,80 @@ function resetColumnLayout() {
 // ── GITHUB GIST SYNC ─────────────────────────────────────────
 async function loadGistData() {
   try {
-    // Use raw URL to avoid API truncation of large files
-    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
-    const res = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return;
-    const content = await res.text();
-    if (!content) return;
-    const parsed = JSON.parse(content);
-    State.suppressedUpcs = new Set(parsed.suppressed || []);
-    if (parsed.shopifyVendors) {
-      State.shopifyVendors = parsed.shopifyVendors;
-      const count = Object.keys(State.shopifyVendors).length;
-      setStatus('shopify', 'ok', count + ' artists');
-    } else {
-      setStatus('shopify', 'ok', 'No data');
+    // Instantly apply localStorage cache for immediate UI response
+    try {
+      const cached = localStorage.getItem('fp_config_cache');
+      if (cached) { applyConfigData(JSON.parse(cached)); console.log('Config from cache'); }
+    } catch(e) {}
+
+    // Fetch orchard data and config in parallel
+    const dataUrl   = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
+    const configUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_CONFIG_FILE}`;
+    const [dataRes, configRes] = await Promise.all([
+      fetch(dataUrl   + '?t=' + Date.now(), { cache: 'no-store' }),
+      fetch(configUrl + '?t=' + Date.now(), { cache: 'no-store' }),
+    ]);
+
+    // Orchard data (fp_data.json)
+    if (dataRes.ok) {
+      const txt = await dataRes.text();
+      if (txt) {
+        const parsed = JSON.parse(txt);
+        if (parsed.orchardData && parsed.orchardData.length) {
+          const sample = parsed.orchardData[0];
+          State.orchardData = sample && sample.u !== undefined
+            ? parsed.orchardData.map(expandOrchardRow) : parsed.orchardData;
+          State.orchardLoaded = true;
+          console.log('Orchard loaded:', State.orchardData.length, 'products');
+        }
+        if (parsed.orchardTs) localStorage.setItem('fp_orchard_ts', parsed.orchardTs);
+        // Legacy fallback: old fp_data.json had config fields too
+        if (!configRes.ok) { applyConfigData(parsed); updateGistStatus(txt.length/1024); }
+      }
     }
-    if (parsed.manualArtists) {
-      State.manualArtists = parsed.manualArtists;
+
+    // Config data (fp_config.json)
+    if (configRes.ok) {
+      const txt = await configRes.text();
+      if (txt) {
+        const parsed = JSON.parse(txt);
+        applyConfigData(parsed);
+        try { localStorage.setItem('fp_config_cache', txt); } catch(e) {}
+        console.log('Config loaded from Gist:', Object.keys(parsed.boxLots||{}).length, 'box lots,', (parsed.suppressed||[]).length, 'suppressed');
+        updateGistStatus(txt.length/1024);
+      }
+    } else if (dataRes.ok) {
+      // fp_config.json doesn't exist yet — legacy mode, config already applied from fp_data.json above
+      console.log('fp_config.json not found yet — will be created on next save');
     }
-    if (parsed.boxLots)       State.boxLots       = parsed.boxLots;
-    if (parsed.clearedAlerts) State.clearedAlerts = parsed.clearedAlerts;
-    if (parsed.manualFormats) State.manualFormats = parsed.manualFormats;
-    if (parsed.manualLabels)  State.manualLabels  = parsed.manualLabels;
-    if (parsed.movements) {
-      State.movements = parsed.movements;
-    }
-    if (parsed.orchardData && parsed.orchardData.length) {
-      // Expand short-key format if needed (detect by checking for 'u' key vs 'Display UPC')
-      const sample = parsed.orchardData[0];
-      State.orchardData = sample && sample.u !== undefined
-        ? parsed.orchardData.map(expandOrchardRow)
-        : parsed.orchardData;
-      State.orchardLoaded = true;
-      console.log('Orchard data loaded from Gist:', parsed.orchardData.length, 'products');
-    }
-    if (parsed.orchardTs) {
-      localStorage.setItem('fp_orchard_ts', parsed.orchardTs);
-    }
-    if (parsed.fpVelocity && Object.keys(parsed.fpVelocity).length) {
-      State.fp_velocity = parsed.fpVelocity;
-      console.log('FP velocity loaded from Gist:', Object.keys(parsed.fpVelocity).length, 'SKUs');
-    }
-    if (parsed.fpVelocityTs) {
-      State.fp_velocity_ts = parsed.fpVelocityTs;
-      const btn = document.getElementById('update-sales-btn');
-      if (btn) btn.title = 'Last updated: ' + new Date(parsed.fpVelocityTs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    }
-    console.log('Gist loaded:', State.suppressedUpcs.size, 'suppressed,', Object.keys(State.shopifyVendors).length, 'shopify,', Object.keys(State.manualArtists||{}).length, 'manual artists');
-    // Update size indicator from raw content length
-    updateGistStatus(content.length / 1024);
+
   } catch(e) {
     console.warn('Gist load failed:', e.message);
+  }
+}
+
+function applyConfigData(parsed) {
+  if (!parsed) return;
+  if (parsed.suppressed)     State.suppressedUpcs = new Set(parsed.suppressed);
+  if (parsed.shopifyVendors) {
+    State.shopifyVendors = parsed.shopifyVendors;
+    setStatus('shopify', 'ok', Object.keys(parsed.shopifyVendors).length + ' artists');
+  } else if (!Object.keys(State.shopifyVendors||{}).length) {
+    setStatus('shopify', 'ok', 'No data');
+  }
+  if (parsed.manualArtists)  State.manualArtists  = parsed.manualArtists;
+  if (parsed.movements)      State.movements      = parsed.movements;
+  if (parsed.boxLots)        State.boxLots        = parsed.boxLots;
+  if (parsed.manualFormats)  State.manualFormats  = parsed.manualFormats;
+  if (parsed.manualLabels)   State.manualLabels   = parsed.manualLabels;
+  if (parsed.clearedAlerts)  State.clearedAlerts  = parsed.clearedAlerts;
+  if (parsed.fpVelocity && Object.keys(parsed.fpVelocity).length) {
+    State.fp_velocity = parsed.fpVelocity;
+  }
+  if (parsed.fpVelocityTs) {
+    State.fp_velocity_ts = parsed.fpVelocityTs;
+    const btn = document.getElementById('update-sales-btn');
+    if (btn) btn.title = 'Last updated: ' + new Date(parsed.fpVelocityTs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   }
 }
 
@@ -388,59 +412,27 @@ function expandOrchardRow(s) {
 }
 
 async function saveFPVelocityToGist() {
-  if (!Object.keys(State.fp_velocity).length) return;
-  try {
-    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
-    let existing = {};
-    try {
-      const r = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
-      if (r.ok) existing = await r.json();
-    } catch(e) {}
-    const ts = new Date().toISOString();
-    State.fp_velocity_ts = ts;
-    const payload = {
-      ...existing,
-      fpVelocity: State.fp_velocity,
-      fpVelocityTs: ts,
-    };
-    const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
-    console.log('Saving FP velocity to Gist, SKUs:', Object.keys(State.fp_velocity).length, 'size:', Math.round(body.length/1024)+'KB');
-    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
-      method: 'PATCH',
-      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
-      body,
-    });
-    if (!res.ok) console.warn('FP velocity Gist save failed:', res.status);
-    else console.log('FP velocity saved to Gist OK, timestamp:', ts);
-  } catch(e) {
-    console.warn('FP velocity Gist save failed:', e.message);
-  }
+  // Velocity is now saved as part of saveGistData (fp_config.json)
+  State.fp_velocity_ts = new Date().toISOString();
+  await saveGistData();
 }
 
 async function saveOrchardToGist() {
   if (!State.orchardData.length) return;
   try {
-    // Use raw URL to read existing data (same as other save functions)
-    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
-    let existing = {};
-    try {
-      const r = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
-      if (r.ok) existing = await r.json();
-    } catch(e) {}
-    // Merge orchard data into existing payload
+    // fp_data.json only contains orchard data — no config fields
     const payload = {
-      ...existing,
       orchardData: slimOrchardData(State.orchardData),
       orchardTs: localStorage.getItem('fp_orchard_ts') || '',
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
-    console.log('Saving orchard to Gist, rows:', State.orchardData.length, 'size:', body.length);
-    const saveRes = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+    console.log('Saving orchard to Gist, rows:', State.orchardData.length, 'size:', Math.round(body.length/1024)+'KB');
+    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
       headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
       body,
     });
-    if (!saveRes.ok) console.warn('Orchard Gist save failed:', saveRes.status);
+    if (!res.ok) console.warn('Orchard Gist save failed:', res.status);
     else console.log('Orchard saved to Gist OK');
   } catch(e) {
     console.warn('Orchard Gist save failed:', e.message);
@@ -449,28 +441,24 @@ async function saveOrchardToGist() {
 
 async function saveGistData() {
   try {
-    // Read current Gist first to preserve orchardData
-    const rawUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/${CONFIG.GIST_FILE}`;
-    let existing = {};
-    try {
-      const r = await fetch(rawUrl + '?t=' + Date.now(), { cache: 'no-store' });
-      if (r.ok) existing = await r.json();
-    } catch(e) {}
-
     const payload = {
-      ...existing, // preserve orchardData, orchardTs, and anything else
       suppressed: [...State.suppressedUpcs],
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
       boxLots: State.boxLots || {},
-      clearedAlerts: State.clearedAlerts || {},
       manualFormats: State.manualFormats || {},
       manualLabels: State.manualLabels || {},
+      clearedAlerts: State.clearedAlerts || {},
+      fpVelocity: State.fp_velocity || {},
+      fpVelocityTs: State.fp_velocity_ts || '',
     };
-    const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
+    // Always save to localStorage first — instant, never fails
+    try { localStorage.setItem('fp_config_cache', JSON.stringify(payload)); } catch(e) {}
+
+    const body = JSON.stringify({ files: { [CONFIG.GIST_CONFIG_FILE]: { content: JSON.stringify(payload) } } });
     const sizeKB = body.length / 1024;
-    console.log('Saving to Gist, size:', Math.round(sizeKB)+'KB', 'orchard rows preserved:', payload.orchardData?.length || 0);
+    console.log('Saving config to Gist, size:', Math.round(sizeKB)+'KB');
     updateGistStatus(sizeKB);
     const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
       method: 'PATCH',
@@ -479,12 +467,13 @@ async function saveGistData() {
     });
     if (!res.ok) {
       const err = await res.text();
-      console.warn('Gist save failed:', res.status, err);
+      console.warn('Config Gist save failed:', res.status, err);
+      // localStorage already saved — data not lost
     } else {
-      console.log('Gist save OK, status:', res.status);
+      console.log('Config Gist save OK, size:', Math.round(sizeKB)+'KB');
     }
   } catch(e) {
-    console.warn('Gist save failed:', e.message);
+    console.warn('Config Gist save failed:', e.message);
   }
 }
 
