@@ -3937,8 +3937,8 @@ function renderProductionRuns() {
         + '</div>';
     }).join('');
 
-    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:12px;background:var(--surface);">'
-      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:6px 6px 0 0;">'
+    const isExpanded = run._expanded !== false; // default expanded
+    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:16px;background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,0.06);">'      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:' + (isExpanded ? '6px 6px 0 0' : '6px') + ';cursor:pointer;" onclick="toggleRunExpand(\'' + run.id + '\')">'      + '<span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">' + (isExpanded ? '▾' : '▸') + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
@@ -3947,14 +3947,14 @@ function renderProductionRuns() {
       + ' · <span style="color:var(--text-muted);">$' + totalUSD.toLocaleString('en-US',{minimumFractionDigits:2}) + '</span>'
       + '</div>'
       + '</div>'
-      + '<select class="run-status-sel" data-run="' + run.id + '" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:' + statusColor + ';font-weight:600;">'
+      + '<select class="run-status-sel" data-run="' + run.id + '" onclick="event.stopPropagation()" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:' + statusColor + ';font-weight:600;">'
       + RUN_STATUSES.map(s => '<option value="' + s + '"' + (s===run.status?' selected':'') + '>' + s + '</option>').join('')
       + '</select>'
-      + '<button class="edit-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
-      + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
+      + '<button class="edit-run-btn" data-run="' + run.id + '" onclick="event.stopPropagation()" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
+      + '<button class="delete-run-btn" data-run="' + run.id + '" onclick="event.stopPropagation()" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
       + '</div>'
       + '</div>'
-      + '<div style="padding:0;background:white;border-radius:0 0 6px 6px;overflow:hidden;">' + variantsHtml + '</div>'
+      + (isExpanded ? '<div style="padding:0;background:white;border-radius:0 0 6px 6px;overflow:hidden;border-top:1px solid var(--border);">' + variantsHtml + '</div>' : '')
       + '</div>';
   }).join('');
 }
@@ -3962,8 +3962,16 @@ function renderProductionRuns() {
 let _editRunId = null;
 let _runVariants = []; // temp state for modal
 
+window.toggleRunExpand = function(id) {
+  const run = (State.productionRuns||[]).find(r => r.id === id);
+  if (!run) return;
+  run._expanded = run._expanded === false ? true : false;
+  renderProductionRuns();
+};
+
 window.openNewRunModal = function() {
   _editRunId = null;
+  _runHeader = {};
   _runVariants = [{ id: 'v' + Date.now(), version:'', catalog:'', upc:'', versionNotes:'', qty:0, quotedAmount:'', destinations:[] }];
   renderRunModal();
   document.getElementById('run-modal-title').textContent = 'New Production Run';
@@ -3974,6 +3982,7 @@ window.editRun = function(id) {
   const run = (State.productionRuns||[]).find(r => r.id === id);
   if (!run) return;
   _editRunId = id;
+  _runHeader = { artist: run.artist, title: run.title, mainSku: run.mainSku||'', partNumber: run.partNumber||'' };
   _runVariants = JSON.parse(JSON.stringify(run.variants || []));
   renderRunModal(run);
   document.getElementById('run-modal-title').textContent = 'Edit Production Run';
@@ -3986,9 +3995,16 @@ window.closeRunModal = function() {
   _runVariants = [];
 };
 
+let _runHeader = {};
+
 function syncRunModalState() {
-  // Read current DOM values back into _runVariants before any re-render
   const get = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  // Sync top-level header fields
+  _runHeader.artist     = get('run-artist');
+  _runHeader.title      = get('run-title');
+  _runHeader.mainSku    = get('run-mainSku');
+  _runHeader.partNumber = get('run-partNumber');
+  // Sync variant fields
   _runVariants.forEach(v => {
     v.version       = get('rv-version-'  + v.id);
     v.catalog       = get('rv-catalog-'  + v.id);
@@ -4037,7 +4053,7 @@ window.removeRunModalDest = function(vid, did) {
 
 function renderRunModal(run) {
   const body = document.getElementById('run-modal-body');
-  const r = run || {};
+  const r = run || _runHeader || {};
 
   // Search field for title
   const titleSearchId = 'run-title-search';
