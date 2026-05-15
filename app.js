@@ -458,7 +458,21 @@ async function saveOrchardToGist() {
   }
 }
 
+let _gistSaving = false;
+let _gistSavePending = false;
+
 async function saveGistData() {
+  if (_gistSaving) { _gistSavePending = true; return; }
+  _gistSaving = true;
+  try {
+    await _saveGistDataImpl();
+  } finally {
+    _gistSaving = false;
+    if (_gistSavePending) { _gistSavePending = false; setTimeout(saveGistData, 500); }
+  }
+}
+
+async function _saveGistDataImpl() {
   try {
     const payload = {
       suppressed: [...State.suppressedUpcs],
