@@ -3937,8 +3937,8 @@ function renderProductionRuns() {
         + '</div>';
     }).join('');
 
-    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:12px;">'
-      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;">'
+    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:12px;background:var(--surface);">'
+      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:6px 6px 0 0;">'
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
@@ -3953,11 +3953,11 @@ function renderProductionRuns() {
       + '<button class="edit-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
       + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
       + '</div>'
-      + '<button class="edit-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);">Edit</button>'
-      + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
+      + '</div>'
+      + '<div style="padding:0 14px 12px;">' + variantsHtml + '</div>'
+      + '</div>';
   }).join('');
 }
-
 // ── PRODUCTION RUN MODAL ──────────────────────────────────────
 let _editRunId = null;
 let _runVariants = []; // temp state for modal
@@ -3986,23 +3986,50 @@ window.closeRunModal = function() {
   _runVariants = [];
 };
 
+function syncRunModalState() {
+  // Read current DOM values back into _runVariants before any re-render
+  const get = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  _runVariants.forEach(v => {
+    v.version       = get('rv-version-'  + v.id);
+    v.catalog       = get('rv-catalog-'  + v.id);
+    v.upc           = get('rv-upc-'      + v.id);
+    v.versionNotes  = get('rv-notes-'    + v.id);
+    v.qty           = parseInt(get('rv-qty-' + v.id))||0;
+    v.quotedAmount  = get('rv-amount-'   + v.id);
+    v.destinations.forEach(d => {
+      const whEl = document.getElementById('rd-wh-'     + d.id);
+      const stEl = document.getElementById('rd-status-' + d.id);
+      if (whEl) d.wh           = whEl.value;
+      if (stEl) d.status       = stEl.value;
+      d.poNumber    = get('rd-po-'   + d.id);
+      d.expectedDate= get('rd-date-' + d.id);
+      d.qty         = parseInt(get('rd-qty-'  + d.id))||0;
+      d.notes       = get('rd-notes-'+ d.id);
+    });
+  });
+}
+
 window.addRunVariant = function() {
+  syncRunModalState();
   _runVariants.push({ id: 'v' + Date.now(), version:'', catalog:'', upc:'', versionNotes:'', qty:0, quotedAmount:'', destinations:[] });
   renderRunModal();
 };
 
 window.removeRunVariant = function(vid) {
+  syncRunModalState();
   _runVariants = _runVariants.filter(v => v.id !== vid);
   renderRunModal();
 };
 
 window.addRunModalDestination = function(vid) {
+  syncRunModalState();
   const v = _runVariants.find(x => x.id === vid);
   if (v) v.destinations.push({ id: 'd' + Date.now(), wh:'fp', poNumber:'', expectedDate:'', qty:0, notes:'', status:'Pending' });
   renderRunModal();
 };
 
 window.removeRunModalDest = function(vid, did) {
+  syncRunModalState();
   const v = _runVariants.find(x => x.id === vid);
   if (v) v.destinations = v.destinations.filter(d => d.id !== did);
   renderRunModal();
@@ -4065,10 +4092,11 @@ function renderRunModal(run) {
 function field(label, id, value, type='text', placeholder='') {
   return '<div><label style="display:block;font-size:9px;color:var(--text-dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;">'+label+'</label>'
     + '<input type="'+type+'" id="'+id+'" value="'+esc(String(value))+'" placeholder="'+esc(placeholder)+'"'
-    + ' style="width:100%;font-size:11px;padding:5px 7px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);box-sizing:border-box;" /></div>';
+    + ' style="width:100%;font-size:11px;padding:5px 7px;background:white;border:1px solid var(--border2);border-radius:3px;color:var(--text);box-sizing:border-box;" /></div>';
 }
 
 window.saveRunModal = function() {
+  syncRunModalState();
   const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const artist = get('run-artist');
   const title  = get('run-title');
