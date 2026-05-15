@@ -1235,7 +1235,7 @@ function mergeData() {
       orchard_title:   row['Release Name'] || '',
       artist:          row['Artist Name'] || '',
       label:           normalizeLabel(row['Label Name'] || ''),
-      format:          row['Configuration'] || '',
+      format:          normalizeFormat(row['Configuration'] || ''),
       us_avail:   safeNum(row['US Available']),
       us_mtd:     safeNum(row['US MTDS#']),
       us_3ms:     safeNum(row['US 3MS#']),
@@ -1292,6 +1292,7 @@ function mergeData() {
   // Apply manual format and label overrides
   for (const p of State.merged) {
     if (State.manualFormats[p.upc]) p.format = State.manualFormats[p.upc];
+    else if (p.format) p.format = normalizeFormat(p.format);
     if (State.manualLabels[p.upc])  p.label  = State.manualLabels[p.upc];
   }
   // Re-apply FP velocity if already loaded
@@ -1500,8 +1501,11 @@ function renderInventory() {
     }
     if (cfgFilter) {
       const fmt = (p.format||'').toLowerCase();
-      if (cfgFilter === 'lp' && !fmt.includes('vinyl') && !fmt.includes('lp') && !fmt.includes('12"')) return false;
-      if (cfgFilter === 'cd' && !fmt.includes('cd')) return false;
+      if (cfgFilter === 'lp12' && !fmt.includes('12')) return false;
+      if (cfgFilter === 'lp10' && !fmt.includes('10')) return false;
+      if (cfgFilter === 'lp7'  && !fmt.includes('7')) return false;
+      if (cfgFilter === 'cd'   && !fmt.includes('cd')) return false;
+      if (cfgFilter === 'merch' && !fmt.includes('merch')) return false;
     }
     if (whFilter) {
       const avail = { fp:p.fp_available, us:p.us_avail, ca:p.ca_avail, uk:p.uk_avail, eu:p.eu_avail };
@@ -1607,6 +1611,8 @@ function renderInventory() {
       if (col.id === 'format') {
         const fmtVal = State.manualFormats[p.upc] || v;
         const formats = [...new Set(State.merged.map(x=>x.format).filter(Boolean))].sort();
+        // Add Merch if not already present
+        if (!formats.includes('Merch')) formats.push('Merch');
         const opts = formats.map(f => `<option value="${esc(f)}"${f===fmtVal?' selected':''}>${esc(f)}</option>`).join('');
         return `<td class="mob-format${pinnedClass}" style="${style}">
           <select data-upc="${p.upc}" onchange="saveManualFormat('${p.upc}',this.value)"
@@ -3794,6 +3800,18 @@ function setStatus(which, state, label) {
   if (dot) dot.className = 'status-dot ' + state;
   if (txt) txt.textContent = label;
 }
+function normalizeFormat(fmt) {
+  if (!fmt) return '';
+  const f = fmt.toLowerCase();
+  if (f.includes('12') && (f.includes('vinyl') || f.includes('lp'))) return 'LP - 12"';
+  if (f.includes('10') && (f.includes('vinyl') || f.includes('lp'))) return 'LP - 10"';
+  if (f.includes('7')  && (f.includes('vinyl') || f.includes('lp'))) return 'LP - 7"';
+  if (f === '12 vinyl' || f === '12"') return 'LP - 12"';
+  if (f === '10 vinyl' || f === '10"') return 'LP - 10"';
+  if (f === '7 vinyl'  || f === '7"')  return 'LP - 7"';
+  return fmt;
+}
+
 function normalizeLabel(label) {
   if (!label) return '';
   const l = label.toLowerCase();
