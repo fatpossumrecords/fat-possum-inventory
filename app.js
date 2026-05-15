@@ -4032,6 +4032,20 @@ function renderProductionRuns() {
       + '</div></div>' : '');
 }
 
+window.toggleMfgNav = function(e) {
+  e.preventDefault();
+  const sub = document.getElementById('mfg-nav-sub');
+  const arrow = document.getElementById('mfg-nav-arrow');
+  if (!sub) return;
+  const open = sub.style.display === 'none';
+  sub.style.display = open ? 'block' : 'none';
+  if (arrow) arrow.textContent = open ? '▾' : '▸';
+  if (open) {
+    // Also switch to manufacturing view and default tab
+    switchView('manufacturing');
+  }
+};
+
 window.toggleArchivedRuns = function() {
   const body = document.getElementById('archived-runs-body');
   const arrow = document.getElementById('archived-runs-arrow');
