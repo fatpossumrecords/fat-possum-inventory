@@ -2443,6 +2443,27 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('add-dest-btn')) {
     addRunDestination(e.target.dataset.run, e.target.dataset.vid);
   }
+  if (e.target.classList.contains('edit-run-btn')) {
+    editRun(e.target.dataset.run);
+  }
+  if (e.target.classList.contains('delete-run-btn')) {
+    deleteRun(e.target.dataset.run);
+  }
+  if (e.target.classList.contains('run-status-sel')) {
+    updateRunStatus(e.target.dataset.run, e.target.value);
+  }
+  if (e.target.classList.contains('add-run-variant-btn')) {
+    addRunVariant();
+  }
+  if (e.target.classList.contains('add-modal-dest-btn')) {
+    addRunModalDestination(e.target.dataset.vid);
+  }
+  if (e.target.classList.contains('remove-variant-btn')) {
+    removeRunVariant(e.target.dataset.vid);
+  }
+  if (e.target.classList.contains('remove-dest-modal-btn')) {
+    removeRunModalDest(e.target.dataset.vid, e.target.dataset.did);
+  }
   if (e.target.classList.contains('doom-kill')) {
     doomsdayKill(e.target.dataset.upc, e.target.dataset.artist, e.target.dataset.title);
   }
@@ -4036,7 +4057,7 @@ function renderRunModal(run) {
       + '</div>';
   });
 
-  html += '<button onclick="addRunVariant()" style="background:none;border:1px dashed var(--border2);border-radius:3px;padding:6px 16px;font-size:11px;cursor:pointer;color:var(--text-muted);width:100%;margin-top:4px;">+ Add Variant</button>';
+  html += '<button class="add-run-variant-btn" style="background:none;border:1px dashed var(--border2);border-radius:3px;padding:6px 16px;font-size:11px;cursor:pointer;color:var(--text-muted);width:100%;margin-top:4px;">+ Add Variant</button>';
 
   body.innerHTML = html;
 }
@@ -4207,6 +4228,12 @@ window.syncProductionRunsToSheet = async function() {
 // Close run modal on backdrop
 document.addEventListener('click', e => {
   if (e.target.id === 'run-modal') closeRunModal();
+});
+// Run status select change
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('run-status-sel')) {
+    updateRunStatus(e.target.dataset.run, e.target.value);
+  }
 });
 
 window.jumpToTitle = function(catalog) {
