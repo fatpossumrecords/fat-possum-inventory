@@ -373,6 +373,7 @@
           <div class="tab-switcher">
             <button class="tab-btn active" data-tab="predictions" onclick="switchMfgTab('predictions')">Predictions</button>
             <button class="tab-btn" data-tab="queue" onclick="switchMfgTab('queue')">Queue <span id="mfg-queue-badge" class="badge hidden">0</span></button>
+            <button class="tab-btn" data-tab="runs" onclick="switchMfgTab('runs')">Production Runs <span id="runs-badge" class="badge hidden">0</span></button>
           </div>
         </div>
       </div>
@@ -449,6 +450,16 @@
           </table>
         </div>
       </div><!-- end mfg-tab-queue -->
+
+      <!-- PRODUCTION RUNS SUB-VIEW -->
+      <div id="mfg-tab-runs" class="mfg-tab hidden">
+        <div class="view-actions" style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);gap:8px;display:flex;flex-wrap:wrap;align-items:center;">
+          <button class="btn-primary btn-sm" onclick="openNewRunModal()">+ New Production Run</button>
+          <button class="btn-secondary btn-sm" onclick="syncProductionRunsToSheet()">⟳ Sync to Sheet</button>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:8px;" id="runs-summary"></span>
+        </div>
+        <div id="runs-body" style="overflow-y:auto;flex:1;padding:16px 24px;"></div>
+      </div><!-- end mfg-tab-runs -->
 
     </div>
 
@@ -529,6 +540,21 @@
       </div>
     </div>
   </div>
+  <!-- Production Run Modal -->
+  <div id="run-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:1000;display:none;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border-radius:8px;width:780px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 40px rgba(0,0,0,0.2);">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+        <div style="font-size:13px;font-weight:700;" id="run-modal-title">New Production Run</div>
+        <button onclick="closeRunModal()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:22px;line-height:1;">×</button>
+      </div>
+      <div id="run-modal-body" style="overflow-y:auto;flex:1;padding:18px;"></div>
+      <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;">
+        <button onclick="closeRunModal()" class="btn-secondary btn-sm">Cancel</button>
+        <button onclick="saveRunModal()" class="btn-primary btn-sm">Save Run</button>
+      </div>
+    </div>
+  </div>
+
   <div id="notif-popup" class="hidden" style="position:fixed;top:56px;right:16px;width:420px;max-height:70vh;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:200;display:flex;flex-direction:column;overflow:hidden;">
     <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
       <span id="notif-popup-title" style="font-size:13px;font-weight:600;color:var(--text)"></span>
