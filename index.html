@@ -236,36 +236,42 @@
           <h2>Global Inventory</h2>
           <p class="view-sub" id="inventory-count">Loading…</p>
         </div>
-        <div class="view-actions">
-    
-          <select id="filter-config" class="select-sm">
-            <option value="">All formats</option>
-            <option value="lp12">LP - 12"</option>
-            <option value="lp10">LP - 10"</option>
-            <option value="lp7">LP - 7"</option>
-            <option value="cd">CD</option>
-            <option value="cass">Cassette</option>
-            <option value="book">Book</option>
-            <option value="dvd">DVD</option>
-            <option value="merch">Merch</option>
-          </select>
-          <select id="filter-warehouse" class="select-sm">
-            <option value="">All warehouses</option>
-            <option value="fp">Fat Possum WH</option>
-            <option value="us">Orchard US</option>
-            <option value="ca">Orchard Canada</option>
-            <option value="uk">Orchard UK</option>
-            <option value="eu">Orchard EU</option>
-          </select>
-          <select id="filter-status" class="select-sm">
-            <option value="">All statuses</option>
-            <option value="critical">Critical</option>
-            <option value="low">Low</option>
-            <option value="out">Out of Stock</option>
-            <option value="ok">OK</option>
-          </select>
-          <button id="export-inventory-btn" class="btn-secondary btn-sm">Export CSV</button>
-          <button onclick="clearInventoryFilters()" class="btn-ghost btn-sm" id="clear-filters-btn" style="display:none;">✕ Clear Filters</button>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+            <select id="filter-config" class="select-sm" title="Format">
+              <option value="">Format</option>
+              <option value="lp12">LP - 12"</option>
+              <option value="lp10">LP - 10"</option>
+              <option value="lp7">LP - 7"</option>
+              <option value="cd">CD</option>
+              <option value="cass">Cassette</option>
+              <option value="book">Book</option>
+              <option value="dvd">DVD</option>
+              <option value="merch">Merch</option>
+            </select>
+            <select id="filter-label" class="select-sm" title="Label">
+              <option value="">Label</option>
+            </select>
+            <select id="filter-warehouse" class="select-sm" title="Warehouse">
+              <option value="">Warehouse</option>
+              <option value="fp">Fat Possum WH</option>
+              <option value="us">Orchard US</option>
+              <option value="ca">Orchard CA</option>
+              <option value="uk">Orchard UK</option>
+              <option value="eu">Orchard EU</option>
+            </select>
+            <select id="filter-status" class="select-sm" title="Status">
+              <option value="">Status</option>
+              <option value="critical">Critical</option>
+              <option value="low">Low</option>
+              <option value="out">Out of Stock</option>
+              <option value="ok">OK</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button id="export-inventory-btn" class="btn-secondary btn-sm">Export CSV</button>
+            <button onclick="clearInventoryFilters()" class="btn-ghost btn-sm" id="clear-filters-btn" style="display:none;">✕ Clear</button>
+          </div>
         </div>
       </div>
       <!-- Floating action bar for bulk selection -->
