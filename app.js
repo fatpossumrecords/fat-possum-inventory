@@ -3943,8 +3943,8 @@ function renderProductionRuns() {
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
       + esc(run.mainSku||'') + (run.partNumber ? ' · Part#: ' + esc(run.partNumber) : '')
-      + ' · ' + totalQty.toLocaleString() + ' units total'
-      + ' · $' + totalUSD.toLocaleString('en-US',{minimumFractionDigits:2}) + ' total quoted'
+      + '<span style="margin-left:6px;font-size:12px;font-weight:700;color:var(--text);"> ' + totalQty.toLocaleString() + ' <span style="font-size:10px;font-weight:400;color:var(--text-muted);">total units</span></span>'
+      + ' · <span style="color:var(--text-muted);">$' + totalUSD.toLocaleString('en-US',{minimumFractionDigits:2}) + '</span>'
       + '</div>'
       + '</div>'
       + '<select class="run-status-sel" data-run="' + run.id + '" style="font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:' + statusColor + ';font-weight:600;">'
@@ -3954,7 +3954,7 @@ function renderProductionRuns() {
       + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
       + '</div>'
       + '</div>'
-      + '<div style="padding:0 14px 12px;">' + variantsHtml + '</div>'
+      + '<div style="padding:0;background:white;border-radius:0 0 6px 6px;overflow:hidden;">' + variantsHtml + '</div>'
       + '</div>';
   }).join('');
 }
