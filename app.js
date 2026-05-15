@@ -468,12 +468,20 @@ async function saveGistData() {
     if (!res.ok) {
       const err = await res.text();
       console.warn('Config Gist save failed:', res.status, err);
-      // localStorage already saved — data not lost
+      setStatus('gist', 'error', 'Save failed');
+      const dot = document.getElementById('gist-dot');
+      if (dot) dot.className = 'status-dot error';
+      toast('⚠ Gist save failed — changes saved locally only. Check your connection.', 'error');
     } else {
       console.log('Config Gist save OK, size:', Math.round(sizeKB)+'KB');
+      // Clear any previous error state
+      const dot = document.getElementById('gist-dot');
+      if (dot) dot.className = 'status-dot ok';
     }
   } catch(e) {
     console.warn('Config Gist save failed:', e.message);
+    setStatus('gist', 'error', 'Save failed');
+    toast('⚠ Gist save failed — changes saved locally only.', 'error');
   }
 }
 
