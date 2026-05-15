@@ -1610,7 +1610,7 @@ function renderInventory() {
       }
       if (col.id === 'format') {
         const fmtVal = State.manualFormats[p.upc] || v;
-        const formats = [...new Set(State.merged.map(x=>x.format).filter(Boolean))].sort();
+        const formats = [...new Set(State.merged.map(x=>normalizeFormat(x.format)).filter(Boolean))].sort();
         // Add Merch if not already present
         if (!formats.includes('Merch')) formats.push('Merch');
         const opts = formats.map(f => `<option value="${esc(f)}"${f===fmtVal?' selected':''}>${esc(f)}</option>`).join('');
@@ -3802,13 +3802,19 @@ function setStatus(which, state, label) {
 }
 function normalizeFormat(fmt) {
   if (!fmt) return '';
-  const f = fmt.toLowerCase();
-  if (f.includes('12') && (f.includes('vinyl') || f.includes('lp'))) return 'LP - 12"';
-  if (f.includes('10') && (f.includes('vinyl') || f.includes('lp'))) return 'LP - 10"';
-  if (f.includes('7')  && (f.includes('vinyl') || f.includes('lp'))) return 'LP - 7"';
-  if (f === '12 vinyl' || f === '12"') return 'LP - 12"';
-  if (f === '10 vinyl' || f === '10"') return 'LP - 10"';
-  if (f === '7 vinyl'  || f === '7"')  return 'LP - 7"';
+  const f = fmt.toLowerCase().trim();
+  // Any vinyl/lp gets normalized by size
+  const isVinylFmt = f.includes('vinyl') || f.includes(' lp') || f.startsWith('lp') || f.includes('"');
+  if (isVinylFmt || f.includes('12') || f.includes('10') || f.includes('7') || f.includes('6')) {
+    if (f.includes('12')) return 'LP - 12"';
+    if (f.includes('10')) return 'LP - 10"';
+    if (f.includes('7'))  return 'LP - 7"';
+    if (f.includes('6'))  return 'LP - 6"';
+    if (isVinylFmt)       return 'LP - 12"'; // default vinyl to 12"
+  }
+  if (f.includes('cd')) return 'CD';
+  if (f.includes('cass')) return 'Cassette';
+  if (f.includes('merch')) return 'Merch';
   return fmt;
 }
 
