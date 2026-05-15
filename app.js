@@ -1544,6 +1544,9 @@ function renderInventory() {
       if (cfgFilter === 'lp10' && !fmt.includes('10')) return false;
       if (cfgFilter === 'lp7'  && !fmt.includes('7')) return false;
       if (cfgFilter === 'cd'   && !fmt.includes('cd')) return false;
+      if (cfgFilter === 'cass' && !fmt.includes('cass')) return false;
+      if (cfgFilter === 'book' && !fmt.includes('book')) return false;
+      if (cfgFilter === 'dvd'  && !fmt.includes('dvd')) return false;
       if (cfgFilter === 'merch' && !fmt.includes('merch')) return false;
     }
     if (whFilter) {
