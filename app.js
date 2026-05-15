@@ -1582,7 +1582,7 @@ function renderInventory() {
       }
       if (col.id === 'status')  return `<td class="mob-status${pinnedClass}" style="${style}">${statusPill(v)}</td>`;
       if (col.id === 'open_po') {
-        const hasMov = State.movements.some(m => m.upc === p.upc && (m.status === 'confirmed' || m.status === 'shipped'));
+        const hasMov = State.movements.some(m => m.upc === p.upc && (m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed'));
         const hasPO  = !!(State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty;
         const poMark  = hasPO  ? '<span style="color:var(--green);font-size:13px;" title="Open PO">✓</span>' : '';
         const movMark = hasMov ? '<span style="color:var(--green);font-size:13px;" title="Stock movement confirmed">→</span>' : '';
@@ -1858,7 +1858,7 @@ function renderAlerts(preserveExpanded=false) {
     // Sum confirmed/shipped movement quantities inbound to this warehouse per UPC
     const confirmedInbound = {};
     for (const m of State.movements) {
-      if ((m.status === 'confirmed' || m.status === 'shipped') && m.to === wh.key) {
+      if ((m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed') && m.to === wh.key) {
         confirmedInbound[m.upc] = (confirmedInbound[m.upc] || 0) + (m.qty || 0);
       }
     }
@@ -2730,7 +2730,7 @@ function renderDashboard() {
     // Apply confirmed inbound same as renderAlerts
     const confirmedInbound = {};
     for (const m of State.movements) {
-      if ((m.status === 'confirmed' || m.status === 'shipped') && m.to === wh.key) {
+      if ((m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed') && m.to === wh.key) {
         confirmedInbound[m.upc] = (confirmedInbound[m.upc] || 0) + (m.qty || 0);
       }
     }
@@ -3113,7 +3113,7 @@ function buildNeedsAttentionBanner() {
   // Track addressed alerts per upc|wh combo
   const addressedKeys = new Set();
   for (const m of State.movements) {
-    if (m.status === 'confirmed' || m.status === 'shipped') {
+    if (m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed') {
       addressedKeys.add(m.upc + '|' + m.to);
     }
   }
@@ -3406,7 +3406,7 @@ function updateNotifications() {
       const weeks = (avail / monthly) * 4.33;
       if (weeks >= CONFIG.REORDER_WEEKS) continue;
       const key = p.upc + '|' + wh.key;
-      const actioned = State.movements.some(m => m.upc === p.upc && m.to === wh.key && (m.status === 'confirmed' || m.status === 'shipped'));
+      const actioned = State.movements.some(m => m.upc === p.upc && m.to === wh.key && (m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed'));
       if (actioned) { delete seenAlerts[key]; continue; }
       if (!seenAlerts[key]) seenAlerts[key] = now;
       const age = now - seenAlerts[key];
