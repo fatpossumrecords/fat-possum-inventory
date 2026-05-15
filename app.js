@@ -3900,9 +3900,38 @@ function renderProductionRuns() {
     return;
   }
 
+  // Build monthly tally from destination expected dates
+  const monthlyTally = {};
+  for (const run of visible) {
+    if (run.status === 'Cancelled' || run.status === 'Received') continue;
+    for (const v of (run.variants||[])) {
+      for (const d of (v.destinations||[])) {
+        if (!d.expectedDate) continue;
+        const dt = new Date(d.expectedDate);
+        const key = dt.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+        if (!monthlyTally[key]) monthlyTally[key] = { units: 0, dollars: 0, date: dt };
+        monthlyTally[key].units   += d.qty||0;
+        monthlyTally[key].dollars += parseFloat(v.quotedAmount||0) * ((d.qty||0) / (v.qty||1));
+      }
+    }
+  }
+  const tallyHtml = Object.keys(monthlyTally).length
+    ? '<div style="background:var(--surface2);border-radius:6px;padding:12px 16px;margin-bottom:20px;">'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Expected by Month</div>'
+      + '<div style="display:flex;gap:12px;flex-wrap:wrap;">'
+      + Object.entries(monthlyTally).sort((a,b) => a[1].date - b[1].date).map(([month, t]) =>
+          '<div style="background:white;border-radius:4px;padding:8px 12px;min-width:140px;">'
+          + '<div style="font-size:11px;font-weight:700;color:var(--text);">' + month + '</div>'
+          + '<div style="font-size:13px;font-weight:700;color:var(--accent);margin-top:2px;">' + t.units.toLocaleString() + '<span style="font-size:10px;font-weight:400;color:var(--text-muted);margin-left:3px;">units</span></div>'
+          + '<div style="font-size:11px;color:var(--text-muted);">$' + t.dollars.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}) + '</div>'
+          + '</div>'
+        ).join('')
+      + '</div></div>'
+    : '';
+
   const STATUS_COLOR = { Ordered:'#3b7de8', 'In Production':'var(--orange)', Shipped:'var(--green)', Received:'var(--text-muted)', Cancelled:'var(--text-dim)' };
 
-  el.innerHTML = visible.map(run => {
+  el.innerHTML = tallyHtml + visible.map(run => {
     const totalQty = (run.variants||[]).reduce((s,v) => s+(v.qty||0), 0);
     const totalUSD = (run.variants||[]).reduce((s,v) => s+parseFloat(v.quotedAmount||0), 0);
     const statusColor = STATUS_COLOR[run.status] || 'var(--text-muted)';
@@ -3938,7 +3967,7 @@ function renderProductionRuns() {
     }).join('');
 
     const isExpanded = run._expanded !== false; // default expanded
-    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:16px;background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,0.06);">'      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:' + (isExpanded ? '6px 6px 0 0' : '6px') + ';cursor:pointer;" onclick="toggleRunExpand(\'' + run.id + '\')">'      + '<span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">' + (isExpanded ? '▾' : '▸') + '</span>'
+    return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:28px;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,0.08);">'      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:' + (isExpanded ? '6px 6px 0 0' : '6px') + ';cursor:pointer;" onclick="toggleRunExpand(\'' + run.id + '\')">'      + '<span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">' + (isExpanded ? '▾' : '▸') + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
@@ -3954,7 +3983,7 @@ function renderProductionRuns() {
       + '<button class="delete-run-btn" data-run="' + run.id + '" onclick="event.stopPropagation()" style="background:none;border:1px solid var(--border2);border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-dim);">×</button>'
       + '</div>'
       + '</div>'
-      + (isExpanded ? '<div style="padding:0;background:white;border-radius:0 0 6px 6px;overflow:hidden;border-top:1px solid var(--border);">' + variantsHtml + '</div>' : '')
+      + (isExpanded ? '<div style="padding:0 0 12px 0;background:white;border-radius:0 0 6px 6px;overflow:hidden;border-top:1px solid var(--border);">' + variantsHtml + '</div>' : '')
       + '</div>';
   }).join('');
 }
