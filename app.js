@@ -2443,6 +2443,9 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('add-dest-btn')) {
     addRunDestination(e.target.dataset.run, e.target.dataset.vid);
   }
+  if (e.target.classList.contains('toggle-archived-btn') || e.target.closest('.toggle-archived-btn')) {
+    toggleArchivedRuns();
+  }
   if (e.target.classList.contains('edit-run-btn')) {
     e.stopPropagation();
     editRun(e.target.dataset.run);
@@ -3898,6 +3901,26 @@ function renderProductionRuns() {
   if (changed) { saveGistData(); }
 
   const visible = runs.filter(r => !r._archived);
+
+  // Sort: no expected date first, then by soonest expected date
+  function getSoonestDate(run) {
+    let soonest = null;
+    for (const v of (run.variants||[])) {
+      for (const d of (v.destinations||[])) {
+        if (!d.expectedDate) continue;
+        const dt = new Date(d.expectedDate);
+        if (!soonest || dt < soonest) soonest = dt;
+      }
+    }
+    return soonest;
+  }
+  visible.sort((a, b) => {
+    const da = getSoonestDate(a), db = getSoonestDate(b);
+    if (!da && !db) return 0;
+    if (!da) return -1; // no date sorts first
+    if (!db) return 1;
+    return da - db;
+  });
   if (!visible.length) {
     el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:40px;font-size:13px;">No production runs yet. Click + New Production Run to add one.</div>';
     return;
@@ -3934,6 +3957,7 @@ function renderProductionRuns() {
 
   const STATUS_COLOR = { Ordered:'#3b7de8', 'In Production':'var(--orange)', Shipped:'var(--green)', Received:'var(--text-muted)', Cancelled:'var(--text-dim)' };
 
+  const archived = runs.filter(r => r._archived || r.status === 'Received');
   el.innerHTML = tallyHtml + visible.map(run => {
     const totalQty = (run.variants||[]).reduce((s,v) => s+(v.qty||0), 0);
     const totalUSD = (run.variants||[]).reduce((s,v) => s+parseFloat(v.quotedAmount||0), 0);
@@ -3988,8 +4012,35 @@ function renderProductionRuns() {
       + '</div>'
       + (isExpanded ? '<div style="padding:0 0 16px 0;background:white;border-radius:0 0 6px 6px;overflow:hidden;border-top:1px solid var(--border);"><div style="padding-bottom:4px;">' + variantsHtml + '</div></div>' : '')
       + '</div>';
-  }).join('');
+  }).join('')
+  + (archived.length ? '<div style="margin-top:32px;">'
+      + '<div class="toggle-archived-btn" style="cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
+      + '<span id="archived-runs-arrow" style="font-size:10px;color:var(--text-dim);">▸</span>'
+      + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Archived / Received (' + archived.length + ')</span>'
+      + '</div>'
+      + '<div id="archived-runs-body" style="display:none;">'
+      + archived.map(run => {
+          const totalQty = (run.variants||[]).reduce((s,v)=>s+(v.qty||0),0);
+          return '<div style="border:1px solid var(--border);border-radius:6px;margin-bottom:8px;opacity:0.65;">'
+            + '<div style="padding:10px 14px;display:flex;gap:12px;align-items:center;background:var(--surface2);border-radius:6px;">'
+            + '<div style="flex:1;font-size:12px;font-weight:600;color:var(--text-muted);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
+            + '<span style="font-size:10px;color:var(--text-muted);">' + totalQty.toLocaleString() + ' units</span>'
+            + '<span style="font-size:10px;font-weight:600;color:var(--text-dim);">' + (run.status||'Received') + '</span>'
+            + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:12px;padding:0 4px;">×</button>'
+            + '</div></div>';
+        }).join('')
+      + '</div></div>' : '');
 }
+
+window.toggleArchivedRuns = function() {
+  const body = document.getElementById('archived-runs-body');
+  const arrow = document.getElementById('archived-runs-arrow');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  if (arrow) arrow.textContent = open ? '▾' : '▸';
+};
+
 // ── PRODUCTION RUN MODAL ──────────────────────────────────────
 let _editRunId = null;
 let _runVariants = []; // temp state for modal
@@ -4463,6 +4514,7 @@ function switchView(viewName, pushHistory=true) {
   }
   document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
   if (viewName === 'suppressed') renderSuppressedLog();
+  if (viewName === 'manufacturing') setTimeout(() => switchMfgTab('runs'), 50);
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
