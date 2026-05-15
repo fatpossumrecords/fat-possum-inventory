@@ -109,6 +109,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
   document.getElementById('filter-status').addEventListener('change', renderInventory);
+  document.getElementById('filter-label').addEventListener('change', renderInventory);
   document.getElementById('filter-config').addEventListener('change', renderInventory);
   document.getElementById('filter-warehouse').addEventListener('change', renderInventory);
   document.getElementById('export-inventory-btn').addEventListener('click', exportInventory);
@@ -1348,12 +1349,21 @@ function mergeData() {
 }
 
 function populateLabelDropdown() {
-  const sel = document.getElementById('alert-filter-label');
-  if (!sel) return;
   const labels = [...new Set(State.merged.map(p => p.label).filter(Boolean))].sort();
-  const current = sel.value;
-  sel.innerHTML = '<option value="">All labels</option>' +
-    labels.map(l => `<option value="${esc(l)}"${l === current ? ' selected' : ''}>${esc(l)}</option>`).join('');
+  // Alert filter label
+  const sel = document.getElementById('alert-filter-label');
+  if (sel) {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All labels</option>' +
+      labels.map(l => `<option value="${esc(l)}"${l === current ? ' selected' : ''}>${esc(l)}</option>`).join('');
+  }
+  // Inventory filter label
+  const inv = document.getElementById('filter-label');
+  if (inv) {
+    const current = inv.value;
+    inv.innerHTML = '<option value="">Label</option>' +
+      labels.map(l => `<option value="${esc(l.toLowerCase())}"${l.toLowerCase() === current ? ' selected' : ''}>${esc(l)}</option>`).join('');
+  }
 }
 
 // ── INVENTORY VIEW ────────────────────────────────────────────
@@ -1529,8 +1539,9 @@ function getVal(p, colId) {
 
 function renderInventory() {
   const search    = (document.getElementById('search-input').value || '').toLowerCase();
-  const cfgFilter = document.getElementById('filter-config').value.toLowerCase();
-  const whFilter  = document.getElementById('filter-warehouse').value;
+  const cfgFilter   = document.getElementById('filter-config').value.toLowerCase();
+  const whFilter    = document.getElementById('filter-warehouse').value;
+  const labelFilter = (document.getElementById('filter-label')?.value || '').toLowerCase();
   const statusFilter = (document.getElementById('filter-status')?.value || '');
 
 
@@ -1554,6 +1565,7 @@ function renderInventory() {
       if ((avail[whFilter]||0) <= 0) return false;
     }
     if (statusFilter && stockStatus(p) !== statusFilter) return false;
+    if (labelFilter && (p.label||'').toLowerCase() !== labelFilter) return false;
     return true;
   });
 
@@ -1686,6 +1698,7 @@ window.clearInventoryFilters = function() {
   document.getElementById('filter-config').value = '';
   document.getElementById('filter-warehouse').value = '';
   document.getElementById('filter-status').value = '';
+  document.getElementById('filter-label').value = '';
   document.getElementById('clear-filters-btn').style.display = 'none';
   renderInventory();
 };
@@ -1696,7 +1709,8 @@ function updateClearFiltersBtn() {
   const active = document.getElementById('search-input').value
     || document.getElementById('filter-config').value
     || document.getElementById('filter-warehouse').value
-    || document.getElementById('filter-status').value;
+    || document.getElementById('filter-status').value
+    || document.getElementById('filter-label')?.value;
   btn.style.display = active ? '' : 'none';
 }
 
