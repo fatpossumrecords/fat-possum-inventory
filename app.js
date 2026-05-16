@@ -4187,6 +4187,9 @@ function renderProductionRuns() {
       + '</div>'
       + '<div id="archived-runs-body" style="display:none;">'
       + archived.map(run => {
+          const runCatsA = (run.variants||[]).map(v=>(v.catalog||'').toLowerCase()).filter(Boolean);
+          const matchedPOA = State.packiyoPOList.find(po => (po._lines||[]).some(l => runCatsA.includes((l.sku||'').toLowerCase())));
+          const packiyoPONum = matchedPOA?.attributes?.number || '';
           const totalQty = (run.variants||[]).reduce((s,v)=>s+(v.qty||0),0);
           const totalUSD = (run.variants||[]).reduce((s,v)=>s+parseFloat(v.quotedAmount||0),0);
           const isExp = run._archExpanded === true;
