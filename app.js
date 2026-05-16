@@ -3614,6 +3614,98 @@ function updateNotifications() {
   }
   State._newAlerts = newAlerts;
   State._newMfg = newMfg;
+  updateWarningBadge();
+}
+
+window.showWarnings = function() {
+  const popup = document.getElementById('notif-popup');
+  const title = document.getElementById('notif-popup-title');
+  const body  = document.getElementById('notif-popup-body');
+  if (!popup) return;
+
+  const warnings = getSystemWarnings();
+  title.textContent = warnings.length ? 'System Warnings (' + warnings.length + ')' : 'No Warnings';
+  body.innerHTML = warnings.length
+    ? warnings.map(w =>
+        '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;">'
+        + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0a500" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+        + '<div style="flex:1;">'
+        + '<div style="font-size:12px;font-weight:600;color:var(--text)">' + w.title + '</div>'
+        + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + w.detail + '</div>'
+        + '</div>'
+        + (w.action ? '<button class="warn-action-btn" data-action="'+w.action+'" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap;">'+w.actionLabel+'</button>' : '')
+        + '</div>'
+      ).join('')
+    : '<p style="padding:16px;color:var(--text-muted);font-size:12px;text-align:center;">✓ No warnings — all systems good.</p>';
+
+  popup.classList.toggle('hidden');
+};
+
+function getSystemWarnings() {
+  const warnings = [];
+
+  // Unmatched Packiyo POs
+  const runCatalogs = new Set();
+  (State.productionRuns||[]).forEach(r => (r.variants||[]).forEach(v => {
+    if (v.catalog) runCatalogs.add(v.catalog.toLowerCase());
+  }));
+  const runPONumbers = new Set((State.productionRuns||[]).map(r => (r.poNumber||'').trim().toLowerCase()).filter(Boolean));
+  const unmatched = State.packiyoPOList.filter(po => {
+    const num = (po.attributes?.number||'').trim();
+    if (!num) return false;
+    if (runPONumbers.has(num.toLowerCase())) return false;
+    return !(po._lines||[]).some(l => runCatalogs.has((l.sku||'').toLowerCase()));
+  });
+  if (unmatched.length) {
+    warnings.push({
+      title: unmatched.length + ' Packiyo PO' + (unmatched.length>1?'s':'') + ' not linked to a Production Run',
+      detail: unmatched.map(p => p.attributes?.number).join(', '),
+      action: "switchView('manufacturing');switchMfgTab('runs')",
+      actionLabel: 'View Runs',
+    });
+  }
+
+  // Orchard CSV staleness
+  const ts = localStorage.getItem('fp_orchard_ts');
+  if (ts) {
+    const days = Math.floor((Date.now() - new Date(ts)) / 86400000);
+    if (days >= 10) {
+      warnings.push({
+        title: 'Orchard CSV is ' + days + ' days old',
+        detail: 'Upload a fresh CSV to keep inventory data accurate.',
+        action: null,
+        actionLabel: '',
+      });
+    }
+  }
+
+  // Gist save failures
+  const gistDot = document.getElementById('gist-dot');
+  if (gistDot?.className?.includes('error')) {
+    warnings.push({
+      title: 'Gist save failed',
+      detail: 'Recent changes may not be synced across devices.',
+      action: 'saveGistData()',
+      actionLabel: 'Retry',
+    });
+  }
+
+  return warnings;
+}
+
+function updateWarningBadge() {
+  const warnings = getSystemWarnings();
+  const badge = document.getElementById('notif-warn-badge');
+  const icon  = document.getElementById('warn-icon');
+  if (!badge) return;
+  if (warnings.length) {
+    badge.textContent = warnings.length;
+    badge.classList.remove('hidden');
+    if (icon) icon.style.color = '#f0a500';
+  } else {
+    badge.classList.add('hidden');
+    if (icon) icon.style.color = 'var(--text-muted)';
+  }
 }
 
 window.showAlertNotifications = function() {
