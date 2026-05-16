@@ -3622,23 +3622,27 @@ window.showWarnings = function() {
   const title = document.getElementById('notif-popup-title');
   const body  = document.getElementById('notif-popup-body');
   if (!popup) return;
-
+  if (!popup.classList.contains('hidden') && popup.dataset.source === 'warnings') {
+    popup.classList.add('hidden');
+    popup.style.display = '';
+    return;
+  }
+  popup.dataset.source = 'warnings';
+  popup.classList.remove('hidden');
+  popup.style.display = '';
   const warnings = getSystemWarnings();
   title.textContent = warnings.length ? 'System Warnings (' + warnings.length + ')' : 'No Warnings';
   body.innerHTML = warnings.length
     ? warnings.map(w =>
         '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;">'
-        + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0a500" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
         + '<div style="flex:1;">'
         + '<div style="font-size:12px;font-weight:600;color:var(--text)">' + w.title + '</div>'
         + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + w.detail + '</div>'
         + '</div>'
-        + (w.action ? '<button class="warn-action-btn" data-action="'+w.action+'" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap;">'+w.actionLabel+'</button>' : '')
+        + (w.action ? '<button class="warn-action-btn" data-action="'+w.action+'" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;cursor:pointer;">'+w.actionLabel+'</button>' : '')
         + '</div>'
       ).join('')
     : '<p style="padding:16px;color:var(--green);font-size:12px;text-align:center;font-weight:600;">✓ No warnings — well done!</p>';
-
-  popup.classList.toggle('hidden');
 };
 
 function getSystemWarnings() {
