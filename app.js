@@ -3766,7 +3766,8 @@ document.addEventListener('click', e => {
   if (popup && !popup.classList.contains('hidden') &&
       !popup.contains(e.target) &&
       !document.getElementById('notif-alerts-btn')?.contains(e.target) &&
-      !document.getElementById('notif-mfg-btn')?.contains(e.target)) {
+      !document.getElementById('notif-mfg-btn')?.contains(e.target) &&
+      !document.getElementById('notif-warn-btn')?.contains(e.target)) {
     popup.classList.add('hidden');
   }
 });
