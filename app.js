@@ -85,7 +85,12 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('logout-btn').addEventListener('click', logout);
 
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', e => { e.preventDefault(); switchView(item.dataset.view); });
+    item.addEventListener('click', e => {
+      if (!item.dataset.view) return;
+      if (item.dataset.view === 'manufacturing') return; // handled by toggleMfgNav
+      e.preventDefault();
+      switchView(item.dataset.view);
+    });
   });
 
   // Handle browser back/forward
