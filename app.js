@@ -4116,6 +4116,13 @@ function renderProductionRuns() {
     const totalQty = (run.variants||[]).reduce((s,v) => s+(v.qty||0), 0);
     const totalUSD = (run.variants||[]).reduce((s,v) => s+parseFloat(v.quotedAmount||0), 0);
     const statusColor = STATUS_COLOR[run.status] || 'var(--text-muted)';
+    // Find matched Packiyo PO for this run
+    const runCats = (run.variants||[]).map(v=>(v.catalog||'').toLowerCase()).filter(Boolean);
+    const matchedPO = State.packiyoPOList.find(po =>
+      (po._lines||[]).some(l => runCats.includes((l.sku||'').toLowerCase()))
+    );
+    const packiyoPONum = matchedPO?.attributes?.number || '';
+    const packiyoExpected = matchedPO?.attributes?.expected_at ? new Date(matchedPO.attributes.expected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
     const variantsHtml = (run.variants||[]).map(v => {
       const destsHtml = (v.destinations||[]).map(d => {
         const dStatus = d.status || 'Pending';
@@ -4151,13 +4158,6 @@ function renderProductionRuns() {
     }).join('');
 
     const isExpanded = run._expanded === true; // default collapsed
-    // Find matched Packiyo PO for this run
-    const runCats = (run.variants||[]).map(v=>(v.catalog||'').toLowerCase()).filter(Boolean);
-    const matchedPO = State.packiyoPOList.find(po =>
-      (po._lines||[]).some(l => runCats.includes((l.sku||'').toLowerCase()))
-    );
-    const packiyoPONum = matchedPO?.attributes?.number || '';
-    const packiyoExpected = matchedPO?.attributes?.expected_at ? new Date(matchedPO.attributes.expected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
     return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:28px;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,0.08);">'      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:' + (isExpanded ? '6px 6px 0 0' : '6px') + ';cursor:pointer;" onclick="toggleRunExpand(\'' + run.id + '\')">'      + '<span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">' + (isExpanded ? '▾' : '▸') + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
