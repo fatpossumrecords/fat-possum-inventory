@@ -2460,6 +2460,14 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('toggle-archived-btn') || e.target.closest('.toggle-archived-btn')) {
     toggleArchivedRuns();
   }
+  if (e.target.classList.contains('arch-run-expand') || e.target.closest('.arch-run-expand')) {
+    const el = e.target.classList.contains('arch-run-expand') ? e.target : e.target.closest('.arch-run-expand');
+    toggleArchRunExpand(el.dataset.run);
+  }
+  if (e.target.classList.contains('repress-run-btn')) {
+    e.stopPropagation();
+    repressRun(e.target.dataset.run);
+  }
   if (e.target.classList.contains('edit-run-btn')) {
     e.stopPropagation();
     editRun(e.target.dataset.run);
@@ -3918,11 +3926,12 @@ function renderProductionRuns() {
 
   // Sort: no expected date first, then by soonest expected date
   function getSoonestDate(run) {
-    let soonest = null;
+    let soonest = run.expectedDate ? new Date(run.expectedDate) : null;
     for (const v of (run.variants||[])) {
       for (const d of (v.destinations||[])) {
-        if (!d.expectedDate) continue;
-        const dt = new Date(d.expectedDate);
+        const dateStr = d.expectedDate || run.expectedDate;
+        if (!dateStr) continue;
+        const dt = new Date(dateStr);
         if (!soonest || dt < soonest) soonest = dt;
       }
     }
@@ -3946,8 +3955,9 @@ function renderProductionRuns() {
     if (run.status === 'Cancelled' || run.status === 'Received') continue;
     for (const v of (run.variants||[])) {
       for (const d of (v.destinations||[])) {
-        if (!d.expectedDate) continue;
-        const dt = new Date(d.expectedDate);
+        const dateStr = d.expectedDate || run.expectedDate;
+        if (!dateStr) continue;
+        const dt = new Date(dateStr);
         const key = dt.toLocaleDateString('en-US',{month:'long',year:'numeric'});
         if (!monthlyTally[key]) monthlyTally[key] = { units: 0, dollars: 0, date: dt };
         monthlyTally[key].units   += d.qty||0;
@@ -3955,6 +3965,19 @@ function renderProductionRuns() {
       }
     }
   }
+  // Find unmatched Packiyo POs (not linked to any production run)
+  const matchedPOs = new Set((State.productionRuns||[]).map(r => (r.poNumber||'').trim().toLowerCase()).filter(Boolean));
+  const unmatchedPOs = State.packiyoPOList.filter(po => {
+    const num = (po.attributes?.number||'').trim();
+    return num && !matchedPOs.has(num.toLowerCase());
+  });
+  const unmatchedHtml = unmatchedPOs.length
+    ? '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:11px;">'
+      + '<span style="font-weight:700;color:#856404;">⚠ ' + unmatchedPOs.length + ' Packiyo PO' + (unmatchedPOs.length>1?'s':'') + ' not linked to a Production Run: </span>'
+      + unmatchedPOs.map(po => '<span style="font-family:monospace;color:#856404;margin-left:4px;">' + esc(po.attributes?.number||'') + '</span>').join(', ')
+      + '</div>'
+    : '';
+
   const tallyHtml = Object.keys(monthlyTally).length
     ? '<div style="background:var(--surface2);border-radius:6px;padding:12px 16px;margin-bottom:20px;">'
       + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Expected by Month</div>'
@@ -3972,7 +3995,7 @@ function renderProductionRuns() {
   const STATUS_COLOR = { Ordered:'#3b7de8', 'In Production':'var(--orange)', Shipped:'var(--green)', Received:'var(--text-muted)', Cancelled:'var(--text-dim)' };
 
   const archived = runs.filter(r => r._archived || r.status === 'Received');
-  el.innerHTML = tallyHtml + visible.map(run => {
+  el.innerHTML = unmatchedHtml + tallyHtml + visible.map(run => {
     const totalQty = (run.variants||[]).reduce((s,v) => s+(v.qty||0), 0);
     const totalUSD = (run.variants||[]).reduce((s,v) => s+parseFloat(v.quotedAmount||0), 0);
     const statusColor = STATUS_COLOR[run.status] || 'var(--text-muted)';
@@ -4012,7 +4035,7 @@ function renderProductionRuns() {
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
-      + esc(run.mainSku||'') + (run.partNumber ? ' · Part#: ' + esc(run.partNumber) : '')
+      + esc(run.mainSku||'') + (run.partNumber ? ' · Part#: ' + esc(run.partNumber) : '') + (run.poNumber ? ' · PO#: <strong>' + esc(run.poNumber) + '</strong>' : '') + (run.expectedDate ? ' · Ships: ' + run.expectedDate : '')
       + '<span style="margin-left:6px;font-size:12px;font-weight:700;color:var(--text);"> ' + totalQty.toLocaleString() + ' <span style="font-size:10px;font-weight:400;color:var(--text-muted);">total units</span></span>'
       + ' · <span style="color:var(--text-muted);">$' + totalUSD.toLocaleString('en-US',{minimumFractionDigits:2}) + '</span>'
       + '</div>'
@@ -4035,13 +4058,35 @@ function renderProductionRuns() {
       + '<div id="archived-runs-body" style="display:none;">'
       + archived.map(run => {
           const totalQty = (run.variants||[]).reduce((s,v)=>s+(v.qty||0),0);
-          return '<div style="border:1px solid var(--border);border-radius:6px;margin-bottom:8px;opacity:0.65;">'
-            + '<div style="padding:10px 14px;display:flex;gap:12px;align-items:center;background:var(--surface2);border-radius:6px;">'
-            + '<div style="flex:1;font-size:12px;font-weight:600;color:var(--text-muted);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
-            + '<span style="font-size:10px;color:var(--text-muted);">' + totalQty.toLocaleString() + ' units</span>'
-            + '<span style="font-size:10px;font-weight:600;color:var(--text-dim);">' + (run.status||'Received') + '</span>'
-            + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:12px;padding:0 4px;">×</button>'
-            + '</div></div>';
+          const totalUSD = (run.variants||[]).reduce((s,v)=>s+parseFloat(v.quotedAmount||0),0);
+          const isExp = run._archExpanded === true;
+          const variantsHtml = (run.variants||[]).map(v => {
+            const destsHtml = (v.destinations||[]).map(d =>
+              '<div style="padding:3px 0 3px 12px;font-size:10px;color:var(--text-muted);display:flex;gap:12px;">'
+              + '<span style="width:90px;flex-shrink:0;">' + (WH_DEST[d.wh]||d.wh) + '</span>'
+              + '<span>' + (d.qty||0).toLocaleString() + ' units</span>'
+              + '<span>' + (d.expectedDate||'') + '</span>'
+              + '<span style="color:var(--green);">' + (d.status||'') + '</span>'
+              + '</div>'
+            ).join('');
+            return '<div style="padding:6px 12px;border-top:1px solid var(--border);font-size:11px;">'
+              + '<span style="font-weight:600;">' + esc(v.version||'') + '</span>'
+              + '<span style="color:var(--text-muted);margin-left:8px;">' + esc(v.catalog||'') + '</span>'
+              + '<span style="color:var(--text-dim);margin-left:8px;font-size:10px;">' + (v.qty||0).toLocaleString() + ' units · $' + parseFloat(v.quotedAmount||0).toFixed(2) + '</span>'
+              + destsHtml + '</div>';
+          }).join('');
+          return '<div style="border:1px solid var(--border);border-radius:6px;margin-bottom:10px;opacity:0.75;">'
+            + '<div class="arch-run-expand" data-run="' + run.id + '" style="padding:10px 14px;display:flex;gap:12px;align-items:center;background:var(--surface2);border-radius:' + (isExp?'6px 6px 0 0':'6px') + ';cursor:pointer;">'
+            + '<span style="font-size:10px;color:var(--text-dim);">' + (isExp?'▾':'▸') + '</span>'
+            + '<div style="flex:1;">'
+            + '<div style="font-size:12px;font-weight:600;color:var(--text-muted);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
+            + '<div style="font-size:10px;color:var(--text-dim);margin-top:1px;">' + totalQty.toLocaleString() + ' units · $' + totalUSD.toFixed(2) + (run.poNumber ? ' · PO# ' + esc(run.poNumber) : '') + '</div>'
+            + '</div>'
+            + '<button class="repress-run-btn" data-run="' + run.id + '" style="background:var(--accent);color:white;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;" title="Create new run based on this one">↺ Repress</button>'
+            + '<button class="delete-run-btn" data-run="' + run.id + '" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:14px;padding:0 4px;">×</button>'
+            + '</div>'
+            + (isExp ? '<div style="background:white;border-radius:0 0 6px 6px;padding:4px 0 8px;">' + variantsHtml + '</div>' : '')
+            + '</div>';
         }).join('')
       + '</div></div>' : '');
 }
@@ -4058,6 +4103,43 @@ window.toggleMfgNav = function(e) {
     // Also switch to manufacturing view and default tab
     switchView('manufacturing');
   }
+};
+
+window.toggleArchRunExpand = function(id) {
+  const run = (State.productionRuns||[]).find(r => r.id === id);
+  if (!run) return;
+  run._archExpanded = !run._archExpanded;
+  renderProductionRuns();
+};
+
+window.repressRun = function(id) {
+  const run = (State.productionRuns||[]).find(r => r.id === id);
+  if (!run) return;
+  // Deep clone the run, reset status/dates/IDs
+  const newRun = JSON.parse(JSON.stringify(run));
+  newRun.id = 'run-' + Date.now();
+  newRun.status = 'Ordered';
+  newRun.createdAt = new Date().toISOString();
+  newRun.updatedAt = new Date().toISOString();
+  newRun.poNumber = '';
+  newRun.expectedDate = '';
+  newRun._archived = false;
+  newRun._expanded = true;
+  delete newRun.receivedAt;
+  // Reset variant destination dates and status
+  (newRun.variants||[]).forEach(v => {
+    v.id = 'v' + Date.now() + Math.random();
+    (v.destinations||[]).forEach(d => {
+      d.id = 'd' + Date.now() + Math.random();
+      d.expectedDate = '';
+      d.status = 'Pending';
+      delete d.receivedAt;
+    });
+  });
+  State.productionRuns.push(newRun);
+  saveGistData();
+  renderProductionRuns();
+  toast('New run created from ' + run.artist + ' — ' + run.title + '. Update dates and PO#.', 'success');
 };
 
 window.toggleArchivedRuns = function() {
@@ -4202,7 +4284,9 @@ function syncRunModalState() {
   _runHeader.artist     = get('run-artist');
   _runHeader.title      = get('run-title');
   _runHeader.mainSku    = get('run-mainSku');
-  _runHeader.partNumber = get('run-partNumber');
+  _runHeader.partNumber  = get('run-partNumber');
+  _runHeader.poNumber    = get('run-poNumber');
+  _runHeader.expectedDate= get('run-expectedDate');
   // Sync variant fields
   _runVariants.forEach(v => {
     v.version       = get('rv-version-'  + v.id);
@@ -4273,6 +4357,8 @@ function renderRunModal(run) {
     + '</div>'
     + field('Main SKU', 'run-mainSku', r.mainSku||'', 'text')
     + field('Part # (Manufacturer ID)', 'run-partNumber', r.partNumber||'', 'text')
+    + field('Packiyo PO#', 'run-poNumber', r.poNumber||'', 'text', 'e.g. 7200032039')
+    + field('Expected Ship Date', 'run-expectedDate', r.expectedDate||'', 'date')
     + '</div>';
 
   // Variants
@@ -4357,6 +4443,7 @@ window.saveRunModal = function() {
     if (idx >= 0) {
       State.productionRuns[idx] = { ...State.productionRuns[idx], artist, title,
         mainSku: get('run-mainSku'), partNumber: get('run-partNumber'),
+        poNumber: get('run-poNumber'), expectedDate: get('run-expectedDate'),
         variants, updatedAt: new Date().toISOString() };
     }
   } else {
@@ -4364,6 +4451,7 @@ window.saveRunModal = function() {
     State.productionRuns.push({
       id: 'run-' + Date.now(), artist, title,
       mainSku: get('run-mainSku'), partNumber: get('run-partNumber'),
+      poNumber: get('run-poNumber'), expectedDate: get('run-expectedDate'),
       status: 'Ordered', variants,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
