@@ -1319,7 +1319,20 @@ function mergeData() {
     };
     if (products.has(upc)) {
       const p = products.get(upc);
+      // Preserve Packiyo FP stock fields — Orchard doesn't track FP warehouse
+      const fp_available = p.fp_available;
+      const fp_onhand    = p.fp_onhand;
+      const fp_inbound   = p.fp_inbound;
+      const fp_allocated = p.fp_allocated;
+      const fp_12ms      = p.fp_12ms;
       Object.assign(p, o);
+      if (p.fromPackiyo) {
+        p.fp_available = fp_available;
+        p.fp_onhand    = fp_onhand;
+        p.fp_inbound   = fp_inbound;
+        p.fp_allocated = fp_allocated;
+        p.fp_12ms      = fp_12ms;
+      }
       if (!p.catalog) p.catalog = o.orchard_catalog;
       if (!p.title)   p.title   = o.orchard_title;
       // Always keep orchard catalog # separate for Orchard-bound exports
