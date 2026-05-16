@@ -1269,25 +1269,34 @@ function mergeData() {
   for (const p of State.packiyoProducts) {
     const upc = normalizeUPC(p.barcode || '');
     if (!upc) continue;
-    products.set(upc, {
+    const entry = {
       upc,
       catalog:      p.sku || '',
-      packiyo_sku:  p.sku || '',  // keep original packiyo SKU for PO lookup
+      packiyo_sku:  p.sku || '',
       title:        p.name || '',
       artist:       '',
       label:        '',
-      format:       '', // format only from Orchard CSV, never Packiyo
+      format:       '',
       fromPackiyo:  true,
       fp_available: safeNum(p.quantity_available),
       fp_onhand:    safeNum(p.quantity_on_hand),
       fp_inbound:   safeNum(p.quantity_inbound),
       fp_allocated: safeNum(p.quantity_allocated),
-      fp_12ms: 0, // filled after loading order history
+      fp_12ms: 0,
       us_avail: 0, us_mtd: 0, us_3ms: 0, us_12ms: 0,
       ca_avail: 0, ca_mtd: 0, ca_3ms: 0, ca_12ms: 0,
       uk_avail: 0, uk_open: 0, uk_last_mo: 0, uk_this_yr: 0, uk_last_yr: 0,
       eu_avail: 0, eu_mtd: 0, eu_last_mo: 0, eu_this_yr: 0,
-    });
+    };
+    // If duplicate UPC, keep the one with higher stock
+    if (products.has(upc)) {
+      const existing = products.get(upc);
+      if (entry.fp_available > existing.fp_available) {
+        products.set(upc, entry);
+      }
+    } else {
+      products.set(upc, entry);
+    }
   }
 
   for (const row of State.orchardData) {
