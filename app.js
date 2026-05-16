@@ -3624,12 +3624,10 @@ window.showWarnings = function() {
   if (!popup) return;
   if (!popup.classList.contains('hidden') && popup.dataset.source === 'warnings') {
     popup.classList.add('hidden');
-    popup.style.display = '';
     return;
   }
   popup.dataset.source = 'warnings';
   popup.classList.remove('hidden');
-  popup.style.display = '';
   const warnings = getSystemWarnings();
   title.textContent = warnings.length ? 'System Warnings (' + warnings.length + ')' : 'No Warnings';
   body.innerHTML = warnings.length
