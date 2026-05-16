@@ -491,6 +491,49 @@ td { overflow: hidden; }
   /* ── Filters wrap nicely ── */
   .filter-row { flex-wrap: wrap; gap: 6px; }
   select.select-sm { font-size: 12px; }
+
+  /* ── Top bar ── */
+  #top-bar { padding: 0 12px; }
+  #search-input { width: 120px; }
+
+  /* ── Dashboard improvements ── */
+  .dash-grid { grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; }
+  .dash-card { padding: 10px 12px; border-radius: 6px; }
+  .dash-num { font-size: 20px; }
+  .dash-label { font-size: 10px; }
+  .dash-sub { font-size: 10px; }
+  .warehouse-snapshot-wrap { flex-direction: column; gap: 8px; padding: 0 12px 12px; }
+  .warehouse-snapshot, .active-movements { width: 100% !important; }
+
+  /* ── Inventory card improvements ── */
+  #inventory-table td.mob-total { font-size: 22px; }
+  .inv-body-wrap { padding-bottom: 0; }
+  /* Show stock by warehouse on mobile cards */
+  #inventory-table td.mob-fp   { display: inline-block; font-size: 10px; color: var(--text-muted); margin-right: 6px; }
+  #inventory-table td.mob-fp::before { content: 'FP: '; color: var(--text-dim); }
+  #inventory-table td.mob-us   { display: inline-block; font-size: 10px; color: var(--text-muted); margin-right: 6px; }
+  #inventory-table td.mob-us::before { content: 'US: '; color: var(--text-dim); }
+
+  /* ── Alerts mobile ── */
+  .alert-section h3 { font-size: 12px; padding: 10px 12px; }
+  .alert-section h3 a { font-size: 10px; }
+
+  /* ── Production runs mobile ── */
+  #runs-body { padding: 10px 12px; }
+  #runs-body > div { margin-bottom: 14px; }
+
+  /* ── Modals ── */
+  #alloc-modal > div,
+  #run-modal > div { width: 96vw !important; max-height: 92vh !important; }
+  #run-modal-body { padding: 12px; }
+  #run-modal-body input { font-size: 13px !important; padding: 6px 8px !important; }
+
+  /* ── Needs attention banner ── */
+  #needs-attention-banner { font-size: 11px; padding: 8px 12px; }
+  #needs-attention-banner .possum-walk { display: none; }
+
+  /* ── Bottom nav with mfg sub-items ── */
+  #mfg-nav-sub { display: none !important; } /* hide desktop sub-menu on mobile */
 }
 
 /* ── MFG TABS ── */
