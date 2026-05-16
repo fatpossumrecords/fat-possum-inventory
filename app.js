@@ -3719,6 +3719,10 @@ function updateNotifications() {
     State._notificationsInitialized = true;
     State._newAlerts = [];
     State._newMfg = [];
+    // Set all timestamps to 8 days ago so nothing counts as "new" on first run
+    const oldTs = now - sevenDays - 86400000;
+    Object.keys(seenAlerts).forEach(k => seenAlerts[k] = oldTs);
+    Object.keys(seenMfg).forEach(k => seenMfg[k] = oldTs);
     State.seenAlerts = seenAlerts;
     State.seenMfg = seenMfg;
     try {
