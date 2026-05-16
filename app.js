@@ -3029,10 +3029,19 @@ function renderDashboard() {
         <div class="dash-num">${alertCount}</div>
         <div class="dash-sub">${criticalCount > 0 ? criticalCount+' critical' : 'across all warehouses'}</div>
       </div>
+      <div class="dash-card dash-card-green">
+        <div class="dash-label">Resolved (30d)</div>
+        <div class="dash-num" id="resolved-count">0</div>
+        <div class="dash-sub">movements actioned</div>
+      </div>
       <div class="dash-card ${mfgUrgent > 0 ? 'dash-card-red' : mfgSoon > 0 ? 'dash-card-yellow' : ''}" onclick="switchView('manufacturing');switchMfgTab('predictions')" style="cursor:pointer">
         <div class="dash-label">Mfg Predictions</div>
         <div class="dash-num">${mfgUrgent + mfgSoon}</div>
         <div class="dash-sub">${mfgUrgent > 0 ? mfgUrgent+' urgent · ' : ''}${mfgWithPO} with open PO</div>
+      </div>
+      <div class="dash-card" id="doomsday-card" style="padding:12px 14px;min-width:0;">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">STOCKOUT CLOCK</div>
+        <div id="doomsday-display"></div>
       </div>
       ${(()=>{
         const activeRuns = (State.productionRuns||[]).filter(r => !r._archived && r.status !== 'Cancelled' && r.status !== 'Received');
@@ -3051,18 +3060,9 @@ function renderDashboard() {
           + '<div class="dash-sub">' + totalUnitsInFlight.toLocaleString() + ' units · $' + Math.round(totalCommitted).toLocaleString() + (nextDate ? ' · next: '+nextDate : '') + '</div>'
           + '</div>';
       })()}
-      <div class="dash-card dash-card-green">
-        <div class="dash-label">Resolved (30d)</div>
-        <div class="dash-num" id="resolved-count">0</div>
-        <div class="dash-sub">movements actioned</div>
-      </div>
-      <div class="dash-card" style="grid-column:span 2;">
+      <div class="dash-card" style="grid-column:span 4;">
         <div class="dash-label" style="margin-bottom:8px;">Inbound to Fat Possum Warehouse</div>
         ${buildInboundHTML()}
-      </div>
-      <div class="dash-card" id="doomsday-card" style="padding:12px 14px;min-width:0;">
-        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">STOCKOUT CLOCK</div>
-        <div id="doomsday-display"></div>
       </div>
     </div>
 
