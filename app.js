@@ -71,7 +71,79 @@ const State = {
   colWidths: {},
 };
 
-// ── BOOT ──────────────────────────────────────────────────────
+// ── AUTO-REFRESH ─────────────────────────────────────────────
+const AUTO_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
+
+function scheduleAutoRefresh() {
+  const lastRefresh = parseInt(localStorage.getItem('fp_last_packiyo_refresh') || '0');
+  const now = Date.now();
+  const timeSince = now - lastRefresh;
+  // If it's been more than 4 hours since last refresh, do it now
+  const delay = timeSince >= AUTO_REFRESH_INTERVAL ? 0 : AUTO_REFRESH_INTERVAL - timeSince;
+  console.log('Next auto-refresh in', Math.round(delay/60000), 'minutes');
+  setTimeout(async () => {
+    console.log('Auto-refreshing Packiyo...');
+    await loadPackiyo();
+    localStorage.setItem('fp_last_packiyo_refresh', Date.now().toString());
+    // Schedule next refresh
+    setInterval(async () => {
+      console.log('Auto-refreshing Packiyo (scheduled)...');
+      await loadPackiyo();
+      localStorage.setItem('fp_last_packiyo_refresh', Date.now().toString());
+      syncProductionRunsFromPackiyo();
+    }, AUTO_REFRESH_INTERVAL);
+  }, delay);
+}
+
+// ── FEATURE 6: WEEKLY STOCK SNAPSHOTS ───────────────────────
+async function takeStockSnapshot() {
+  const lastSnap = localStorage.getItem('fp_last_snapshot');
+  const now = Date.now();
+  if (lastSnap && now - parseInt(lastSnap) < 6 * 24 * 3600 * 1000) return; // once per week
+  if (!State.merged.length) return;
+
+  const week = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const snapshot = {
+    date: week,
+    totalUnits: State.merged.reduce((s, p) => s + (p.fp_available||0) + (p.us_avail||0) + (p.uk_avail||0) + (p.eu_avail||0) + (p.ca_avail||0), 0),
+    fpUnits: State.merged.reduce((s, p) => s + (p.fp_available||0), 0),
+    usUnits: State.merged.reduce((s, p) => s + (p.us_avail||0), 0),
+    ukUnits: State.merged.reduce((s, p) => s + (p.uk_avail||0), 0),
+    euUnits: State.merged.reduce((s, p) => s + (p.eu_avail||0), 0),
+    caUnits: State.merged.reduce((s, p) => s + (p.ca_avail||0), 0),
+    alertCount: State.merged.filter(p => {
+      const m = (p.fp_12ms||0)/12; return m > 0 && ((p.fp_available||0)/m)*4.33 < CONFIG.REORDER_WEEKS;
+    }).length,
+  };
+
+  try {
+    // Load existing snapshots from Gist
+    const snapUrl = `https://gist.githubusercontent.com/fatpossumrecords/${CONFIG.GIST_ID}/raw/fp_snapshots.json?t=${Date.now()}`;
+    let snapshots = [];
+    try {
+      const r = await fetch(snapUrl, { cache: 'no-store' });
+      if (r.ok) snapshots = await r.json();
+    } catch(e) {}
+
+    // Add new snapshot, keep last 52 weeks
+    snapshots = snapshots.filter(s => s.date !== week); // replace if same week
+    snapshots.push(snapshot);
+    if (snapshots.length > 52) snapshots = snapshots.slice(-52);
+
+    const body = JSON.stringify({ files: { 'fp_snapshots.json': { content: JSON.stringify(snapshots) } } });
+    await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      body,
+    });
+    localStorage.setItem('fp_last_snapshot', now.toString());
+    console.log('Stock snapshot saved for week', week, ':', snapshot);
+  } catch(e) {
+    console.warn('Snapshot save failed:', e.message);
+  }
+}
+
+// ── BOOT ───────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-screen').classList.remove('hidden');
   const saved = sessionStorage.getItem('fp_user');
@@ -216,6 +288,8 @@ function bootApp() {
   loadGistData().then(() => {
     if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
+    scheduleAutoRefresh();
+    setTimeout(takeStockSnapshot, 5000); // take snapshot 5s after boot
     // Auto-push any unsynced local changes
     if (window._hasPendingLocalChanges) {
       window._hasPendingLocalChanges = false;
@@ -1724,7 +1798,7 @@ function renderInventory() {
       if (col.id === 'fp_available') {
         const alertWh = alertingWarehouses(p);
         const alertStyle = alertWh.fp === 'critical' ? 'color:var(--orange);font-weight:600;' : alertWh.fp === 'low' ? 'color:var(--yellow);font-weight:600;' : '';
-        return `<td class="num${pinnedClass}" style="${style}${alertStyle}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
+        return `<td class="num mob-fp${pinnedClass}" style="${style}${alertStyle}" title="On Hand: ${p.fp_onhand} | Inbound: ${p.fp_inbound} | Allocated: ${p.fp_allocated}">${numCell(v)}</td>`;
       }
       if (col.num) {
         const whMap = { us_avail:'us', ca_avail:'ca', uk_avail:'uk', eu_avail:'eu' };
@@ -4247,6 +4321,56 @@ function renderProductionRuns() {
             + '</div>';
         }).join('')
       + '</div></div>' : '');
+}
+
+// ── FEATURE 2: AUTO-SYNC PRODUCTION RUNS FROM PACKIYO ────────
+function syncProductionRunsFromPackiyo() {
+  if (!State.productionRuns?.length || !State.packiyoPOList?.length) return;
+  let changed = false;
+
+  for (const run of State.productionRuns) {
+    if (run.status === 'Received' || run.status === 'Cancelled' || run._archived) continue;
+
+    // Find matched Packiyo PO by SKU
+    const runCats = (run.variants||[]).map(v => (v.catalog||'').toLowerCase()).filter(Boolean);
+    const matchedPO = State.packiyoPOList.find(po =>
+      (po._lines||[]).some(l => runCats.includes((l.sku||'').toLowerCase()))
+    );
+    if (!matchedPO) continue;
+
+    const poStatus = (matchedPO.attributes?.status || '').toLowerCase();
+    const poShipped = poStatus === 'shipped' || poStatus === 'fulfilled' || poStatus === 'closed' || matchedPO.attributes?.closed_at;
+
+    if (poShipped) {
+      // Update FP destination status to Shipped
+      for (const v of (run.variants||[])) {
+        for (const d of (v.destinations||[])) {
+          if (d.wh === 'fp' && d.status === 'Pending') {
+            d.status = 'Shipped';
+            changed = true;
+            console.log('Auto-updated FP destination to Shipped:', run.artist, run.title);
+          }
+        }
+      }
+
+      // If all destinations are Shipped, update run status
+      const allShipped = (run.variants||[]).every(v =>
+        (v.destinations||[]).every(d => d.status === 'Shipped' || d.status === 'Received')
+      );
+      if (allShipped && run.status !== 'Shipped') {
+        run.status = 'Shipped';
+        run.updatedAt = new Date().toISOString();
+        changed = true;
+        console.log('Auto-updated run to Shipped:', run.artist, run.title);
+      }
+    }
+  }
+
+  if (changed) {
+    saveGistData();
+    renderProductionRuns();
+    toast('Production runs updated from Packiyo PO status.', 'success');
+  }
 }
 
 window.toggleMfgNav = function(e) {
