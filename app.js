@@ -3970,11 +3970,25 @@ function renderProductionRuns() {
       }
     }
   }
-  // Find unmatched Packiyo POs (not linked to any production run)
-  const matchedPOs = new Set((State.productionRuns||[]).map(r => (r.poNumber||'').trim().toLowerCase()).filter(Boolean));
+  // Find unmatched Packiyo POs — match by SKU (line items) OR by PO# string
+  const runVariantCatalogs = new Set();
+  const runPONumbers = new Set();
+  for (const run of (State.productionRuns||[])) {
+    if (run.poNumber) runPONumbers.add(run.poNumber.trim().toLowerCase());
+    for (const v of (run.variants||[])) {
+      if (v.catalog) runVariantCatalogs.add(v.catalog.trim().toLowerCase());
+      if (v.upc) runVariantCatalogs.add(v.upc.trim());
+    }
+  }
   const unmatchedPOs = State.packiyoPOList.filter(po => {
     const num = (po.attributes?.number||'').trim();
-    return num && !matchedPOs.has(num.toLowerCase());
+    if (!num) return false;
+    // Match by PO# string
+    if (runPONumbers.has(num.toLowerCase())) return false;
+    // Match by SKU — if any line item SKU matches a run variant
+    const lineSkus = (po._lines||[]).map(l => (l.sku||'').toLowerCase());
+    if (lineSkus.some(sku => runVariantCatalogs.has(sku))) return false;
+    return true;
   });
   const unmatchedHtml = unmatchedPOs.length
     ? '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:11px;">'
