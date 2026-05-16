@@ -3710,6 +3710,9 @@ function updateWarningBadge() {
 
 window.showAlertNotifications = function() {
   const popup = document.getElementById('notif-popup');
+  if (!popup.classList.contains('hidden') && popup.dataset.source === 'alerts') { popup.classList.add('hidden'); return; }
+  popup.dataset.source = 'alerts';
+  popup.classList.remove('hidden');
   const title = document.getElementById('notif-popup-title');
   const body = document.getElementById('notif-popup-body');
   if (!popup) return;
@@ -3732,6 +3735,9 @@ window.showAlertNotifications = function() {
 
 window.showMfgNotifications = function() {
   const popup = document.getElementById('notif-popup');
+  if (!popup.classList.contains('hidden') && popup.dataset.source === 'mfg') { popup.classList.add('hidden'); return; }
+  popup.dataset.source = 'mfg';
+  popup.classList.remove('hidden');
   const title = document.getElementById('notif-popup-title');
   const body = document.getElementById('notif-popup-body');
   if (!popup) return;
@@ -4114,9 +4120,12 @@ function renderProductionRuns() {
       const destsHtml = (v.destinations||[]).map(d => {
         const dStatus = d.status || 'Pending';
         const dColor = dStatus === 'Received' ? 'var(--green)' : dStatus === 'Shipped' ? 'var(--orange)' : 'var(--text-muted)';
+        // For FP WH destination, show matched Packiyo PO# if no manual PO# entered
+        const displayPO = d.poNumber || (d.wh === 'fp' && packiyoPONum ? packiyoPONum : '');
+        const poLabel = displayPO + (d.wh === 'fp' && packiyoPONum && !d.poNumber ? ' <span style="font-size:9px;color:var(--green);">✓</span>' : '');
         return '<div style="display:flex;gap:8px;align-items:center;padding:4px 0 4px 16px;border-top:1px solid var(--border);font-size:11px;">'
           + '<span style="color:var(--text-muted);width:100px;flex-shrink:0;">' + (WH_DEST[d.wh]||d.wh) + '</span>'
-          + '<span style="font-family:monospace;color:var(--text-muted);width:80px;">' + esc(d.poNumber||'—') + '</span>'
+          + '<span style="font-family:monospace;color:var(--text-muted);width:80px;">' + (poLabel||'—') + '</span>'
           + '<span style="color:var(--text-muted);width:90px;">' + (d.expectedDate||'—') + '</span>'
           + '<span style="font-weight:600;width:60px;text-align:right;">' + (d.qty||0).toLocaleString() + '</span>'
           + '<span style="color:var(--text-muted);flex:1;font-size:10px;">' + esc(d.notes||'') + '</span>'
@@ -4142,11 +4151,21 @@ function renderProductionRuns() {
     }).join('');
 
     const isExpanded = run._expanded === true; // default collapsed
+    // Find matched Packiyo PO for this run
+    const runCats = (run.variants||[]).map(v=>(v.catalog||'').toLowerCase()).filter(Boolean);
+    const matchedPO = State.packiyoPOList.find(po =>
+      (po._lines||[]).some(l => runCats.includes((l.sku||'').toLowerCase()))
+    );
+    const packiyoPONum = matchedPO?.attributes?.number || '';
+    const packiyoExpected = matchedPO?.attributes?.expected_at ? new Date(matchedPO.attributes.expected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
     return '<div style="border:1px solid var(--border2);border-radius:6px;margin-bottom:28px;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,0.08);">'      + '<div style="padding:12px 14px;display:flex;gap:12px;align-items:center;background:white;border-radius:' + (isExpanded ? '6px 6px 0 0' : '6px') + ';cursor:pointer;" onclick="toggleRunExpand(\'' + run.id + '\')">'      + '<span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">' + (isExpanded ? '▾' : '▸') + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:13px;font-weight:700;color:var(--text);">' + esc(run.artist) + ' — ' + esc(run.title) + '</div>'
       + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'
-      + esc(run.mainSku||'') + (run.partNumber ? ' · Part#: ' + esc(run.partNumber) : '') + (run.poNumber ? ' · PO#: <strong>' + esc(run.poNumber) + '</strong>' : '') + (run.expectedDate ? ' · Ships: ' + run.expectedDate : '')
+      + esc(run.mainSku||'') + (run.partNumber ? ' · Part#: ' + esc(run.partNumber) : '')
+      + (run.poNumber || packiyoPONum ? ' · PO#: <strong>' + esc(run.poNumber || packiyoPONum) + '</strong>' : '')
+      + (run.expectedDate || packiyoExpected ? ' · Ships: ' + esc(run.expectedDate || packiyoExpected) : '')
+      + (packiyoPONum && !run.poNumber ? ' <span style="font-size:9px;color:var(--green);">(matched from Packiyo)</span>' : '')
       + '<span style="margin-left:6px;font-size:12px;font-weight:700;color:var(--text);"> ' + totalQty.toLocaleString() + ' <span style="font-size:10px;font-weight:400;color:var(--text-muted);">total units</span></span>'
       + ' · <span style="color:var(--text-muted);">$' + totalUSD.toLocaleString('en-US',{minimumFractionDigits:2}) + '</span>'
       + '</div>'
@@ -4741,7 +4760,8 @@ function switchView(viewName, pushHistory=true) {
   }
   document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
   if (viewName === 'suppressed') renderSuppressedLog();
-  if (viewName === 'manufacturing') setTimeout(() => switchMfgTab('runs'), 50);
+  if (viewName === 'manufacturing' && !window._mfgTabOverride) setTimeout(() => switchMfgTab('runs'), 50);
+  window._mfgTabOverride = false;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
