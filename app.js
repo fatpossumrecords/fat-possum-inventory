@@ -3769,7 +3769,6 @@ window.showWarnings = function() {
   if (popup.style.display === 'flex' && popup.dataset.source === 'warnings') { popup.style.display = 'none'; return; }
   popup.dataset.source = 'warnings';
   popup.style.display = 'flex';
-  popup.classList.remove('hidden');
   const warnings = getSystemWarnings();
   title.textContent = warnings.length ? 'System Warnings (' + warnings.length + ')' : 'No Warnings';
   body.innerHTML = warnings.length
@@ -3857,7 +3856,6 @@ window.showAlertNotifications = function() {
   if (popup.style.display === 'flex' && popup.dataset.source === 'alerts') { popup.style.display = 'none'; return; }
   popup.dataset.source = 'alerts';
   popup.style.display = 'flex';
-  popup.classList.remove('hidden');
   const title = document.getElementById('notif-popup-title');
   const body = document.getElementById('notif-popup-body');
   if (!popup) return;
@@ -3875,7 +3873,6 @@ window.showAlertNotifications = function() {
         <button onclick="document.getElementById('notif-popup').style.display='none';needsAttentionAction('${p.upc}','${wh.key}')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Action</button>
       </div>`).join('');
   }
-  popup.classList.toggle('hidden');
 };
 
 window.showMfgNotifications = function() {
@@ -3883,7 +3880,6 @@ window.showMfgNotifications = function() {
   if (popup.style.display === 'flex' && popup.dataset.source === 'mfg') { popup.style.display = 'none'; return; }
   popup.dataset.source = 'mfg';
   popup.style.display = 'flex';
-  popup.classList.remove('hidden');
   const title = document.getElementById('notif-popup-title');
   const body = document.getElementById('notif-popup-body');
   if (!popup) return;
@@ -3900,7 +3896,6 @@ window.showMfgNotifications = function() {
         <button onclick="document.getElementById('notif-popup').style.display='none';switchView('manufacturing')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">View</button>
       </div>`).join('');
   }
-  popup.classList.toggle('hidden');
 };
 
 document.addEventListener('click', e => {
