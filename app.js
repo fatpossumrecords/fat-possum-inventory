@@ -3029,11 +3029,28 @@ function renderDashboard() {
         <div class="dash-num">${alertCount}</div>
         <div class="dash-sub">${criticalCount > 0 ? criticalCount+' critical' : 'across all warehouses'}</div>
       </div>
-      <div class="dash-card ${mfgUrgent > 0 ? 'dash-card-red' : mfgSoon > 0 ? 'dash-card-yellow' : ''}" onclick="switchView('manufacturing')" style="cursor:pointer">
-        <div class="dash-label">Manufacturing Flags</div>
+      <div class="dash-card ${mfgUrgent > 0 ? 'dash-card-red' : mfgSoon > 0 ? 'dash-card-yellow' : ''}" onclick="switchView('manufacturing');switchMfgTab('predictions')" style="cursor:pointer">
+        <div class="dash-label">Mfg Predictions</div>
         <div class="dash-num">${mfgUrgent + mfgSoon}</div>
         <div class="dash-sub">${mfgUrgent > 0 ? mfgUrgent+' urgent · ' : ''}${mfgWithPO} with open PO</div>
       </div>
+      ${(()=>{
+        const activeRuns = (State.productionRuns||[]).filter(r => !r._archived && r.status !== 'Cancelled' && r.status !== 'Received');
+        const totalUnitsInFlight = activeRuns.reduce((s,r) => s+(r.variants||[]).reduce((sv,v)=>sv+(v.qty||0),0), 0);
+        const totalCommitted = activeRuns.reduce((s,r) => s+(r.variants||[]).reduce((sv,v)=>sv+parseFloat(v.quotedAmount||0),0), 0);
+        const nextRun = activeRuns.sort((a,b) => {
+          const da = (r => { let d=null; (r.variants||[]).forEach(v=>(v.destinations||[]).forEach(dd=>{if(dd.expectedDate){const dt=new Date(dd.expectedDate);if(!d||dt<d)d=dt;}})); return d; })(a);
+          const db = (r => { let d=null; (r.variants||[]).forEach(v=>(v.destinations||[]).forEach(dd=>{if(dd.expectedDate){const dt=new Date(dd.expectedDate);if(!d||dt<d)d=dt;}})); return d; })(b);
+          if(!da&&!db)return 0; if(!da)return 1; if(!db)return -1; return da-db;
+        })[0];
+        const nextDate = nextRun ? (()=>{ let d=null; (nextRun.variants||[]).forEach(v=>(v.destinations||[]).forEach(dd=>{if(dd.expectedDate){const dt=new Date(dd.expectedDate);if(!d||dt<d)d=dt;}})); return d ? d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : nextRun.expectedDate||''; })() : '';
+        const color = activeRuns.length > 0 ? '' : 'dash-card-green';
+        return '<div class="dash-card '+color+'" onclick="switchView(\'manufacturing\');switchMfgTab(\'runs\')" style="cursor:pointer">'
+          + '<div class="dash-label">Production Runs</div>'
+          + '<div class="dash-num">' + activeRuns.length + '</div>'
+          + '<div class="dash-sub">' + totalUnitsInFlight.toLocaleString() + ' units · $' + Math.round(totalCommitted).toLocaleString() + (nextDate ? ' · next: '+nextDate : '') + '</div>'
+          + '</div>';
+      })()}
       <div class="dash-card dash-card-green">
         <div class="dash-label">Resolved (30d)</div>
         <div class="dash-num" id="resolved-count">0</div>
@@ -3069,6 +3086,33 @@ function renderDashboard() {
       </div>
     </div>
 
+    <div class="dash-section" style="margin-top:0">
+      <h3>Active Production Runs</h3>
+      ${(()=>{
+        const activeRuns = (State.productionRuns||[]).filter(r => !r._archived && r.status !== 'Cancelled' && r.status !== 'Received');
+        if (!activeRuns.length) return '<p style="color:var(--text-muted);font-size:12px;">No active production runs.</p>';
+        return '<table class="dash-table"><thead><tr><th>Artist / Title</th><th>Status</th><th>Units</th><th>Quoted $</th><th>Next Expected</th></tr></thead><tbody>'
+          + activeRuns.sort((a,b)=>{
+              const getNext = r => { let d=null; (r.variants||[]).forEach(v=>(v.destinations||[]).forEach(dd=>{if(dd.expectedDate){const dt=new Date(dd.expectedDate);if(!d||dt<d)d=dt;}})); return d||( r.expectedDate?new Date(r.expectedDate):null); };
+              const da=getNext(a), db=getNext(b); if(!da&&!db)return 0; if(!da)return 1; if(!db)return -1; return da-db;
+            }).map(run => {
+            const totalQty = (run.variants||[]).reduce((s,v)=>s+(v.qty||0),0);
+            const totalUSD = (run.variants||[]).reduce((s,v)=>s+parseFloat(v.quotedAmount||0),0);
+            let nextDate = null;
+            (run.variants||[]).forEach(v=>(v.destinations||[]).forEach(d=>{if(d.expectedDate){const dt=new Date(d.expectedDate);if(!nextDate||dt<nextDate)nextDate=dt;}}));
+            if (!nextDate && run.expectedDate) nextDate = new Date(run.expectedDate);
+            const STATUS_COLOR = { Ordered:'#3b7de8', 'In Production':'var(--orange)', Shipped:'var(--green)' };
+            return '<tr onclick="switchView(\'manufacturing\');switchMfgTab(\'runs\')" style="cursor:pointer;">'
+              + '<td><strong>' + esc(run.artist) + '</strong> — ' + esc(run.title) + '</td>'
+              + '<td><span style="color:' + (STATUS_COLOR[run.status]||'var(--text-muted)') + ';font-weight:600;font-size:11px;">' + (run.status||'') + '</span></td>'
+              + '<td class="num">' + totalQty.toLocaleString() + '</td>'
+              + '<td class="num">$' + Math.round(totalUSD).toLocaleString() + '</td>'
+              + '<td style="font-size:11px;color:var(--text-muted);">' + (nextDate ? nextDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—') + '</td>'
+              + '</tr>';
+          }).join('')
+          + '</tbody></table>';
+      })()}
+    </div>
     <div class="dash-section" style="margin-top:0">
       <h3>Column Layout</h3>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
