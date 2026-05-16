@@ -3622,11 +3622,9 @@ window.showWarnings = function() {
   const title = document.getElementById('notif-popup-title');
   const body  = document.getElementById('notif-popup-body');
   if (!popup) return;
-  if (!popup.classList.contains('hidden') && popup.dataset.source === 'warnings') {
-    popup.classList.add('hidden');
-    return;
-  }
+  if (popup.style.display === 'flex' && popup.dataset.source === 'warnings') { popup.style.display = 'none'; return; }
   popup.dataset.source = 'warnings';
+  popup.style.display = 'flex';
   popup.classList.remove('hidden');
   const warnings = getSystemWarnings();
   title.textContent = warnings.length ? 'System Warnings (' + warnings.length + ')' : 'No Warnings';
@@ -3712,8 +3710,9 @@ function updateWarningBadge() {
 
 window.showAlertNotifications = function() {
   const popup = document.getElementById('notif-popup');
-  if (!popup.classList.contains('hidden') && popup.dataset.source === 'alerts') { popup.classList.add('hidden'); return; }
+  if (popup.style.display === 'flex' && popup.dataset.source === 'alerts') { popup.style.display = 'none'; return; }
   popup.dataset.source = 'alerts';
+  popup.style.display = 'flex';
   popup.classList.remove('hidden');
   const title = document.getElementById('notif-popup-title');
   const body = document.getElementById('notif-popup-body');
@@ -3729,7 +3728,7 @@ window.showAlertNotifications = function() {
           <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${WH[wh.key]} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo</div>
         </div>
-        <button onclick="document.getElementById('notif-popup').classList.add('hidden');needsAttentionAction('${p.upc}','${wh.key}')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Action</button>
+        <button onclick="document.getElementById('notif-popup').style.display='none';needsAttentionAction('${p.upc}','${wh.key}')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Action</button>
       </div>`).join('');
   }
   popup.classList.toggle('hidden');
@@ -3737,8 +3736,9 @@ window.showAlertNotifications = function() {
 
 window.showMfgNotifications = function() {
   const popup = document.getElementById('notif-popup');
-  if (!popup.classList.contains('hidden') && popup.dataset.source === 'mfg') { popup.classList.add('hidden'); return; }
+  if (popup.style.display === 'flex' && popup.dataset.source === 'mfg') { popup.style.display = 'none'; return; }
   popup.dataset.source = 'mfg';
+  popup.style.display = 'flex';
   popup.classList.remove('hidden');
   const title = document.getElementById('notif-popup-title');
   const body = document.getElementById('notif-popup-body');
@@ -3753,7 +3753,7 @@ window.showMfgNotifications = function() {
           <div style="font-size:12px;font-weight:600;color:var(--text)">${esc(p.artist)} — ${esc(p.title)}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${months.toFixed(1)} months left · ${monthly.toFixed(0)}/mo · ${esc(p.format)}</div>
         </div>
-        <button onclick="document.getElementById('notif-popup').classList.add('hidden');switchView('manufacturing')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">View</button>
+        <button onclick="document.getElementById('notif-popup').style.display='none';switchView('manufacturing')" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">View</button>
       </div>`).join('');
   }
   popup.classList.toggle('hidden');
@@ -3761,12 +3761,12 @@ window.showMfgNotifications = function() {
 
 document.addEventListener('click', e => {
   const popup = document.getElementById('notif-popup');
-  if (popup && !popup.classList.contains('hidden') &&
+  if (popup && popup.style.display === 'flex' &&
       !popup.contains(e.target) &&
       !document.getElementById('notif-alerts-btn')?.contains(e.target) &&
       !document.getElementById('notif-mfg-btn')?.contains(e.target) &&
       !document.getElementById('notif-warn-btn')?.contains(e.target)) {
-    popup.classList.add('hidden');
+    popup.style.display = 'none';
   }
 });
 
