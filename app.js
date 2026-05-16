@@ -3636,7 +3636,7 @@ window.showWarnings = function() {
         + (w.action ? '<button class="warn-action-btn" data-action="'+w.action+'" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap;">'+w.actionLabel+'</button>' : '')
         + '</div>'
       ).join('')
-    : '<p style="padding:16px;color:var(--text-muted);font-size:12px;text-align:center;">✓ No warnings — all systems good.</p>';
+    : '<p style="padding:16px;color:var(--green);font-size:12px;text-align:center;font-weight:600;">✓ No warnings — well done!</p>';
 
   popup.classList.toggle('hidden');
 };
@@ -4760,8 +4760,7 @@ function switchView(viewName, pushHistory=true) {
   }
   document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
   if (viewName === 'suppressed') renderSuppressedLog();
-  if (viewName === 'manufacturing' && !window._mfgTabOverride) setTimeout(() => switchMfgTab('runs'), 50);
-  window._mfgTabOverride = false;
+  if (viewName === 'manufacturing') setTimeout(() => { if (!window._mfgTabOverride) switchMfgTab('runs'); window._mfgTabOverride = false; }, 80);
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
