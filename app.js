@@ -118,7 +118,6 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-status').addEventListener('change', renderInventory);
   document.getElementById('filter-label').addEventListener('change', renderInventory);
   document.getElementById('filter-config').addEventListener('change', renderInventory);
-  document.getElementById('notif-warn-btn')?.addEventListener('click', showWarnings);
   document.getElementById('filter-warehouse').addEventListener('change', renderInventory);
   document.getElementById('export-inventory-btn').addEventListener('click', exportInventory);
 
