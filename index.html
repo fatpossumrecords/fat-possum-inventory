@@ -66,8 +66,8 @@
         <span id="mfg-nav-arrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▸</span>
       </div>
       <div id="mfg-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
-        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="window._mfgTabOverride=true;switchView('manufacturing');switchMfgTab('runs')">Production Runs</div>
-        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="window._mfgTabOverride=true;switchView('manufacturing');switchMfgTab('predictions')">Predictions</div>
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('manufacturing');switchMfgTab('runs')">Production Runs</div>
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="window._mfgTabOverride=true;switchView('manufacturing');setTimeout(()=>switchMfgTab('predictions'),90)">Predictions</div>
       </div>
       <a href="#" class="nav-item" data-view="alerts">
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
