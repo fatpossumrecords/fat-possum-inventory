@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,6 +10,7 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
 <div id="login-screen" class="login-screen hidden">
   <div class="login-box">
     <div class="login-logo">
@@ -35,9 +35,11 @@
   </div>
 </div>
 
+<!-- MAIN APP -->
 <div id="app" class="hidden" style="display:flex;flex-direction:column;height:100vh;overflow:hidden;">
   <div style="display:flex;flex:1;overflow:hidden;">
 
+  <!-- SIDEBAR -->
   <aside id="sidebar">
     <div class="sidebar-header" style="height:52px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
       <div style="display:flex;align-items:center;gap:10px;">
@@ -72,24 +74,14 @@
         Alerts
         <span id="alert-badge" class="badge hidden">0</span>
       </a>
-      
-      <div class="nav-item" data-view="wh-actions" style="cursor:pointer; border-top:1px solid var(--border); padding-top:12px; margin-top:4px;" onclick="toggleWhActionsNav(event)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-        FP WH Action
-        <span id="wh-actions-nav-arrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▸</span>
-      </div>
-      <div id="wh-actions-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:8px;">
-        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;text-transform:none;letter-spacing:0;" onclick="switchView('wh-actions');switchWhActionsTab('replenishment')">📋 Replenishment</div>
-        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;text-transform:none;letter-spacing:0;" onclick="switchView('wh-actions');switchWhActionsTab('virtual-view')">MAP Warehouse View</div>
-      </div>
-
+    </nav>
       <a href="#" class="nav-item" data-view="suppressed" style="border-top:1px solid var(--border);opacity:0.65;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
         Suppressed
       </a>
-    </nav>
     <div class="sidebar-footer">
 
+      <!-- STATUS -->
       <div class="data-status">
         <div class="status-row">
           <span class="status-dot" id="packiyo-dot"></span>
@@ -123,6 +115,7 @@
         </div>
       </div>
 
+      <!-- SYNC + SHEET LINK -->
       <div style="display:flex;gap:6px;margin-top:6px;">
         <button onclick="initSheetsAuth()" title="Sync to Google Sheets"
           style="flex:1;padding:4px 8px;font-size:10px;font-weight:600;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
@@ -136,6 +129,7 @@
         </a>
       </div>
 
+      <!-- ACTIONS (expandable) -->
       <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:6px;">
         <div onclick="toggleSidebarSection('actions')" style="cursor:pointer;font-size:10px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;user-select:none;text-transform:uppercase;letter-spacing:0.8px;">
           <span>Actions</span>
@@ -151,6 +145,7 @@
         </div>
       </div>
 
+      <!-- UPLOAD HISTORY (expandable) -->
       <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
         <div onclick="toggleSidebarSection('history')" style="cursor:pointer;font-size:10px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;user-select:none;text-transform:uppercase;letter-spacing:0.8px;">
           <span>Upload History</span>
@@ -162,6 +157,7 @@
         </div>
       </div>
 
+      <!-- HI NAME + SIGN OUT + ASK CLAUDE -->
       <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
         <div id="user-row" style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-style:italic;"></div>
         <div style="display:flex;align-items:center;gap:6px;">
@@ -177,9 +173,12 @@
     </div>
   </aside>
 
+  <!-- MAIN CONTENT -->
   <main id="main-content" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+    <!-- Needs attention banner — above top bar, only shows on dashboard -->
     <div id="needs-attention-banner" style="display:none;background:#E8650A;color:white;padding:12px 20px;align-items:center;gap:12px;border-bottom:2px solid #C4540A;overflow:hidden;position:relative;"></div>
 
+    <!-- Top bar — aligned with sidebar header height -->
     <div style="height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;gap:8px;border-bottom:1px solid var(--border);background:var(--surface);">
       <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;width:280px;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -187,6 +186,7 @@
           style="border:none;background:transparent;font-size:12px;color:var(--text);outline:none;font-family:inherit;width:100%;" />
       </div>
       <div style="display:flex;gap:10px;align-items:center;">
+        <!-- Calculator icon for reorder calc -->
         <button id="title-search-btn" onclick="openTitleSearch()" title="Reorder Calculator" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-muted);display:flex;align-items:center;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="4" y="2" width="16" height="20" rx="2"/>
@@ -196,6 +196,7 @@
             <line x1="8" y1="18" x2="9" y2="18"/><line x1="12" y1="18" x2="13" y2="18"/><line x1="15" y1="17" x2="17" y2="19"/><line x1="17" y1="17" x2="15" y2="19"/>
           </svg>
         </button>
+        <!-- Bell -->
         <button id="notif-alerts-btn" onclick="event.stopPropagation();showAlertNotifications()" title="New reorder alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
           <svg id="bell-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted)">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -203,6 +204,7 @@
           </svg>
           <span id="notif-alerts-badge" class="notif-badge hidden">0</span>
         </button>
+        <!-- Vinyl record -->
         <button id="notif-mfg-btn" onclick="event.stopPropagation();showMfgNotifications()" title="New manufacturing alerts" style="background:none;border:none;cursor:pointer;position:relative;padding:4px;">
           <svg id="vinyl-icon" width="26" height="26" viewBox="0 0 26 26" fill="none">
             <circle cx="13" cy="13" r="12" fill="#1a1a1a" stroke="#444" stroke-width="1"/>
@@ -225,6 +227,7 @@
     </div>
     <div style="flex:1;overflow:auto;min-height:0;">
 
+    <!-- DASHBOARD VIEW -->
     <div id="view-dashboard" class="view active">
       <div class="view-header">
         <div>
@@ -235,8 +238,10 @@
       <div id="dashboard-body" style="padding:24px;display:flex;flex-direction:column;gap:20px">
         <div class="loading-cell">Loading dashboard…</div>
       </div>
+
     </div>
 
+    <!-- INVENTORY VIEW -->
     <div id="view-inventory" class="view hidden">
       <div class="view-header">
         <div>
@@ -281,6 +286,7 @@
           </div>
         </div>
       </div>
+      <!-- Floating action bar for bulk selection -->
       <div id="inv-action-bar" class="hidden" style="position:sticky;bottom:0;left:0;right:0;background:var(--text);color:#fff;padding:10px 20px;display:flex;align-items:center;gap:12px;z-index:50;border-top:2px solid var(--accent);">
         <span id="inv-selected-count" style="font-size:13px;font-weight:600;"></span>
         <button onclick="suppressSelected()" style="background:var(--accent);color:#fff;border:none;padding:6px 16px;border-radius:3px;font-size:12px;font-weight:600;cursor:pointer;">Suppress Selected</button>
@@ -296,6 +302,7 @@
       </div>
     </div>
 
+    <!-- MOVEMENTS VIEW -->
     <div id="view-movements" class="view hidden">
       <div class="view-header">
         <div>
@@ -367,6 +374,7 @@
       </div>
     </div>
 
+    <!-- MANUFACTURING VIEW -->
     <div id="view-manufacturing" class="view hidden">
       <div class="view-header">
         <div>
@@ -385,6 +393,7 @@
         </div>
       </div>
 
+      <!-- PREDICTIONS SUB-VIEW -->
       <div id="mfg-tab-predictions" class="mfg-tab active">
         <div class="view-actions" style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);gap:8px;display:flex;flex-wrap:wrap;">
           <select id="mfg-filter" class="select-sm">
@@ -399,34 +408,35 @@
           <button id="export-mfg-btn" class="btn-secondary btn-sm">Export CSV</button>
           <button class="btn-primary btn-sm" onclick="addSelectedToMfgQueue()">+ Add to Queue</button>
         </div>
-        <div class="table-wrap">
-          <table id="mfg-table">
-            <thead>
-              <tr>
-                <th class="sortable" data-col="artist">Artist</th>
-                <th class="sortable" data-col="title">Title</th>
-                <th class="sortable" data-col="catalog">Catalog #</th>
-                <th>Format</th>
-                <th class="num sortable" data-col="totalStock">Total Stock</th>
-                <th class="num">FP Inbound</th>
-                <th class="num sortable" data-col="poQty">Open PO Qty</th>
-                <th class="num">Total w/ All</th>
-                <th class="num sortable" data-col="monthly">Mo. Velocity</th>
-                <th class="num sortable" data-col="need12mo">12mo Need</th>
-                <th class="num sortable" data-col="globalShortfall">Mfg Shortfall</th>
-                <th class="num sortable" data-col="monthsLeft">Months Left</th>
-                <th class="sortable" data-col="daysToDeadline">PO Deadline</th>
-                <th class="sortable" data-col="urgency">Urgency</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="mfg-tbody">
-              <tr><td colspan="11" class="loading-cell">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
+      <div class="table-wrap">
+        <table id="mfg-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-col="artist">Artist</th>
+              <th class="sortable" data-col="title">Title</th>
+              <th class="sortable" data-col="catalog">Catalog #</th>
+              <th>Format</th>
+              <th class="num sortable" data-col="totalStock">Total Stock</th>
+              <th class="num">FP Inbound</th>
+              <th class="num sortable" data-col="poQty">Open PO Qty</th>
+              <th class="num">Total w/ All</th>
+              <th class="num sortable" data-col="monthly">Mo. Velocity</th>
+              <th class="num sortable" data-col="need12mo">12mo Need</th>
+              <th class="num sortable" data-col="globalShortfall">Mfg Shortfall</th>
+              <th class="num sortable" data-col="monthsLeft">Months Left</th>
+              <th class="sortable" data-col="daysToDeadline">PO Deadline</th>
+              <th class="sortable" data-col="urgency">Urgency</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="mfg-tbody">
+            <tr><td colspan="11" class="loading-cell">Loading…</td></tr>
+          </tbody>
+        </table>
       </div>
+      </div><!-- end mfg-tab-predictions -->
 
+      <!-- QUEUE SUB-VIEW — driven by Packiyo open POs -->
       <div id="mfg-tab-queue" class="mfg-tab hidden">
         <div class="view-actions" style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);gap:8px;display:flex;flex-wrap:wrap;align-items:center;">
           <button id="export-mfg-queue-btn" class="btn-secondary btn-sm" onclick="exportMfgQueue()">Export CSV</button>
@@ -454,8 +464,9 @@
             </tbody>
           </table>
         </div>
-      </div>
+      </div><!-- end mfg-tab-queue -->
 
+      <!-- PRODUCTION RUNS SUB-VIEW -->
       <div id="mfg-tab-runs" class="mfg-tab hidden">
         <div class="view-actions" style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);gap:8px;display:flex;flex-wrap:wrap;align-items:center;">
           <button class="btn-primary btn-sm" onclick="openNewRunModal()">+ New Production Run</button>
@@ -463,93 +474,11 @@
           <span style="font-size:11px;color:var(--text-muted);margin-left:8px;" id="runs-summary"></span>
         </div>
         <div id="runs-body" style="overflow-y:auto;flex:1;padding:16px 24px;"></div>
-      </div>
+      </div><!-- end mfg-tab-runs -->
+
     </div>
 
-    <div id="view-wh-actions" class="view hidden">
-      <div class="view-header">
-        <div>
-          <h2 id="wh-actions-header-title">FP Warehouse Operations</h2>
-          <p class="view-sub" id="wh-actions-header-sub">Velocity suggestions & pick bin alignments</p>
-        </div>
-        <div class="view-actions" style="display:flex; gap:12px; align-items:center;">
-          <div class="tab-switcher" style="display:flex; background:var(--surface2); padding:2px; border-radius:4px; border:1px solid var(--border);">
-            <button class="tab-btn active" id="wh-btn-replen" onclick="switchWhActionsTab('replenishment')" style="padding:4px 12px; font-size:11px; border:none; background:transparent; cursor:pointer;">Suggestions List</button>
-            <button class="tab-btn" id="wh-btn-virtual" onclick="switchWhActionsTab('virtual-view')" style="padding:4px 12px; font-size:11px; border:none; background:transparent; cursor:pointer;">Grid Map View</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="wh-actions-tab-replenishment" class="wh-actions-tab" style="padding:24px; display:none; flex-direction:column; gap:16px;">
-        <div style="background:var(--surface2); padding:16px; border-radius:6px; border:1px solid var(--border); display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px;">
-          <div style="background:white; padding:12px; border-radius:4px; border:1px solid var(--border);">
-            <div style="font-size:10px; color:var(--text-muted); font-weight:600;">URGENT SKUS</div>
-            <div id="replen-stat-urgent" style="font-size:24px; font-weight:700; color:var(--red);">0</div>
-          </div>
-          <div style="background:white; padding:12px; border-radius:4px; border:1px solid var(--border);">
-            <div style="font-size:10px; color:var(--text-muted); font-weight:600;">NEEDS REPLENISHMENT</div>
-            <div id="replen-stat-warn" style="font-size:24px; font-weight:700; color:var(--yellow);">0</div>
-          </div>
-          <div style="background:white; padding:12px; border-radius:4px; border:1px solid var(--border);">
-            <div style="font-size:10px; color:var(--text-muted); font-weight:600;">TOTAL UNITS TO MOVE</div>
-            <div id="replen-stat-move" style="font-size:24px; font-weight:700; color:var(--accent);">0</div>
-          </div>
-          <div style="display:flex; flex-direction:column; justify-content:center; gap:6px;">
-            <button class="btn-primary btn-sm" id="run-replen-calc-btn" onclick="executeReplenishmentEngine()" style="width:100%; text-align:center;">⟳ Compute Run Metrics</button>
-            <button class="btn-secondary btn-sm" id="walk-replen-toggle-btn" onclick="toggleReplenWalkOrder()" style="width:100%; text-align:center;">⟳ Walk Order: OFF</button>
-          </div>
-        </div>
-
-        <div class="filter-bar" style="display:flex; gap:8px; align-items:center; background:var(--surface); padding:8px 12px; border:1px solid var(--border); border-radius:4px;">
-          <input type="text" id="replen-search-box" placeholder="Filter by product name or SKU layout..." oninput="applyReplenFilters()" style="flex:1; padding:6px 10px; font-size:12px; border-radius:4px; border:1px solid var(--border2);" />
-          <select id="replen-priority-filter" onchange="applyReplenFilters()" class="select-sm" style="width:140px;">
-            <option value="all">All Items</option>
-            <option value="urgent">🔴 Urgent Status</option>
-            <option value="replenish">🟡 Needs Stock</option>
-            <option value="ok">🟢 Status OK</option>
-          </select>
-          <button class="btn-secondary btn-sm" onclick="exportReplenToCSV()">CSV Export</button>
-        </div>
-
-        <div style="overflow-x:auto; background:white; border:1px solid var(--border); border-radius:6px;">
-          <table style="width:100%; border-collapse:collapse;" id="replen-data-table">
-            <thead>
-              <tr style="background:var(--surface2);">
-                <th style="padding:10px; font-size:10px;">Product Details</th>
-                <th style="padding:10px; font-size:10px;">SKU</th>
-                <th style="padding:10px; font-size:10px; text-align:right;">Allocated</th>
-                <th style="padding:10px; font-size:10px; text-align:right;">Pick Qty</th>
-                <th style="padding:10px; font-size:10px; text-align:right;">Free Pick</th>
-                <th style="padding:10px; font-size:10px; text-align:right;">Bulk Qty</th>
-                <th style="padding:10px; font-size:10px;">Pull Location Source</th>
-                <th style="padding:10px; font-size:10px;">Target Bins</th>
-                <th style="padding:10px; font-size:10px; text-align:right;">Move Qty</th>
-                <th style="padding:10px; font-size:10px; text-align:center;">Priority</th>
-              </tr>
-            </thead>
-            <tbody id="replen-table-body">
-              <tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">Click "Compute Run Metrics" to load recommendations utilizing data frames.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="wh-actions-tab-virtual-view" class="wh-actions-tab" style="padding:24px; display:none; flex-direction:column; gap:16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface2); padding:10px 16px; border-radius:6px; border:1px solid var(--border);">
-          <button class="btn-secondary btn-sm" id="wt-toggle-empty-bins" onclick="toggleUnusedWalkthroughBins()">Show unused bins</button>
-          <div style="display:flex; gap:16px; font-size:11px; font-family:monospace; color:var(--text-muted);">
-            <div style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:rgba(240,74,74,0.85); display:inline-block; border-radius:2px;"></span>Urgent</div>
-            <div style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:rgba(240,184,74,0.7); display:inline-block; border-radius:2px;"></span>Replenish</div>
-            <div style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:rgba(74,240,160,0.15); display:inline-block; border-radius:2px;"></span>OK</div>
-            <div style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border:1px solid rgba(240,74,74,0.35); display:inline-block; border-radius:2px;"></span>Vacated</div>
-          </div>
-        </div>
-        <div id="wt-map-sections-wrapper" style="display:flex; flex-direction:column; gap:24px;">
-          <div style="text-align:center; padding:40px; color:var(--text-muted); font-family:monospace;">Execute analysis calculations under suggestions tab first to draw inventory grid mapping structures.</div>
-        </div>
-      </div>
-    </div>
-
+    <!-- SUPPRESSED VIEW -->
     <div id="view-suppressed" class="view hidden">
       <div class="view-header">
         <div>
@@ -562,6 +491,7 @@
       </div>
     </div>
 
+    <!-- ALERTS VIEW -->
     <div id="view-alerts" class="view hidden">
       <div class="view-header">
         <div>
@@ -595,6 +525,7 @@
 
   </main>
 
+  <!-- Title Search Modal -->
   <div id="title-search-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;display:none;align-items:flex-start;justify-content:center;padding-top:80px;">
     <div style="background:var(--surface);border-radius:8px;width:680px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 16px 40px rgba(0,0,0,0.2);">
       <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;">
@@ -607,6 +538,7 @@
     </div>
   </div>
 
+  <!-- Stock Allocation Planner Modal -->
   <div id="alloc-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:1000;display:none;align-items:center;justify-content:center;">
     <div style="background:var(--surface);border-radius:8px;width:720px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 40px rgba(0,0,0,0.2);">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
@@ -623,7 +555,7 @@
       </div>
     </div>
   </div>
-
+  <!-- Production Run Modal -->
   <div id="run-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:1000;display:none;align-items:center;justify-content:center;">
     <div style="background:var(--surface);border-radius:8px;width:780px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 40px rgba(0,0,0,0.2);">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
