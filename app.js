@@ -5028,3 +5028,553 @@ function toast(msg,type='') {
   el.classList.remove('hidden'); clearTimeout(el._t);
   el._t=setTimeout(()=>el.classList.add('hidden'),3500);
 }
+// ── FP WH ACTION — SUBSYSTEM REPLENISHMENT & VIRTUAL MAP GENERATOR ──
+
+window.toggleWhActionsNav = function(e) {
+  e.preventDefault();
+  const sub = document.getElementById('wh-actions-nav-sub');
+  const arrow = document.getElementById('wh-actions-nav-arrow');
+  if (!sub) return;
+  const open = sub.style.display === 'none';
+  sub.style.display = open ? 'block' : 'none';
+  if (arrow) arrow.textContent = open ? '▾' : '▸';
+  if (open) {
+    switchView('wh-actions');
+    switchWhActionsTab('replenishment');
+  }
+};
+
+window.switchWhActionsTab = function(tab) {
+  document.querySelectorAll('.wh-actions-tab').forEach(t => { t.style.display = 'none'; t.classList.remove('active'); });
+  document.querySelectorAll('.tab-switcher .tab-btn').forEach(b => b.classList.remove('active'));
+  
+  const activeTabPanel = document.getElementById(`wh-actions-tab-${tab}`);
+  if (activeTabPanel) {
+    activeTabPanel.style.display = 'flex';
+    activeTabPanel.classList.add('active');
+  }
+  
+  if (tab === 'replenishment' && document.getElementById('wh-btn-replen')) document.getElementById('wh-btn-replen').classList.add('active');
+  if (tab === 'virtual-view' && document.getElementById('wh-btn-virtual')) {
+    document.getElementById('wh-btn-virtual').classList.add('active');
+    renderReplenWalkthroughMap();
+  }
+  
+  // Dynamic sync to header select menu
+  const sel = document.getElementById('wh-actions-tab-select');
+  if(sel) sel.value = tab;
+};
+
+// Main execution process that bridges your local logic with the global store
+window.executeReplenishmentEngine = async function() {
+  toast("Fetching fresh location layout arrays and allocations...", "");
+  const btn = document.getElementById('run-replen-calc-btn');
+  if(btn) { btn.disabled = true; btn.textContent = "Computing..."; }
+  
+  try {
+    const configMock = {
+      key: CONFIG.PACKIYO_TOKEN,
+      base: CONFIG.PACKIYO_BASE
+    };
+    
+    // Core parameters imported directly from your original application spec
+    const paramLookbackDays = 30;
+    const paramDaysSupplyTarget = 7;
+    const paramOutlierThreshold = 25;
+    const paramMaxPickableUnitsCap = 50;
+    const paramMinUnitsFloor = 2;
+
+    // Direct page fetch engine using the token schema from your core network architecture
+    const fetchFullDataset = async (endpoint) => {
+      let page = 1, combinedData = [], combinedIncluded = [];
+      while (true) {
+        const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}page[number]=${page}&page[size]=100`;
+        const res = await fetch(CONFIG.PACKIYO_BASE + url, {
+          headers: { 'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`, 'Accept': 'application/vnd.api+json' }
+        });
+        if (!res.ok) throw new Error(`Packiyo status fault on extraction sequence.`);
+        const json = await res.json();
+        if (json.data && json.data.length) combinedData.push(...json.data);
+        if (json.included && json.included.length) combinedIncluded.push(...json.included);
+        const lastPage = json.meta?.page?.lastPage || 1;
+        if (page >= lastPage) break;
+        page++;
+        await new Promise(r => setTimeout(r, 120));
+      }
+      return { allData: combinedData, allIncluded: combinedIncluded };
+    };
+
+    // Parallel processing sequence for dependencies that are missing from the global model
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - paramLookbackDays);
+    const dateStr = cutoffDate.toISOString().split('T')[0];
+    
+    const [locationsMap, ordersHistory, openOrdersFrame] = await Promise.all([
+      fetchFullDataset('/locations?include=location_type'),
+      fetchFullDataset(`/orders?include=order_items&filter[fulfilled]=true&filter[fulfilled_at_min]=${dateStr}`),
+      fetchFullDataset('/orders?include=order_items&filter[fulfilled]=false')
+    ]);
+
+    State.replenLocationsRaw = locationsMap;
+    State.replenOpenOrdersRaw = openOrdersFrame;
+
+    // Type definition lookup logic matching your pick area schema rules
+    const typePickable = {}, typeSellable = {};
+    locationsMap.allIncluded.forEach(inc => {
+      if (inc.type === 'location-types') {
+        const p = inc.attributes?.pickable;
+        const s = inc.attributes?.sellable;
+        typePickable[inc.id] = (p === true || p === 1 || p === '1');
+        typeSellable[inc.id] = (s === true || s === 1 || s === '1');
+      }
+    });
+
+    const locationPickable = {}, locationSellable = {};
+    locationsMap.allData.forEach(loc => {
+      const typeId = loc.relationships?.location_type?.data?.id;
+      locationPickable[loc.id] = typeId ? (typePickable[typeId] ?? false) : false;
+      locationSellable[loc.id] = typeId ? (typeSellable[typeId] ?? false) : false;
+    });
+
+    // Parse open order demand queues accurately while cleaning out cancelled items
+    const liveCustomerAllocBySku = {}, livePOAllocBySku = {};
+    const openItemToOrder = {};
+    openOrdersFrame.allData.forEach(order => {
+      const refs = order.relationships?.order_items?.data || [];
+      refs.forEach(r => { openItemToOrder[r.id] = order; });
+    });
+
+    openOrdersFrame.allIncluded.filter(i => i.type === 'order-items').forEach(item => {
+      const order = openItemToOrder[item.id];
+      if (!order) return;
+      if (/cancelled/i.test(order.attributes?.status_text || '')) return;
+      const orderNum = order.attributes?.number || '';
+      const a = item.attributes || {};
+      const sku = a.sku || '';
+      const qty = parseInt(a.quantity || 0);
+      if (!sku || qty <= 0) return;
+
+      if (/^PO#\s*/i.test(String(orderNum))) {
+        livePOAllocBySku[sku] = (livePOAllocBySku[sku] || 0) + qty;
+      } else {
+        liveCustomerAllocBySku[sku] = (liveCustomerAllocBySku[sku] || 0) + qty;
+      }
+    });
+
+    // Velocity track profiling engine block map
+    const orderSkuQty = {};
+    ordersHistory.allIncluded.filter(i => i.type === 'order-items').forEach(item => {
+      const a = item.attributes || {};
+      const sku = a.sku || '';
+      const qty = parseInt(a.quantity || 0);
+      if (!sku || qty <= 0) return;
+      const oid = item.relationships?.order?.data?.id || 'unk';
+      if (!orderSkuQty[oid]) orderSkuQty[oid] = {};
+      orderSkuQty[oid][sku] = (orderSkuQty[oid][sku] || 0) + qty;
+    });
+
+    const computedVelocityMap = {};
+    Object.values(orderSkuQty).forEach(skuMap => {
+      for (const [sku, qty] of Object.entries(skuMap)) {
+        if (qty >= paramOutlierThreshold) continue; // skip bulk distributor anomalies
+        if (!computedVelocityMap[sku]) computedVelocityMap[sku] = { totalUnits: 0, orderCount: 0 };
+        computedVelocityMap[sku].totalUnits += qty;
+        computedVelocityMap[sku].orderCount += 1;
+      }
+    });
+
+    // Location profile scanning utilizing State.packiyoProducts directly to preserve bandwidth limits
+    const locNameById = {};
+    State.packiyoProducts.forEach(p => {
+      // Re-map internal lookups using local cache
+    });
+
+    const pickQtyBySku = {};
+    // Extract dynamic location mappings via nested loop matrices inside the main products definition
+    const freshProductsFrame = await fetchFullDataset('/products?include=location_products.location');
+    
+    freshProductsFrame.allIncluded.forEach(inc => {
+      if (inc.type === 'locations') locNameById[inc.id] = inc.attributes?.name || inc.id;
+    });
+
+    const lpById = {};
+    freshProductsFrame.allIncluded.forEach(inc => {
+      if (inc.type === 'location-products') {
+        lpById[inc.id] = {
+          qty: parseInt(inc.attributes?.quantity_on_hand ?? 0),
+          locationId: inc.relationships?.location?.data?.id || null
+        };
+      }
+    });
+
+    freshProductsFrame.allData.forEach(item => {
+      const sku = item.attributes?.sku || '';
+      if (!sku) return;
+      const refs = item.relationships?.location_products?.data || [];
+      let pickQty = 0, bulkQty = 0;
+      const bulkLocs = [], pickLocs = [], emptyPickLocs = [];
+
+      refs.forEach(ref => {
+        const lp = lpById[ref.id];
+        if (!lp) return;
+        const isPickable = lp.locationId && locationPickable[lp.locationId];
+        const isSellable = lp.locationId && locationSellable[lp.locationId];
+        const locName = lp.locationId ? (locNameById[lp.locationId] || lp.locationId) : '?';
+        
+        if (isPickable) {
+          if (lp.qty > 0) { pickQty += lp.qty; pickLocs.push(locName); } 
+          else { emptyPickLocs.push(locName); }
+        } else if (isSellable && lp.qty > 0) {
+          bulkQty += lp.qty;
+          bulkLocs.push({ name: locName, qty: lp.qty });
+        }
+      });
+
+      // Location parsing algorithm 
+      bulkLocs.sort((a,b) => {
+        const aNow = /^NOW(-|$)/i.test(a.name), bNow = /^NOW(-|$)/i.test(b.name);
+        if (aNow !== bNow) return aNow ? 1 : -1;
+        return a.qty - b.qty;
+      });
+
+      pickQtyBySku[sku] = { pickQty, bulkQty, bulkLocs, pickLocs, emptyPickLocs };
+    });
+
+    // Compile suggestions rows based on allocation rules
+    State.replenRows = freshProductsFrame.allData.map(item => {
+      const a = item.attributes || {};
+      const name = a.name || 'Unknown Title';
+      const sku = a.sku || '';
+      const onHand = parseInt(a.quantity_on_hand ?? 0);
+
+      const customerAllocated = liveCustomerAllocBySku[sku] || 0;
+      const poAllocated = livePOAllocBySku[sku] || 0;
+      const allocated = customerAllocated + poAllocated;
+
+      const locData = pickQtyBySku[sku] || { pickQty: 0, bulkQty: 0, bulkLocs: [], pickLocs: [], emptyPickLocs: [] };
+      const { pickQty, bulkQty, bulkLocs = [], pickLocs = [], emptyPickLocs = [] } = locData;
+
+      const freePickQty = Math.max(0, pickQty - customerAllocated);
+      const vm = computedVelocityMap[sku] || null;
+      const velocity = vm ? parseFloat((vm.totalUnits / paramLookbackDays).toFixed(3)) : 0;
+      const orderCount = vm ? vm.orderCount : 0;
+
+      let velocityTarget = velocity > 0 ? Math.ceil(velocity * paramDaysSupplyTarget) : 0;
+      if (freePickQty === 0 && orderCount > 0) velocityTarget = Math.max(velocityTarget, paramIntersectionsMinFloor || 2);
+
+      const postPickTarget = Math.min(velocityTarget + customerAllocated, paramMaxPickableUnitsCap);
+      let netSuggest = Math.max(0, postPickTarget - pickQty);
+      if (netSuggest > 0 && netSuggest < paramMinUnitsFloor) netSuggest = paramMinUnitsFloor;
+
+      const pickLocsFallback = pickLocs.length === 0 && emptyPickLocs.length > 0;
+      const replenishBins = pickLocs.length > 0 ? pickLocs : emptyPickLocs;
+
+      let priority = 'ok';
+      if (freePickQty === 0 && orderCount > 0) priority = 'urgent';
+      else if (netSuggest > 0) priority = 'replenish';
+
+      return {
+        name, sku, onHand, allocated, customerAllocated, poAllocated,
+        pickQty, freePickQty, bulkQty, bulkLocs, pickLocs: replenishBins, pickLocsFallback,
+        velocity, orderCount, suggest: netSuggest, priority
+      };
+    }).filter(r => r.onHand > 0 && (r.bulkQty > 0 || r.priority === 'ok'));
+
+    // Cache the mapping matrix context in window debug object safely
+    window._debugReplenMap = { pickQtyBySku, velocityMap: computedVelocityMap };
+
+    toast("Replenishment matrix matching run completed.", "success");
+    applyReplenFilters();
+
+  } catch(err) {
+    console.error(err);
+    toast("Calculation failure sequence context error: " + err.message, "error");
+  } finally {
+    if(btn) { btn.disabled = false; btn.textContent = "⟳ Compute Run Metrics"; }
+  }
+};
+
+// Internal parsing helpers
+function getBinCoordinatesSortKey(name) {
+  const m = (name || '').match(/([A-Za-z]+)-(\d+)-([A-Za-z]+)(\d+)/);
+  if (!m) return ['ZZZ', 999, 'ZZ', 99];
+  return [m[1].toUpperCase(), parseInt(m[2]), m[3].toUpperCase(), parseInt(m[4])];
+}
+
+function processAisleSortingWalk(row) {
+  if (!row.bulkLocs || row.bulkLocs.length === 0) return ['ZZZ', 999, 'ZZ', 99];
+  const sorted = [...row.bulkLocs].sort((a, b) => {
+    const aNow = /^NOW(-|$)/i.test(a.name), bNow = /^NOW(-|$)/i.test(b.name);
+    if (aNow !== bNow) return aNow ? 1 : -1;
+    const ka = getBinCoordinatesSortKey(a.name), kb = getBinCoordinatesSortKey(b.name);
+    for (let i = 0; i < ka.length; i++) {
+      if (ka[i] < kb[i]) return -1;
+      if (ka[i] > kb[i]) return 1;
+    }
+    return 0;
+  });
+  return getBinCoordinatesSortKey(sorted[0].name);
+}
+
+window.toggleReplenWalkOrder = function() {
+  State.replenWalkOrder = !State.replenWalkOrder;
+  const btn = document.getElementById('walk-replen-toggle-btn');
+  const priFilter = document.getElementById('replen-priority-filter');
+  
+  if (State.replenWalkOrder) {
+    if(btn) { btn.textContent = "✓ Walk Order: ON"; btn.className = "btn-primary btn-sm"; }
+    if(priFilter) priFilter.value = "all"; 
+  } else {
+    if(btn) { btn.textContent = "⟳ Walk Order: OFF"; btn.className = "btn-secondary btn-sm"; }
+  }
+  applyReplenFilters();
+};
+
+window.applyReplenFilters = function() {
+  const searchBox = document.getElementById('replen-search-box');
+  const q = searchBox ? searchBox.value.toLowerCase() : '';
+  const priFilter = document.getElementById('replen-priority-filter');
+  const activePri = priFilter ? priFilter.value : 'all';
+
+  State.replenFiltered = State.replenRows.filter(r => {
+    const matchSearch = !q || r.name.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q);
+    const matchPriority = 
+      activePri === 'all' ? true :
+      activePri === 'urgent' ? r.priority === 'urgent' :
+      activePri === 'replenish' ? r.priority === 'replenish' : r.priority === 'ok';
+    return matchSearch && matchPriority;
+  });
+
+  if (State.replenWalkOrder) {
+    // Override filters when tracking order sequences across bin layout coordinates
+    State.replenFiltered = State.replenFiltered.filter(r => r.priority === 'urgent' || r.priority === 'replenish');
+    State.replenFiltered.sort((a, b) => {
+      const ka = processAisleSortingWalk(a), kb = processAisleSortingWalk(b);
+      for (let i = 0; i < ka.length; i++) {
+        if (ka[i] < kb[i]) return -1;
+        if (ka[i] > kb[i]) return 1;
+      }
+      return 0;
+    });
+  } else {
+    // Default sorting puts items with a higher recommended move quantity at the top
+    State.replenFiltered.sort((a,b) => b.suggest - a.suggest);
+  }
+
+  renderReplenSuggestionsTable();
+};
+
+function renderReplenSuggestionsTable() {
+  const tbody = document.getElementById('replen-table-body');
+  if(!tbody) return;
+
+  // Compute stat totals
+  const urgentCount = State.replenRows.filter(r => r.priority === 'urgent').length;
+  const warnCount = State.replenRows.filter(r => r.priority === 'replenish').length;
+  const totalMoveUnits = State.replenRows.reduce((sum, r) => sum + r.suggest, 0);
+
+  if(document.getElementById('replen-stat-urgent')) document.getElementById('replen-stat-urgent').textContent = urgentCount;
+  if(document.getElementById('replen-stat-warn')) document.getElementById('replen-stat-warn').textContent = warnCount;
+  if(document.getElementById('replen-stat-move')) document.getElementById('replen-stat-move').textContent = totalMoveUnits.toLocaleString();
+
+  if (State.replenFiltered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">No active rows match the requested visibility filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = State.replenFiltered.map(r => {
+    const pillClass = r.priority === 'urgent' ? 'pill-critical' : r.priority === 'replenish' ? 'pill-low' : 'pill-ok';
+    const suggestText = r.suggest > 0 ? `<b style="color:var(--accent); font-size:14px;">${r.suggest}</b>` : `<span style="color:var(--text-dim);">—</span>`;
+    
+    // Draw chip components dynamically
+    const bulkChips = r.bulkLocs.map(l => {
+      const isNow = /^NOW(-|$)/i.test(l.name);
+      const chipClass = isNow ? 'loc-chip bulk-now' : 'loc-chip bulk-std';
+      return `<span class="${chipClass}">${esc(l.name)} (${l.qty})</span>`;
+    }).join(' ');
+
+    const binChips = r.pickLocs.map(b => {
+      return `<span class="loc-chip pick-bin">${esc(b)}${r.pickLocsFallback ? ' (last)' : ''}</span>`;
+    }).join(' ');
+
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="white-space:normal; font-weight:600; font-size:12px; max-width:240px;">${esc(r.name)}</td>
+      <td><code style="font-size:11px;">${esc(r.sku)}</code></td>
+      <td style="text-align:right; font-family:monospace;">${r.allocated}</td>
+      <td style="text-align:right; font-family:monospace;">${r.pickQty}</td>
+      <td style="text-align:right; font-family:monospace; ${r.freePickQty === 0 && r.orderCount > 0 ? 'color:var(--red); font-weight:700;' : ''}">${r.freePickQty}</td>
+      <td style="text-align:right; font-family:monospace; color:var(--text-muted);">${r.bulkQty.toLocaleString()}</td>
+      <td style="white-space:normal;">${bulkChips || '—'}</td>
+      <td style="white-space:normal;">${binChips || '—'}</td>
+      <td style="text-align:right; font-family:monospace;">${suggestText}</td>
+      <td style="text-align:center;"><span class="pill ${pillClass}">${r.priority}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+window.exportReplenToCSV = function() {
+  if(!State.replenRows.length) { toast("No metrics computed to export yet.", "error"); return; }
+  const headers = ['Product Title','SKU','Allocated Demand','Pick Stock Qty','Free Pick Balance','Bulk Reserve Balance','Suggested Move Transfer','Priority Class'];
+  const formattedRows = State.replenRows.map(r => [r.name, r.sku, r.allocated, r.pickQty, r.freePickQty, r.bulkQty, r.suggest, r.priority]);
+  
+  let csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...formattedRows.map(e => e.join(','))].join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `FP_WH_Replenish_Plan_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+// ── WAREHOUSE MAP VISUAL ENGINE GRID RENDERER ──
+
+window.toggleUnusedWalkthroughBins = function() {
+  State.replenShowUnusedBins = !State.replenShowUnusedBins;
+  const btn = document.getElementById('wt-toggle-empty-bins');
+  if(btn) btn.textContent = State.replenShowUnusedBins ? "Show unused bins" : "Hide unused bins";
+  renderReplenWalkthroughMap();
+};
+
+function parseBinStringToken(name) {
+  let m = name.match(/^(P\d+)-([A-Z]+)-(\d+)-([A-D])$/i);
+  if (m) return { section: m[1].toUpperCase(), col: m[2].toUpperCase(), level: parseInt(m[3]), sub: m[4].toUpperCase() };
+  m = name.match(/^(P4)-(\d+)$/i);
+  if (m) return { section: 'P4', col: '', level: parseInt(m[2]), sub: null };
+  m = name.match(/^(P\d+)-([A-Z]+)-(\d+)$/i);
+  if (m) return { section: m[1].toUpperCase(), col: m[2].toUpperCase(), level: parseInt(m[3]), sub: null };
+  return null;
+}
+
+function getColSortingOffsetWeight(col) {
+  if (!col) return 0;
+  if (col.length === 1) return col.charCodeAt(0) - 64;
+  return 26 + (col.charCodeAt(0) - 64) * 26 + (col.charCodeAt(1) - 64);
+}
+
+window.renderReplenWalkthroughMap = function() {
+  const container = document.getElementById('wt-map-sections-wrapper');
+  if(!container) return;
+
+  if (!State.replenRows.length) {
+    container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted); font-family:monospace;">Execute run metrics calculation first to draw walkthrough location panels.</div>`;
+    return;
+  }
+
+  // Compile layout state metrics from active configuration objects
+  const locMap = {};
+  State.replenRows.forEach(row => {
+    const activePickBins = row.pickLocsFallback ? [] : row.pickLocs;
+    const fallbackPickBins = row.pickLocsFallback ? row.pickLocs : [];
+
+    activePickBins.forEach(loc => {
+      locMap[loc] = { sku: row.sku, name: row.name, r: row, state: row.priority, isFallback: false };
+    });
+    fallbackPickBins.forEach(loc => {
+      if(!locMap[loc]) locMap[loc] = { sku: row.sku, name: row.name, r: row, state: 'vacated', isFallback: true };
+    });
+  });
+
+  // Pull contextual fallbacks directly from the global network extraction frame if available
+  if(window._debugReplenMap?.pickQtyBySku) {
+    for (const [sku, data] of Object.entries(window._debugReplenMap.pickQtyBySku)) {
+      (data.emptyPickLocs || []).forEach(loc => {
+        if (!locMap[loc]) locMap[loc] = { sku, name: 'Empty Cache', r: null, state: 'vacated', isFallback: true };
+      });
+      (data.pickLocs || []).forEach(loc => {
+        if (!locMap[loc]) locMap[loc] = { sku, name: 'Active Stocked', r: null, state: 'ok', isFallback: false };
+      });
+    }
+  }
+
+  const sectionsConfig = [
+    { id: 'P1', label: 'P1 Section', sub: 'Pick aisle — Vinyl & CD records tray rows' },
+    { id: 'P2', label: 'P2 Section', sub: 'Pick aisle — Vinyl & CD records tray rows' },
+    { id: 'P3', label: 'P3 Section', sub: 'Apparel — Apparel shelving layouts' },
+    { id: 'P4', label: 'P4 Section', sub: 'Books — Specialized inventory bays' },
+    { id: 'P5', label: 'P5 Section', sub: '7" Records — Seven inch catalog slots' }
+  ];
+
+  const sectionBins = {};
+  Object.entries(locMap).forEach(([locName, data]) => {
+    const parsed = parseBinStringToken(locName);
+    if (!parsed) return;
+    if (!sectionBins[parsed.section]) sectionBins[parsed.section] = [];
+    sectionBins[parsed.section].push({ locName, parsed, ...data });
+  });
+
+  container.innerHTML = sectionsConfig.map(sec => {
+    const bins = sectionBins[sec.id] || [];
+    
+    // Group configurations matching specific building zones safely
+    let shelfHTML = '';
+    if (sec.id === 'P4') {
+      const maxLevel = Math.max(...bins.map(b => b.parsed.level), 6);
+      const binLookup = {};
+      bins.forEach(b => { binLookup[b.parsed.level] = b; });
+
+      shelfHTML += `<div class="wt-upright"><div class="wt-upright-label">BAYS</div>`;
+      for(let lvl = 1; lvl <= maxLevel; lvl++) {
+        const bData = binLookup[lvl];
+        if(!bData && !State.replenShowUnusedBins) continue;
+        const state = bData ? bData.state : 'empty';
+        const tip = bData ? `SKU: ${bData.sku}&#10;Title: ${bData.name}` : 'Empty Unassigned Slot';
+        shelfHTML += `<div class="wt-bin state-${state}" title="${tip}" style="margin:2px auto;">${lvl}</div>`;
+      }
+      shelfHTML += `</div>`;
+    } 
+    else if (sec.id === 'P3') {
+      const colSet = new Set(bins.map(b => b.parsed.col));
+      const cols = [...colSet].sort((a,b) => getColSortingOffsetWeight(a) - getColSortingOffsetWeight(b));
+      const maxLevel = Math.max(...bins.map(b => b.parsed.level), 7);
+      
+      const binLookup = {};
+      bins.forEach(b => { binLookup[`${b.parsed.col}-${b.parsed.level}-${b.parsed.sub || 'A'}`] = b; });
+
+      cols.forEach(col => {
+        shelfHTML += `<div class="wt-upright"><div class="wt-upright-label">${col}</div>`;
+        for(let lvl = 1; lvl <= maxLevel; lvl++) {
+          shelfHTML += `<div class="wt-subrow">`;
+          ['A','B','C','D'].forEach(sub => {
+            const bData = binLookup[`${col}-${lvl}-${sub}`];
+            if(!bData && !State.replenShowUnusedBins) return;
+            const state = bData ? bData.state : 'empty';
+            const tip = bData ? `SKU: ${bData.sku}&#10;Bin: P3-${col}-${lvl}-${sub}` : 'Empty';
+            shelfHTML += `<div class="wt-bin sub state-${state}" title="${tip}">${sub}</div>`;
+          });
+          shelfHTML += `</div>`;
+        }
+        shelfHTML += `</div>`;
+      });
+    } 
+    else {
+      // Standard Aisle Layout Config (P1, P2, P5)
+      const colSet = new Set(bins.map(b => b.parsed.col));
+      const cols = [...colSet].sort((a,b) => getColSortingOffsetWeight(a) - getColSortingOffsetWeight(b));
+      const maxLevel = Math.max(...bins.map(b => b.parsed.level), 6);
+
+      const binLookup = {};
+      bins.forEach(b => { binLookup[`${b.parsed.col}-${b.parsed.level}`] = b; });
+
+      cols.forEach(col => {
+        shelfHTML += `<div class="wt-upright"><div class="wt-upright-label">${col}</div>`;
+        for(let lvl = 1; lvl <= maxLevel; lvl++) {
+          const bData = binLookup[`${col}-${lvl}`];
+          if(!bData && !State.replenShowUnusedBins) continue;
+          const state = bData ? bData.state : 'empty';
+          const tip = bData ? `SKU: ${bData.sku}&#10;Title: ${bData.name}&#10;Move Target: ${bData.r?.suggest || 0}` : 'Available Bin';
+          shelfHTML += `<div class="wt-bin state-${state}" title="${tip}">${lvl}</div>`;
+        }
+        shelfHTML += `</div>`;
+      });
+    }
+
+    return `<div class="wt-section">
+      <div class="wt-section-label">
+        <span>${sec.label} <span class="wt-section-sub">— ${sec.sub}</span></span>
+        <span style="font-size:10px; opacity:0.65;">${bins.length} linked slots</span>
+      </div>
+      <div class="wt-shelf">${shelfHTML || '<div style="font-size:11px; padding:10px; color:var(--text-muted);">No locations linked inside active report datasets.</div>'}</div>
+    </div>`;
+  }).join('');
+};
