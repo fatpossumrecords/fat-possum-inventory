@@ -5620,6 +5620,23 @@ window.executeReplenishmentEngine = function() {
     // Fail-safe for the parameter referenced in your stack trace error
     const paramIntersectionsMinFloor = 2; 
 
+     window.executeReplenishmentEngine = function() {
+  // ... existing button state logic ...
+
+  try {
+    // ADD THIS DECLARATION LINE HERE (Adjust the fallback value as needed)
+    const paramIntersectionsMinFloor = 2; 
+
+    const recommendations = State.merged.map((p, idx) => {
+      // Your existing mapping data structures that reference paramIntersectionsMinFloor
+    });
+
+    // ... rest of your calculations processing ...
+  } catch (err) {
+    // ... error catching ...
+  }
+};
+     
     // Generate simulated/calculated replenishment recommendations based on inventory allocations
     const recommendations = State.merged.map((p, idx) => {
       const allocated = p.fp_allocated || 0;
