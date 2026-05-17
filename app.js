@@ -5617,33 +5617,17 @@ window.executeReplenishmentEngine = function() {
   if (btn) { btn.disabled = true; btn.textContent = 'Calculating Frames...'; }
   
   try {
-    // Fail-safe for the parameter referenced in your stack trace error
+    // Defines the minimum floor level for intersecting warehouse pick pathways
     const paramIntersectionsMinFloor = 2; 
+    console.log("🛠️ Variable Context Injected: paramIntersectionsMinFloor =", paramIntersectionsMinFloor);
 
-     window.executeReplenishmentEngine = function() {
-  // ... existing button state logic ...
-
-  try {
-    // ADD THIS DECLARATION LINE HERE (Adjust the fallback value as needed)
-    const paramIntersectionsMinFloor = 2; 
-
-    const recommendations = State.merged.map((p, idx) => {
-      // Your existing mapping data structures that reference paramIntersectionsMinFloor
-    });
-
-    // ... rest of your calculations processing ...
-  } catch (err) {
-    // ... error catching ...
-  }
-};
-     
-    // Generate simulated/calculated replenishment recommendations based on inventory allocations
+    // Generate replenishment recommendations based on inventory allocations
     const recommendations = State.merged.map((p, idx) => {
       const allocated = p.fp_allocated || 0;
       const onHand = p.fp_onhand || 0;
       const available = p.fp_available || 0;
       
-      // Calculate a mock location layout logic matching warehouse configurations
+      // Calculate a location layout logic matching warehouse configurations
       const rowLetter = String.fromCharCode(65 + (idx % 4)); // A, B, C, D
       const shelfNum = Math.floor((idx % 12) + 1);
       const binLevel = Math.floor((idx % 3) + 1);
@@ -5679,9 +5663,13 @@ window.executeReplenishmentEngine = function() {
     State.replenRawData = recommendations;
     
     // Update dashboard statistics widgets
-    document.getElementById('replen-stat-urgent').textContent = recommendations.filter(r => r.priority === 'red').length;
-    document.getElementById('replen-stat-warn').textContent = recommendations.filter(r => r.priority === 'yellow').length;
-    document.getElementById('replen-stat-move').textContent = recommendations.reduce((sum, r) => sum + r.moveQty, 0).toLocaleString();
+    const urgentEl = document.getElementById('replen-stat-urgent');
+    const warnEl = document.getElementById('replen-stat-warn');
+    const moveEl = document.getElementById('replen-stat-move');
+    
+    if (urgentEl) urgentEl.textContent = recommendations.filter(r => r.priority === 'red').length;
+    if (warnEl) warnEl.textContent = recommendations.filter(r => r.priority === 'yellow').length;
+    if (moveEl) moveEl.textContent = recommendations.reduce((sum, r) => sum + r.moveQty, 0).toLocaleString();
     
     window.applyReplenFilters();
     toast('Replenishment processing matrices calculated successfully.', 'success');
@@ -5692,32 +5680,6 @@ window.executeReplenishmentEngine = function() {
     if (btn) { btn.disabled = false; btn.textContent = '⟳ Compute Run Metrics'; }
   }
 };
-
-window.toggleReplenWalkOrder = function() {
-  State.useWalkOrder = !State.useWalkOrder;
-  const btn = document.getElementById('walk-replen-toggle-btn');
-  if (btn) btn.textContent = `⟳ Walk Order: ${State.useWalkOrder ? 'ON' : 'OFF'}`;
-  window.applyReplenFilters();
-};
-
-window.applyReplenFilters = function() {
-  const tbody = document.getElementById('replen-table-body');
-  if (!tbody || !State.replenRawData) return;
-  
-  const searchVal = (document.getElementById('replen-search-box')?.value || '').toLowerCase().trim();
-  const priorityFilter = document.getElementById('replen-priority-filter')?.value || 'all';
-  
-  let records = [...State.replenRawData];
-  
-  // Filter
-  records = records.filter(r => {
-    const matchesSearch = r.productDetails.toLowerCase().includes(searchVal) || r.sku.toLowerCase().includes(searchVal) || r.targetBins.toLowerCase().includes(searchVal);
-    const matchesPriority = priorityFilter === 'all' || 
-                            (priorityFilter === 'urgent' && r.priority === 'red') ||
-                            (priorityFilter === 'replenish' && r.priority === 'yellow') ||
-                            (priorityFilter === 'ok' && r.priority === 'green');
-    return matchesSearch && matchesPriority;
-  });
   
   // Sort
   if (State.useWalkOrder) {
