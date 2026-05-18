@@ -514,7 +514,14 @@ window.whExportCSV = function() {
 };
 
 // ── WAREHOUSE WALKTHROUGH ─────────────────────────────────────
-const WT_SECTIONS = [
+
+// ═══════════════════════════════════════════════════════════════
+// WAREHOUSE WALKTHROUGH — rewritten
+// Multi-item bins, MW sections, search/dim, click detail panel
+// ═══════════════════════════════════════════════════════════════
+
+// P-section definitions (pick bins)
+const WT_P_SECTIONS = [
   {id:'P1',label:'P1',sub:'Vinyl & CD — Pick Aisle',type:'standard'},
   {id:'P2',label:'P2',sub:'Vinyl & CD — Pick Aisle',type:'standard'},
   {id:'P3',label:'P3',sub:'Apparel',                type:'p3'},
@@ -522,28 +529,80 @@ const WT_SECTIONS = [
   {id:'P5',label:'P5',sub:'7" Records',             type:'standard'},
 ];
 
+// MW aisle definitions — two halves per aisle
+// format: MW-{aisle}-{letter}{level}  e.g. MW-01-A1
+const WT_MW_AISLES = [
+  {aisle:'01', halves:[{letters:'A,B,C,D',label:'MW-01 A–D'},{letters:'E,F,G,H',label:'MW-01 E–H'}]},
+  {aisle:'02', halves:[{letters:'A,B,C,D',label:'MW-02 A–D'},{letters:'E,F,G,H',label:'MW-02 E–H'}]},
+  {aisle:'03', halves:[{letters:'A,B,C,D',label:'MW-03 A–D'},{letters:'E,F,G,H',label:'MW-03 E–H'}]},
+  {aisle:'04', halves:[{letters:'A,B,C,D,E',label:'MW-04 A–E'},{letters:'F,G,H,I,J',label:'MW-04 F–J'}]},
+  {aisle:'05', halves:[{letters:'A,B,C,D',label:'MW-05 A–D'},{letters:'E,F,G,H,I,J',label:'MW-05 E–J'}]},
+  {aisle:'06', halves:[{letters:'A,B,C,D',label:'MW-06 A–D'},{letters:'E',label:'MW-06 E'}]},
+];
+
+// ── LOC MAP (multi-item) ──────────────────────────────────────
+// locMap[locName] = array of { sku, name, upc, row, state, isFallback }
 function wtBuildLocMap() {
   const locMap = {};
-  for (const row of WHState.allRows) {
-    for (const loc of (row.pickLocsFallback ? [] : row.pickLocs)) locMap[loc] = {sku:row.sku,name:row.name,row,state:row.priority,isFallback:false};
-    for (const loc of (row.pickLocsFallback ? row.pickLocs : [])) { if (!locMap[loc]) locMap[loc]={sku:row.sku,name:row.name,row,state:'vacated',isFallback:true}; }
+
+  function addEntry(loc, entry) {
+    if (!locMap[loc]) locMap[loc] = [];
+    // Avoid duplicate SKUs in same bin
+    if (!locMap[loc].find(e => e.sku === entry.sku)) locMap[loc].push(entry);
   }
+
+  for (const row of WHState.allRows) {
+    const activeLocs   = row.pickLocsFallback ? [] : row.pickLocs;
+    const fallbackLocs = row.pickLocsFallback ? row.pickLocs : [];
+    for (const loc of activeLocs)   addEntry(loc, {sku:row.sku,name:row.name,upc:row.upc||'',row,state:row.priority,isFallback:false});
+    for (const loc of fallbackLocs) addEntry(loc, {sku:row.sku,name:row.name,upc:row.upc||'',row,state:'vacated',isFallback:true});
+  }
+
+  // Also add MW bulk locations from pickQtyBySku debug data
   if (window._whDebug?.pickQtyBySku) {
-    for (const [sku,data] of Object.entries(window._whDebug.pickQtyBySku)) {
-      for (const loc of (data.emptyPickLocs||[])) { if (!locMap[loc]) locMap[loc]={sku,name:'',row:null,state:'vacated',isFallback:true}; }
-      for (const loc of (data.pickLocs||[]))      { if (!locMap[loc]) locMap[loc]={sku,name:'',row:null,state:'ok',isFallback:false}; }
+    for (const [sku, data] of Object.entries(window._whDebug.pickQtyBySku)) {
+      const row = WHState.allRows.find(r => r.sku === sku);
+      // Pick locations: empty (vacated) ones
+      for (const loc of (data.emptyPickLocs||[])) {
+        addEntry(loc, {sku,name:row?.name||'',upc:row?.upc||'',row:row||null,state:'vacated',isFallback:true});
+      }
+      // Pick locations: active ones not already added
+      for (const loc of (data.pickLocs||[])) {
+        if (!locMap[loc] || !locMap[loc].find(e=>e.sku===sku)) {
+          addEntry(loc, {sku,name:row?.name||'',upc:row?.upc||'',row:row||null,state:row?.priority||'ok',isFallback:false});
+        }
+      }
+      // Bulk (MW) locations — show all products in each MW bin
+      for (const bulkLoc of (data.bulkLocs||[])) {
+        addEntry(bulkLoc.name, {
+          sku, name:row?.name||'', upc:row?.upc||'',
+          row: row||null,
+          state: row ? (row.priority==='urgent'||row.priority==='replenish' ? row.priority : 'ok') : 'ok',
+          isFallback: false,
+          bulkQty: bulkLoc.qty,
+          isBulk: true,
+        });
+      }
     }
   }
+
   return locMap;
 }
 
+// ── PARSERS ───────────────────────────────────────────────────
 function wtParseBin(name) {
+  // P3 sub: P3-A-01-B
   let m = name.match(/^(P\d+)-([A-Z]+)-(\d+)-([A-D])$/i);
-  if (m) return {section:m[1].toUpperCase(),col:m[2].toUpperCase(),level:parseInt(m[3]),sub:m[4].toUpperCase()};
+  if (m) return {type:'P',section:m[1].toUpperCase(),col:m[2].toUpperCase(),level:parseInt(m[3]),sub:m[4].toUpperCase()};
+  // P4: P4-01
   m = name.match(/^(P4)-(\d+)$/i);
-  if (m) return {section:'P4',col:'',level:parseInt(m[2]),sub:null};
+  if (m) return {type:'P',section:'P4',col:'',level:parseInt(m[2]),sub:null};
+  // P standard: P1-A-01
   m = name.match(/^(P\d+)-([A-Z]+)-(\d+)$/i);
-  if (m) return {section:m[1].toUpperCase(),col:m[2].toUpperCase(),level:parseInt(m[3]),sub:null};
+  if (m) return {type:'P',section:m[1].toUpperCase(),col:m[2].toUpperCase(),level:parseInt(m[3]),sub:null};
+  // MW: MW-01-A1
+  m = name.match(/^MW-(\d+)-([A-Z]+)(\d+)$/i);
+  if (m) return {type:'MW',aisle:m[1],col:m[2].toUpperCase(),level:parseInt(m[3]),section:'MW-'+m[1]};
   return null;
 }
 
@@ -552,6 +611,96 @@ function wtColKey(col) {
   return col.length===1 ? col.charCodeAt(0)-64 : 26+(col.charCodeAt(0)-64)*26+(col.charCodeAt(1)-64);
 }
 
+// ── SEARCH STATE ──────────────────────────────────────────────
+let _wtSearchTerm = '';
+
+window.wtSearch = function(val) {
+  _wtSearchTerm = val.trim().toLowerCase().replace(/\D/g,'') || val.trim().toLowerCase();
+  wtApplySearch();
+};
+
+function wtApplySearch() {
+  const term = _wtSearchTerm;
+  const bins = document.querySelectorAll('.wt-bin-el');
+  if (!term) {
+    bins.forEach(b => { b.style.opacity=''; b.style.filter=''; });
+    return;
+  }
+  bins.forEach(b => {
+    const skus  = (b.dataset.skus  || '').toLowerCase();
+    const names = (b.dataset.names || '').toLowerCase();
+    const upcs  = (b.dataset.upcs  || '').replace(/\D/g,'');
+    const match = skus.includes(term) || names.includes(term) || upcs.includes(term)
+      || upcs.replace(/^0+/,'').includes(term.replace(/^0+/,''));
+    b.style.opacity = match ? '1' : '0.1';
+    b.style.filter  = match ? '' : 'grayscale(1)';
+  });
+}
+
+// ── CLICK DETAIL PANEL ────────────────────────────────────────
+window.wtShowPanel = function(locName, locMap) {
+  const items = locMap[locName] || [];
+  const panel = document.getElementById('wt-detail-panel');
+  if (!panel) return;
+
+  const isMW = locName.startsWith('MW-');
+
+  // Worst state across all items
+  const worstState = items.some(i=>i.state==='urgent') ? 'urgent'
+    : items.some(i=>i.state==='replenish') ? 'replenish'
+    : items.some(i=>i.state==='vacated') ? 'vacated' : 'ok';
+  const sc = worstState==='urgent'?'var(--red)':worstState==='replenish'?'var(--yellow)':'var(--green)';
+
+  const rows = items.map(item => {
+    const row = item.row;
+    if (!row) return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-muted);">'+(item.sku||'Unknown')+(item.isFallback?' <span style="color:var(--yellow);font-size:10px">(last used)</span>':'')+'</div>';
+    const stateColor = item.state==='urgent'?'var(--red)':item.state==='replenish'?'var(--yellow)':item.state==='vacated'?'var(--text-dim)':'var(--green)';
+    const badge = item.state==='urgent'?'<span class="pill pill-out" style="font-size:9px;">Urgent</span>'
+      :item.state==='replenish'?'<span class="pill pill-low" style="font-size:9px;">Replenish</span>'
+      :item.state==='vacated'?'<span class="pill" style="font-size:9px;background:var(--surface2);color:var(--text-dim);">Vacated</span>'
+      :'<span class="pill pill-ok" style="font-size:9px;">OK</span>';
+
+    const qty = item.isBulk ? item.bulkQty : row.pickQty;
+    const qtyLabel = item.isBulk ? 'Bulk qty' : 'Pick qty';
+    const bulkInfo = !item.isBulk && row.bulkLocs && row.bulkLocs.length
+      ? '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Bulk: '+(row.bulkLocs.slice(0,2).map(l=>l.name+'('+l.qty+')').join(', '))+'</div>' : '';
+
+    return '<div style="padding:12px 16px;border-bottom:1px solid var(--border);">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">'
+      +'<div style="flex:1;">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:2px;">'+whEsc(row.name)+'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">'+whEsc(row.sku)+(row.upc?' &nbsp;·&nbsp; '+whEsc(row.upc):'')+'</div>'
+      +'</div>'
+      +badge
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
+      +'<div style="background:var(--surface2);border-radius:4px;padding:6px 8px;"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">'+qtyLabel+'</div><div style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;color:'+stateColor+';">'+qty+'</div></div>'
+      +(!item.isBulk?'<div style="background:var(--surface2);border-radius:4px;padding:6px 8px;"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Free pick</div><div style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;color:'+stateColor+';">'+row.freePickQty+'</div></div>':'')
+      +'<div style="background:var(--surface2);border-radius:4px;padding:6px 8px;"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Velocity</div><div style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;">'+row.velocity.toFixed(2)+'<span style="font-size:10px;font-weight:400">/day</span></div></div>'
+      +(row.suggest>0?'<div style="background:rgba(184,50,40,0.08);border-radius:4px;padding:6px 8px;border:1px solid rgba(184,50,40,0.2);"><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Move qty</div><div style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;color:var(--red);">'+row.suggest+'</div></div>':'')
+      +'</div>'
+      +bulkInfo
+      +'</div>';
+  }).join('');
+
+  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:2px solid var(--border);background:var(--surface2);flex-shrink:0;">'
+    +'<div>'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+sc+';">'+whEsc(locName)+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'+items.length+' SKU'+(items.length!==1?'s':'')+' in this '+(isMW?'bulk location':'pick bin')+'</div>'
+    +'</div>'
+    +'<button onclick="wtClosePanel()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);padding:4px;">&#x2715;</button>'
+    +'</div>'
+    +'<div style="overflow-y:auto;flex:1;">'+rows+'</div>';
+
+  panel.style.display = 'flex';
+};
+
+window.wtClosePanel = function() {
+  const panel = document.getElementById('wt-detail-panel');
+  if (panel) panel.style.display = 'none';
+};
+
+// ── MAIN RENDER ───────────────────────────────────────────────
 function wtRender() {
   const empty   = document.getElementById('wt-empty');
   const content = document.getElementById('wt-content');
@@ -564,67 +713,109 @@ function wtRender() {
   if (content) content.style.display = 'block';
 
   const locMap = wtBuildLocMap();
-  const sectionBins = {};
-  for (const [locName,data] of Object.entries(locMap)) {
+  window._wtLocMap = locMap; // store for click handlers
+
+  // Split into P and MW bins
+  const pSectionBins = {}, mwBins = {};
+  for (const [locName, items] of Object.entries(locMap)) {
     const parsed = wtParseBin(locName);
     if (!parsed) continue;
-    if (!sectionBins[parsed.section]) sectionBins[parsed.section] = [];
-    sectionBins[parsed.section].push({locName,parsed,...data});
+    if (parsed.type === 'P') {
+      if (!pSectionBins[parsed.section]) pSectionBins[parsed.section] = [];
+      pSectionBins[parsed.section].push({locName, parsed, items});
+    } else if (parsed.type === 'MW') {
+      const key = 'MW-' + parsed.aisle;
+      if (!mwBins[key]) mwBins[key] = [];
+      mwBins[key].push({locName, parsed, items});
+    }
   }
+
   const container = document.getElementById('wt-sections');
   if (!container) return;
   container.innerHTML = '';
-  for (const def of WT_SECTIONS) container.appendChild(wtRenderSection(def, sectionBins[def.id]||[]));
+
+  // ── P sections ──
+  const pHeader = document.createElement('div');
+  pHeader.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-muted);margin:0 0 16px;padding-bottom:8px;border-bottom:2px solid var(--border);';
+  pHeader.textContent = 'Pick Bins';
+  container.appendChild(pHeader);
+
+  for (const def of WT_P_SECTIONS) {
+    const bins = pSectionBins[def.id] || [];
+    container.appendChild(wtRenderPSection(def, bins, locMap));
+  }
+
+  // ── MW sections ──
+  const mwHeader = document.createElement('div');
+  mwHeader.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-muted);margin:32px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--border);';
+  mwHeader.textContent = 'MW Bulk Locations';
+  container.appendChild(mwHeader);
+
+  for (const aisleData of WT_MW_AISLES) {
+    const aisleBins = mwBins['MW-' + aisleData.aisle] || [];
+    container.appendChild(wtRenderMWAisle(aisleData, aisleBins, locMap));
+  }
+
+  // Apply any active search
+  wtApplySearch();
 }
 
-function wtRenderSection(def, bins) {
+// ── P SECTION RENDER ─────────────────────────────────────────
+function wtRenderPSection(def, binEntries, locMap) {
   const el = document.createElement('div');
-  el.style.marginBottom = '32px';
-  const urgent=bins.filter(b=>b.state==='urgent').length;
-  const replen=bins.filter(b=>b.state==='replenish').length;
-  const vacat=bins.filter(b=>b.state==='vacated').length;
+  el.style.marginBottom = '28px';
+
+  const allItems = binEntries.flatMap(b => b.items);
+  const urgent   = binEntries.filter(b => b.items.some(i=>i.state==='urgent')).length;
+  const replen   = binEntries.filter(b => b.items.some(i=>i.state==='replenish')).length;
+  const vacated  = binEntries.filter(b => b.items.some(i=>i.state==='vacated')).length;
   let stats = '';
   if (urgent) stats += '<span style="color:var(--red)">● '+urgent+' urgent</span> ';
   if (replen) stats += '<span style="color:var(--yellow)">● '+replen+' replenish</span> ';
-  if (vacat)  stats += '<span style="color:rgba(184,50,40,0.4)">● '+vacat+' vacated</span>';
+  if (vacated) stats += '<span style="color:rgba(184,50,40,0.4)">● '+vacated+' vacated</span>';
+
   el.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
     +def.label+'<span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">'+def.sub+'</span>'
     +'<div style="margin-left:auto;font-size:10px;font-weight:400;display:flex;gap:10px;">'+stats+'</div></div>'
     +'<div id="wt-shelf-'+def.id+'" style="display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;"></div>';
+
   const shelf = el.querySelector('#wt-shelf-'+def.id);
-  if (def.type==='p4') wtRenderP4(shelf,bins);
-  else if (def.type==='p3') wtRenderP3(shelf,bins);
-  else wtRenderStandard(shelf,bins,def.id);
+  if (def.type==='p4')        wtRenderP4Shelf(shelf, binEntries, locMap);
+  else if (def.type==='p3')   wtRenderP3Shelf(shelf, binEntries, locMap);
+  else                        wtRenderStandardShelf(shelf, binEntries, def.id, locMap);
   return el;
 }
 
-function wtRenderStandard(shelf, bins, sid) {
-  const cols = [...new Set(bins.map(b=>b.parsed.col))].sort((a,b)=>wtColKey(a)-wtColKey(b));
-  const maxLvl = Math.max(...bins.map(b=>b.parsed.level),6);
-  const lu = {}; for (const b of bins) lu[b.parsed.col+'-'+b.parsed.level]=b;
+function wtRenderStandardShelf(shelf, binEntries, sid, locMap) {
+  const cols = [...new Set(binEntries.map(b=>b.parsed.col))].sort((a,b)=>wtColKey(a)-wtColKey(b));
+  const maxLvl = Math.max(...binEntries.map(b=>b.parsed.level), 6);
+  const lu = {}; for (const b of binEntries) lu[b.parsed.col+'-'+b.parsed.level] = b;
   for (const col of cols) {
     const up = document.createElement('div');
-    up.style.cssText='display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
-    up.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+col+'</div>';
-    for (let l=1;l<=maxLvl;l++) up.appendChild(wtMakeBin(sid+'-'+col+'-'+String(l).padStart(2,'0'),lu[col+'-'+l],false));
+    up.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
+    up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+col+'</div>';
+    for (let l=1; l<=maxLvl; l++) {
+      const b = lu[col+'-'+l];
+      up.appendChild(wtMakeBinEl(b ? b.locName : sid+'-'+col+'-'+String(l).padStart(2,'0'), b ? b.items : null, false, locMap));
+    }
     shelf.appendChild(up);
   }
 }
 
-function wtRenderP3(shelf, bins) {
-  const cols = [...new Set(bins.map(b=>b.parsed.col))].sort((a,b)=>wtColKey(a)-wtColKey(b));
-  const maxLvl = Math.max(...bins.map(b=>b.parsed.level),7);
-  const lu={}; for (const b of bins) lu[b.parsed.col+'-'+b.parsed.level+'-'+(b.parsed.sub||'A')]=b;
+function wtRenderP3Shelf(shelf, binEntries, locMap) {
+  const cols = [...new Set(binEntries.map(b=>b.parsed.col))].sort((a,b)=>wtColKey(a)-wtColKey(b));
+  const maxLvl = Math.max(...binEntries.map(b=>b.parsed.level), 7);
+  const lu={}; for (const b of binEntries) lu[b.parsed.col+'-'+b.parsed.level+'-'+(b.parsed.sub||'A')] = b;
   for (const col of cols) {
     const up = document.createElement('div');
-    up.style.cssText='display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
-    up.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+col+'</div>';
-    for (let l=1;l<=maxLvl;l++) {
-      const row=document.createElement('div'); row.style.cssText='display:flex;gap:2px;';
+    up.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
+    up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+col+'</div>';
+    for (let l=1; l<=maxLvl; l++) {
+      const row = document.createElement('div'); row.style.cssText='display:flex;gap:2px;';
       for (const s of ['A','B','C','D']) {
-        const b=lu[col+'-'+l+'-'+s];
+        const b = lu[col+'-'+l+'-'+s];
         if (!b && !WHState.wtShowEmpty) continue;
-        row.appendChild(wtMakeBin('P3-'+col+'-'+String(l).padStart(2,'0')+'-'+s,b,true));
+        row.appendChild(wtMakeBinEl(b?b.locName:'P3-'+col+'-'+String(l).padStart(2,'0')+'-'+s, b?b.items:null, true, locMap));
       }
       if (row.children.length) up.appendChild(row);
     }
@@ -632,70 +823,187 @@ function wtRenderP3(shelf, bins) {
   }
 }
 
-function wtRenderP4(shelf, bins) {
-  const up=document.createElement('div');
+function wtRenderP4Shelf(shelf, binEntries, locMap) {
+  const up = document.createElement('div');
   up.style.cssText='display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
   up.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">P4</div>';
-  const maxLvl=Math.max(...bins.map(b=>b.parsed.level),6);
-  const lu={}; for (const b of bins) lu[b.parsed.level]=b;
-  for (let l=1;l<=maxLvl;l++) up.appendChild(wtMakeBin('P4-'+String(l).padStart(2,'0'),lu[l],false));
+  const maxLvl = Math.max(...binEntries.map(b=>b.parsed.level),6);
+  const lu={}; for (const b of binEntries) lu[b.parsed.level]=b;
+  for (let l=1;l<=maxLvl;l++) {
+    const b=lu[l];
+    up.appendChild(wtMakeBinEl(b?b.locName:'P4-'+String(l).padStart(2,'0'), b?b.items:null, false, locMap));
+  }
   shelf.appendChild(up);
 }
 
-function wtMakeBin(locName, binData, isSub) {
-  const el=document.createElement('div');
-  const state=binData?binData.state:'empty';
-  const S={
-    urgent:   'background:rgba(184,50,40,0.12);border:1px solid var(--red);color:var(--red);',
-    replenish:'background:var(--yellow-bg);border:1px solid var(--yellow);color:var(--yellow);',
-    ok:       'background:var(--green-bg);border:1px solid rgba(30,126,74,0.35);color:var(--green);',
-    vacated:  'background:transparent;border:1px dashed rgba(184,50,40,0.3);color:rgba(184,50,40,0.35);',
-    empty:    'background:var(--surface2);border:1px solid var(--border);color:var(--border2);cursor:default;',
-  };
-  const w=isSub?'20px':'44px';
-  el.style.cssText='width:'+w+';min-height:34px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:8px;font-weight:600;flex-shrink:0;text-align:center;padding:2px;transition:transform 0.1s,box-shadow 0.1s;'+(S[state]||S.empty);
-  if (!WHState.wtShowEmpty && state==='empty'){el.style.display='none';return el;}
-  if (binData && binData.row && state!=='empty') {
-    el.style.cursor='pointer';
-    el.addEventListener('mouseenter', e=>{el.style.transform='scale(1.15)';el.style.zIndex='20';el.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)';wtShowPop(e,locName,binData);});
-    el.addEventListener('mouseleave', ()=>{el.style.transform='';el.style.zIndex='';el.style.boxShadow='';wtHidePop();});
-    el.addEventListener('mousemove', wtMovePop);
+// ── MW AISLE RENDER ───────────────────────────────────────────
+function wtRenderMWAisle(aisleData, binEntries, locMap) {
+  const el = document.createElement('div');
+  el.style.marginBottom = '28px';
+
+  const urgent = binEntries.filter(b=>b.items.some(i=>i.state==='urgent'||i.state==='replenish')).length;
+
+  el.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
+    +'Aisle MW-'+aisleData.aisle
+    +(urgent?'<span style="margin-left:auto;font-size:10px;color:var(--yellow);">● '+urgent+' need attention</span>':'')
+    +'</div>'
+    +'<div id="mw-aisle-'+aisleData.aisle+'" style="display:flex;gap:24px;flex-wrap:wrap;"></div>';
+
+  const aisleEl = el.querySelector('#mw-aisle-'+aisleData.aisle);
+
+  for (const half of aisleData.halves) {
+    const letters = half.letters.split(',').map(s=>s.trim());
+    const halfEl  = document.createElement('div');
+    halfEl.style.cssText = 'flex-shrink:0;';
+    halfEl.innerHTML = '<div style="font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:6px;font-family:\'DM Mono\',monospace;">'+half.label+'</div>';
+    const shelfEl = document.createElement('div');
+    shelfEl.style.cssText = 'display:flex;gap:4px;align-items:flex-start;';
+
+    const lu={}; for (const b of binEntries) lu[b.parsed.col+'-'+b.parsed.level]=b;
+    const maxLvl = binEntries.length ? Math.max(...binEntries.map(b=>b.parsed.level),1) : 6;
+
+    for (const letter of letters) {
+      const up = document.createElement('div');
+      up.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
+      up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+letter+'</div>';
+      for (let l=1; l<=maxLvl; l++) {
+        const b = lu[letter+'-'+l];
+        const locName = 'MW-'+aisleData.aisle+'-'+letter+l;
+        up.appendChild(wtMakeBinEl(locName, b?b.items:null, false, locMap, true));
+      }
+      shelfEl.appendChild(up);
+    }
+    halfEl.appendChild(shelfEl);
+    aisleEl.appendChild(halfEl);
   }
   return el;
 }
 
-function wtShowPop(e,locName,binData) {
-  const pop=document.getElementById('wt-pop');
-  const row=binData.row;
-  if (!pop||!row) return;
-  const sc=row.priority==='urgent'?'color:var(--red)':row.priority==='replenish'?'color:var(--yellow)':'color:var(--green)';
-  const pullFrom=(row.bulkLocs||[]).slice(0,2).map(l=>l.name).join(', ')||'—';
-  pop.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text-muted);margin-bottom:3px;">'+whEsc(locName)+(binData.isFallback?' <span style="color:var(--yellow)">(last used)</span>':'')+' </div>'
-    +'<div style="font-size:12px;font-weight:700;margin-bottom:2px;line-height:1.3;">'+whEsc(row.name)+'</div>'
-    +'<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);margin-bottom:8px;">'+whEsc(row.sku)+'</div>'
-    +'<hr style="border:none;border-top:1px solid var(--border);margin:6px 0;">'
-    +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;"><span style="color:var(--text-muted)">Pick qty</span><span style="font-family:\'DM Mono\',monospace">'+row.pickQty+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;"><span style="color:var(--text-muted)">Free pick</span><span style="font-family:\'DM Mono\',monospace;font-weight:700;'+sc+'">'+row.freePickQty+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;"><span style="color:var(--text-muted)">Allocated</span><span style="font-family:\'DM Mono\',monospace">'+row.customerAllocated+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-muted)">Velocity</span><span style="font-family:\'DM Mono\',monospace">'+row.velocity.toFixed(2)+'/day</span></div>'
-    +(row.suggest>0?'<hr style="border:none;border-top:1px solid var(--border);margin:6px 0;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;"><span style="color:var(--text-muted)">Move qty</span><span style="font-family:\'DM Mono\',monospace;font-weight:700;'+sc+'">'+row.suggest+'</span></div><div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--accent);margin-top:2px;">↓ Pull from: '+whEsc(pullFrom)+'</div>':'');
-  pop.style.display='block';
+// ── BIN ELEMENT ───────────────────────────────────────────────
+function wtMakeBinEl(locName, items, isSub, locMap, isMW) {
+  const el = document.createElement('div');
+  el.className = 'wt-bin-el';
+
+  const hasItems = items && items.length > 0;
+  const worstState = !hasItems ? 'empty'
+    : items.some(i=>i.state==='urgent')    ? 'urgent'
+    : items.some(i=>i.state==='replenish') ? 'replenish'
+    : items.some(i=>i.state==='vacated')   ? 'vacated'
+    : 'ok';
+
+  // Store search data as dataset attributes
+  if (hasItems) {
+    el.dataset.skus  = items.map(i=>i.sku).join(' ');
+    el.dataset.names = items.map(i=>i.name).join(' ');
+    el.dataset.upcs  = items.map(i=>i.upc||'').join(' ');
+  }
+  el.dataset.loc = locName;
+
+  const S = {
+    urgent:   'background:rgba(184,50,40,0.15);border:1px solid var(--red);',
+    replenish:'background:var(--yellow-bg);border:1px solid var(--yellow);',
+    ok:       'background:var(--green-bg);border:1px solid rgba(30,126,74,0.35);',
+    vacated:  'background:transparent;border:1px dashed rgba(184,50,40,0.3);',
+    empty:    'background:var(--surface2);border:1px solid var(--border);cursor:default;',
+  };
+
+  // MW bins slightly wider to fit location text
+  const w = isSub ? '20px' : isMW ? '52px' : '44px';
+  const minH = isMW ? '40px' : '34px';
+
+  el.style.cssText = 'width:'+w+';min-height:'+minH+';border-radius:3px;display:flex;align-items:center;justify-content:center;'
+    +'font-family:\'DM Mono\',monospace;font-size:7px;font-weight:600;flex-shrink:0;text-align:center;'
+    +'padding:2px;transition:transform 0.1s,box-shadow 0.1s;position:relative;overflow:visible;'
+    +(S[worstState]||S.empty);
+
+  if (!WHState.wtShowEmpty && worstState==='empty') { el.style.display='none'; return el; }
+
+  // Multi-item indicator dot
+  if (hasItems && items.length > 1) {
+    const dot = document.createElement('div');
+    dot.style.cssText = 'position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;'
+      +'background:var(--accent);font-size:6px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;line-height:1;';
+    dot.textContent = items.length;
+    el.appendChild(dot);
+  }
+
+  if (hasItems) {
+    el.style.cursor = 'pointer';
+    // Hover: show quick popover
+    el.addEventListener('mouseenter', e => {
+      el.style.transform='scale(1.12)'; el.style.zIndex='20'; el.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)';
+      wtShowMultiPop(e, locName, items);
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.transform=''; el.style.zIndex=''; el.style.boxShadow='';
+      wtHidePop();
+    });
+    el.addEventListener('mousemove', wtMovePop);
+    // Click: open detail panel
+    el.addEventListener('click', () => {
+      wtHidePop();
+      wtShowPanel(locName, window._wtLocMap || {});
+    });
+  }
+
+  return el;
+}
+
+// ── MULTI-ITEM HOVER POPOVER ──────────────────────────────────
+function wtShowMultiPop(e, locName, items) {
+  const pop = document.getElementById('wt-pop');
+  if (!pop) return;
+
+  const isMW = locName.startsWith('MW-');
+  let html = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text-muted);margin-bottom:8px;font-weight:700;">'
+    + whEsc(locName) + (isMW?' <span style="font-size:9px;opacity:0.6">(bulk)</span>':'') + '</div>';
+
+  const shown = items.slice(0, 4); // show up to 4 in hover
+  for (const item of shown) {
+    if (!item.row) continue;
+    const sc = item.state==='urgent'?'var(--red)':item.state==='replenish'?'var(--yellow)':item.state==='vacated'?'var(--text-dim)':'var(--green)';
+    const qty = item.isBulk ? item.bulkQty : item.row.pickQty;
+    html += '<div style="padding:5px 0;border-bottom:1px solid var(--border);margin-bottom:5px;">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px;">'+whEsc(item.row.name)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-family:\'DM Mono\',monospace;font-size:10px;">'
+      +'<span style="color:var(--text-muted)">'+whEsc(item.row.sku)+'</span>'
+      +'<span style="color:'+sc+';font-weight:700;">'+qty+' units</span>'
+      +'</div>'
+      +(item.row.suggest>0&&!item.isBulk?'<div style="font-size:9px;color:var(--accent);margin-top:2px;">Move '+item.row.suggest+' to pick bin</div>':'')
+      +'</div>';
+  }
+  if (items.length > 4) html += '<div style="font-size:9px;color:var(--text-muted);text-align:center;margin-top:4px;">+' + (items.length-4) + ' more — click to see all</div>';
+  else if (items.length > 0) html += '<div style="font-size:9px;color:var(--text-dim);text-align:center;margin-top:4px;">Click for details</div>';
+
+  pop.innerHTML = html;
+  pop.style.display = 'block';
   wtMovePop(e);
 }
 
 function wtMovePop(e) {
-  const pop=document.getElementById('wt-pop');
+  const pop = document.getElementById('wt-pop');
   if (!pop||pop.style.display==='none') return;
-  const pw=pop.offsetWidth||260, ph=pop.offsetHeight||180;
+  const pw=pop.offsetWidth||260, ph=pop.offsetHeight||200;
   let x=e.clientX+14, y=e.clientY+14;
   if (x+pw>window.innerWidth-10)  x=e.clientX-pw-14;
   if (y+ph>window.innerHeight-10) y=e.clientY-ph-14;
   pop.style.left=x+'px'; pop.style.top=y+'px';
 }
 
-function wtHidePop() { const pop=document.getElementById('wt-pop'); if (pop) pop.style.display='none'; }
+function wtHidePop() { const pop=document.getElementById('wt-pop'); if(pop) pop.style.display='none'; }
 
 window.wtToggleEmpty = function() {
+  WHState.wtShowEmpty = !WHState.wtShowEmpty;
+  const btn=document.getElementById('wt-toggle-empty');
+  if (btn) {
+    btn.style.background = WHState.wtShowEmpty ? 'var(--accent)' : 'var(--surface2)';
+    btn.style.color      = WHState.wtShowEmpty ? '#fff' : 'var(--text-muted)';
+    btn.textContent      = WHState.wtShowEmpty ? 'Hide unused bins' : 'Show unused bins';
+  }
+  wtRender();
+};
+
+
   WHState.wtShowEmpty = !WHState.wtShowEmpty;
   const btn=document.getElementById('wt-toggle-empty');
   if (btn) {
