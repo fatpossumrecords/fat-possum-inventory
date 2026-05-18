@@ -1080,21 +1080,24 @@ window.pickerConfirm = function() {
     return;
   }
 
-  // Validate UPC — normalize both sides (strip non-digits, then compare
-  // both with AND without leading zeros to handle scanner/barcode variations)
-  const rawBarcode   = (item.row.upc || '').replace(/\D/g, '');           // e.g. "045778030316"
-  const expectedUpc  = rawBarcode.replace(/^0+/, '');                      // e.g. "45778030316"
+  // Debug — log what we're comparing so we can see mismatches in console
+  const rawBarcode   = (item.row.upc || '').replace(/\D/g, '');
+  const expectedUpc  = rawBarcode.replace(/^0+/, '');
   const expectedSku  = (item.row.sku || '').replace(/\s/g, '').toUpperCase();
-  const scannedDigits = scanned;                                            // already stripped non-digits
-  const scannedNorm   = scannedDigits.replace(/^0+/, '');                  // strip leading zeros too
+  const scannedDigits = scanned;
+  const scannedNorm   = scannedDigits.replace(/^0+/, '');
   const scannedUpper  = (scanInp ? scanInp.value.trim() : '').toUpperCase().replace(/\s/g, '');
+
+  // Debug
+  console.log('[ReplenishScan] rawBarcode="'+rawBarcode+'" expectedUpc="'+expectedUpc+'" scannedDigits="'+scannedDigits+'" scannedNorm="'+scannedNorm+'" skuExpected="'+expectedSku+'" scannedUpper="'+scannedUpper+'"');
+  console.log('[ReplenishScan] upcMatch1='+(scannedNorm===expectedUpc)+' upcMatch2='+(scannedDigits===rawBarcode)+' skuMatch='+(scannedUpper===expectedSku)+' row.upc="'+item.row.upc+'"');
 
   const upcMatch = expectedUpc && (scannedNorm === expectedUpc || scannedDigits === rawBarcode);
   const skuMatch = expectedSku && scannedUpper === expectedSku;
 
   if (!upcMatch && !skuMatch) {
     const errEl = document.getElementById('picker-scan-error');
-    if (errEl) errEl.textContent = '\u2717 Wrong item \u2014 expected UPC ' + (rawBarcode || item.row.sku) + '. Got: ' + (scanInp?.value.trim() || scanned) + '. Try again.';
+    if (errEl) errEl.textContent = '\u2717 Wrong item \u2014 expected UPC: ' + (rawBarcode || '(none on file)') + '  |  got: "' + (scanInp?.value.trim() || scanned) + '"';
     if (scanInp) { scanInp.style.borderColor = 'var(--red)'; scanInp.value = ''; scanInp.focus(); }
     pickerPlayError();
     pickerFlash('rgba(240,74,74,0.6)');
