@@ -587,8 +587,15 @@
     </div>
 
     <!-- FP WH REPLENISHMENT VIEW -->
-    <div id="view-replenishment" class="view hidden">
+    <div id="view-replenishment" class="view hidden" style="position:relative;">
       <div class="view-header">
+
+      <!-- Generating status banner (shown when auto-run triggered from dashboard) -->
+      <div id="wh-dash-generating" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(248,246,242,0.94);z-index:50;align-items:center;justify-content:center;flex-direction:column;gap:16px;backdrop-filter:blur(3px);">
+        <div style="width:40px;height:40px;border:4px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <div style="font-size:15px;font-weight:600;color:var(--text);">Generating replenishment walk…</div>
+        <div id="wh-dash-gen-detail" style="font-size:12px;color:var(--text-muted);font-family:'DM Mono',monospace;"></div>
+      </div>
         <div>
           <h2>FP Warehouse Replenishment</h2>
           <p class="view-sub">Velocity-based pick bin replenishment suggestions</p>
@@ -662,7 +669,7 @@
             <button id="wh-walk-btn" class="btn-secondary btn-sm" onclick="whToggleWalkOrder()">⟳ Walk Order</button>
             <button class="btn-secondary btn-sm" onclick="whExportCSV()">↓ CSV</button>
             <button class="btn-secondary btn-sm" onclick="whPrintPickList()">⎙ Print Pick List</button>
-            <button onclick="startPickerMode()" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;margin-left:8px;">▶ Start Pick Run</button>
+            <button onclick="startReplenishRun()" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;margin-left:8px;">▶ Start Replenish Run</button>
           </div>
           <!-- Table -->
           <div class="table-wrap" style="flex:1;overflow:auto;min-height:0;">
