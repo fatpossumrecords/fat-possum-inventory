@@ -1325,12 +1325,16 @@ function pickerRender() {
     // Qty + Place Into row
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">'
 
-    // Qty input
+    // Qty input with up/down arrows
     + '<div style="padding:16px 20px;background:var(--surface2);border-radius:8px;border:2px solid var(--border);">'
-    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Qty to Pick <span style="font-weight:400;opacity:0.6;">(min ' + suggestedQty + ')</span></div>'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:10px;">Qty to Pick <span style="font-weight:400;opacity:0.6;">(min ' + suggestedQty + ')</span></div>'
+    + '<div style="display:flex;align-items:center;gap:12px;">'
+    + '<button onclick="pickerQtyAdj(-1)" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);font-size:24px;font-weight:700;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">&#8722;</button>'
     + '<input type="number" id="picker-qty-input" value="' + suggestedQty + '" min="' + suggestedQty + '"'
-    + ' style="width:100%;font-family:\'DM Mono\',monospace;font-size:48px;font-weight:700;color:var(--text);background:transparent;border:none;outline:none;padding:0;line-height:1;"'
+    + ' style="flex:1;font-family:\'DM Mono\',monospace;font-size:48px;font-weight:700;color:var(--text);background:transparent;border:none;outline:none;padding:0;line-height:1;text-align:center;width:0;"'
     + ' oninput="pickerQtyChange(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'picker-scan-input\')?.focus();}" />'
+    + '<button onclick="pickerQtyAdj(1)" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);font-size:24px;font-weight:700;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">&#43;</button>'
+    + '</div>'
     + '</div>'
 
     // Place into
@@ -1372,14 +1376,23 @@ function pickerRender() {
 window.pickerQtyChange = function(input) {
   const min = parseInt(input.min) || 1;
   const val = parseInt(input.value) || 0;
-  if (val < min) {
-    input.style.color = 'var(--red)';
-  } else {
-    input.style.color = 'var(--text)';
-  }
-  // Also store on the queue item so confirm picks it up
+  input.style.color = val < min ? 'var(--red)' : 'var(--text)';
   const item = PickerState.queue[PickerState.index];
   if (item) item._overrideQty = val;
+};
+
+window.pickerQtyAdj = function(delta) {
+  const input = document.getElementById('picker-qty-input');
+  if (!input) return;
+  const min = parseInt(input.min) || 1;
+  const current = parseInt(input.value) || min;
+  const next = Math.max(min, current + delta);
+  input.value = next;
+  input.style.color = 'var(--text)';
+  const item = PickerState.queue[PickerState.index];
+  if (item) item._overrideQty = next;
+  // Refocus scan input after tap so scanner still works
+  setTimeout(() => document.getElementById('picker-scan-input')?.focus(), 50);
 };
 
 window.pickerHandleKey = function(e) {
@@ -1487,26 +1500,114 @@ window.pickerConfirm = function() {
     return;
   }
 
-  // SUCCESS
+  // SUCCESS — show confirmation prompt before advancing
   pickerPlaySuccess();
-  pickerFlash('rgba(74,240,160,0.5)', () => {
-    PickerState.completed.push({
-      row:      item.row,
-      bulkLoc:  item.bulkLoc,
-      qty:      pickedQty,
-      suggestedQty: item.qty,
-      destBins: item.destBins,
-      skipped:  false,
-    });
-    PickerState.index++;
-    pickerRender();
-  });
+  pickerFlash('rgba(74,240,160,0.5)');
+  pickerShowConfirm(pickedQty, item);
 };
 
 window.pickerBack = function() {
   if (PickerState.index === 0) return;
   PickerState.index--;
   PickerState.completed.pop();
+  pickerRender();
+};
+
+// ── CONFIRMATION STEP ─────────────────────────────────────────
+// Shown after successful UPC scan — green card overlaid on the
+// picker card. Picker can adjust qty one more time then confirm.
+function pickerShowConfirm(pickedQty, item) {
+  const overlay = document.getElementById('picker-overlay');
+  if (!overlay) return;
+
+  const destStr = item.destBins && item.destBins.length ? item.destBins.join('  ·  ') : '—';
+  const extra   = pickedQty > item.qty ? '+' + (pickedQty - item.qty) + ' extra' : '';
+
+  overlay.innerHTML =
+    '<div style="width:100%;max-width:680px;background:var(--surface);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.18);display:flex;flex-direction:column;overflow:hidden;position:relative;">'
+
+    // Green confirm header
+    + '<div style="background:var(--green);color:#fff;padding:20px 28px;text-align:center;">'
+    + '<div style="font-size:28px;margin-bottom:4px;">&#10003;</div>'
+    + '<div style="font-size:16px;font-weight:700;">Barcode Confirmed</div>'
+    + '<div style="font-size:12px;opacity:0.85;margin-top:2px;">' + whEsc(item.row.name) + '</div>'
+    + '</div>'
+
+    // Confirm qty block
+    + '<div style="padding:28px 32px;display:flex;flex-direction:column;gap:20px;">'
+
+    // Qty confirm — with arrows again
+    + '<div style="text-align:center;">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px;">Confirm Pick Quantity</div>'
+    + '<div style="display:flex;align-items:center;justify-content:center;gap:20px;">'
+    + '<button onclick="pickerConfirmQtyAdj(-1)" style="width:56px;height:56px;border-radius:10px;border:2px solid var(--border2);background:var(--surface2);font-size:28px;font-weight:700;cursor:pointer;color:var(--text);line-height:1;">&#8722;</button>'
+    + '<div style="text-align:center;min-width:100px;">'
+    + '<input type="number" id="picker-confirm-qty" value="' + pickedQty + '" min="' + item.qty + '"'
+    + ' style="font-family:\'DM Mono\',monospace;font-size:64px;font-weight:700;color:var(--text);background:transparent;border:none;outline:none;text-align:center;width:140px;line-height:1;"'
+    + ' oninput="pickerConfirmQtyChange(this,' + item.qty + ')" />'
+    + (extra ? '<div style="font-size:11px;color:var(--green);font-weight:600;margin-top:2px;">' + extra + '</div>' : '')
+    + '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">suggested: ' + item.qty + '</div>'
+    + '</div>'
+    + '<button onclick="pickerConfirmQtyAdj(1)" style="width:56px;height:56px;border-radius:10px;border:2px solid var(--border2);background:var(--surface2);font-size:28px;font-weight:700;cursor:pointer;color:var(--text);line-height:1;">&#43;</button>'
+    + '</div>'
+    + '</div>'
+
+    // Destination reminder
+    + '<div style="padding:14px 20px;background:var(--green-bg);border-radius:8px;border:1px solid rgba(30,126,74,0.3);text-align:center;">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--green);margin-bottom:4px;">Place Into</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:700;color:var(--green);">' + whEsc(destStr) + '</div>'
+    + '</div>'
+
+    + '</div>'
+
+    // Buttons
+    + '<div style="padding:16px 32px;border-top:1px solid var(--border);display:flex;gap:12px;background:var(--surface2);">'
+    + '<button onclick="pickerConfirmGoBack()" style="flex:1;background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:8px;padding:14px;font-size:14px;font-weight:600;cursor:pointer;">&#8592; Back</button>'
+    + '<button onclick="pickerCommit()" style="flex:2;background:var(--green);color:#fff;border:none;border-radius:8px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">Confirm &amp; Next &#8594;</button>'
+    + '</div>'
+
+    + '</div>';
+
+  // Focus confirm qty for keyboard entry
+  setTimeout(() => document.getElementById('picker-confirm-qty')?.select(), 80);
+}
+
+window.pickerConfirmQtyChange = function(input, min) {
+  const val = parseInt(input.value) || 0;
+  input.style.color = val < min ? 'var(--red)' : 'var(--text)';
+};
+
+window.pickerConfirmQtyAdj = function(delta) {
+  const input = document.getElementById('picker-confirm-qty');
+  if (!input) return;
+  const min = parseInt(input.min) || 1;
+  const next = Math.max(min, (parseInt(input.value) || min) + delta);
+  input.value = next;
+  input.style.color = 'var(--text)';
+  // Update extra label
+  const item = PickerState.queue[PickerState.index];
+  if (!item) return;
+};
+
+window.pickerConfirmGoBack = function() {
+  // Return to the pick screen for this item without advancing
+  pickerRender();
+};
+
+window.pickerCommit = function() {
+  const qtyInput = document.getElementById('picker-confirm-qty');
+  const item     = PickerState.queue[PickerState.index];
+  if (!item) return;
+  const finalQty = Math.max(item.qty, parseInt(qtyInput?.value) || item.qty);
+  PickerState.completed.push({
+    row:          item.row,
+    bulkLoc:      item.bulkLoc,
+    qty:          finalQty,
+    suggestedQty: item.qty,
+    destBins:     item.destBins,
+    skipped:      false,
+  });
+  PickerState.index++;
   pickerRender();
 };
 
