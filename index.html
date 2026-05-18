@@ -7,6 +7,87 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+  /* ── DARK MODE ── */
+  body.dark-mode {
+    --bg:         #0f0f11;
+    --surface:    #18181c;
+    --surface2:   #222228;
+    --border:     #2e2e38;
+    --border2:    #3a3a48;
+    --text:       #e8e8ec;
+    --text-muted: #7a7a8c;
+    --text-dim:   #4a4a5a;
+    --accent:     #c8433a;
+    --accent-dim: rgba(200,67,58,0.15);
+    --green:      #4af0a0;
+    --green-bg:   rgba(74,240,160,0.1);
+    --yellow:     #f0b84a;
+    --yellow-bg:  rgba(240,184,74,0.1);
+    --red:        #f04a4a;
+    --red-bg:     rgba(240,74,74,0.1);
+    --blue:       #5b9cf6;
+    --blue-bg:    rgba(91,156,246,0.1);
+    --orange:     #f09050;
+    --orange-bg:  rgba(240,144,80,0.1);
+  }
+  body.dark-mode .login-box { border-color: var(--border2); }
+  body.dark-mode th { background: var(--surface2) !important; color: var(--text-muted); }
+  body.dark-mode td { background: var(--surface) !important; border-color: var(--border); }
+  body.dark-mode tr:nth-child(even) td { background: var(--surface2) !important; }
+  body.dark-mode tr:hover td { background: #2a2a36 !important; }
+  body.dark-mode tr:nth-child(even) td.is-pinned { background: var(--surface2) !important; }
+  body.dark-mode tr:hover td.is-pinned { background: #2a2a36 !important; }
+  body.dark-mode .nav-item.active { background: rgba(200,67,58,0.15); }
+  body.dark-mode .dash-card { background: var(--surface); border-color: var(--border); }
+  body.dark-mode .dash-card-red    { background: rgba(240,74,74,0.08);  border-left-color: var(--red); }
+  body.dark-mode .dash-card-yellow { background: rgba(240,184,74,0.08); border-left-color: var(--yellow); }
+  body.dark-mode .dash-card-green  { background: rgba(74,240,160,0.08); border-left-color: var(--green); }
+  body.dark-mode input, body.dark-mode select { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+  body.dark-mode .btn-secondary { background: var(--surface2); border-color: var(--border2); color: var(--text-muted); }
+  body.dark-mode .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  body.dark-mode .card { background: var(--surface); border-color: var(--border); }
+  body.dark-mode .product-dropdown { background: var(--surface2); border-color: var(--border2); }
+  body.dark-mode .product-dropdown-item:hover { background: var(--surface); }
+  body.dark-mode #notif-popup { background: var(--surface); border-color: var(--border2); }
+  body.dark-mode #title-search-modal > div { background: var(--surface); }
+  body.dark-mode #alloc-modal > div,
+  body.dark-mode #run-modal > div { background: var(--surface); }
+  body.dark-mode .pill-ok       { background: rgba(74,240,160,0.12); color: var(--green); }
+  body.dark-mode .pill-low      { background: rgba(240,184,74,0.12); color: var(--yellow); }
+  body.dark-mode .pill-critical { background: rgba(240,144,80,0.12); color: var(--orange); }
+  body.dark-mode .pill-out      { background: rgba(240,74,74,0.12);  color: var(--red); border-color: rgba(240,74,74,0.3); }
+  body.dark-mode .pill-urgent   { background: rgba(240,74,74,0.12);  color: var(--red); }
+  body.dark-mode .pill-soon     { background: rgba(240,184,74,0.12); color: var(--yellow); }
+  body.dark-mode .pill-plan     { background: rgba(91,156,246,0.12); color: var(--blue); }
+  body.dark-mode .selected-product { background: rgba(91,156,246,0.1); border-color: rgba(91,156,246,0.3); }
+  body.dark-mode .route-warning { background: rgba(240,184,74,0.1); border-color: rgba(240,184,74,0.3); }
+  body.dark-mode #needs-attention-banner { background: #8b2e26; border-bottom-color: #6d221c; }
+  body.dark-mode #wt-pop { background: var(--surface); border-color: var(--border2); }
+  </style>
+  <script>
+  function toggleDarkMode() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('fp_dark_mode', isDark ? '1' : '0');
+    const icon = document.getElementById('darkmode-icon');
+    if (icon) {
+      icon.innerHTML = isDark
+        ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    }
+  }
+  // Apply on load before paint to avoid flash
+  (function() {
+    if (localStorage.getItem('fp_dark_mode') === '1') {
+      document.body.classList.add('dark-mode');
+      // Icon update runs after DOM ready since the button isn't in head
+      document.addEventListener('DOMContentLoaded', function() {
+        const icon = document.getElementById('darkmode-icon');
+        if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+      });
+    }
+  })();
+  </script>
 </head>
 <body>
 
@@ -196,6 +277,11 @@
       </div>
       <div style="display:flex;gap:10px;align-items:center;">
         <!-- Calculator icon for reorder calc -->
+        <button id="darkmode-btn" onclick="toggleDarkMode()" title="Toggle dark mode" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-muted);display:flex;align-items:center;" aria-label="Toggle dark mode">
+          <svg id="darkmode-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
         <button id="title-search-btn" onclick="openTitleSearch()" title="Reorder Calculator" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-muted);display:flex;align-items:center;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="4" y="2" width="16" height="20" rx="2"/>
@@ -565,7 +651,7 @@
       <!-- Replenishment tab -->
       <div id="wh-tab-replenishment" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
         <div id="wh-results" style="display:none;flex:1;overflow:hidden;flex-direction:column;min-height:0;">
-          <div id="wh-stat-grid" class="dash-grid" style="padding:16px 24px;flex-shrink:0;"></div>
+          <div id="wh-stat-grid" style="display:flex;gap:0;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--surface);"></div>
           <!-- Filter + action bar -->
           <div style="padding:8px 24px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
             <input type="text" id="wh-search-box" placeholder="Search product or SKU…" style="width:200px;" oninput="whApplyFilters()" />
