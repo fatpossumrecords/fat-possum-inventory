@@ -1132,6 +1132,27 @@ window.wtToggleEmpty = function() {
     grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
     grid.style.gap = '16px';
     grid.style.flexWrap = ''; // clear any leftover flex
+
+    // Mobile stat strip: Reorder Alerts · Mfg Predictions · Stockout
+    document.getElementById('mob-stat-strip')?.remove();
+    if (window.innerWidth <= 768) {
+      const alertCount = cAlerts ? (cAlerts.querySelector('.dash-num')?.textContent||'0') : '0';
+      const mfgCount   = cMfg   ? (cMfg.querySelector('.dash-num')?.textContent||'0')   : '0';
+      const clockEl    = cClock  ? cClock.querySelector('[style*="font-size:28"]') : null;
+      const clockVal   = clockEl ? clockEl.textContent.trim() : '—';
+      const alertColor = parseInt(alertCount) > 0 ? 'color:var(--red)' : 'color:var(--green)';
+      const strip = document.createElement('div');
+      strip.id = 'mob-stat-strip';
+      strip.className = 'mob-stat-strip';
+      strip.innerHTML =
+        '<div class="mob-stat"><div class="mob-stat-val" style="'+alertColor+'">'+alertCount+'</div><div class="mob-stat-lbl">Alerts</div></div>'
+        +'<div class="mob-stat"><div class="mob-stat-val">'+mfgCount+'</div><div class="mob-stat-lbl">Mfg</div></div>'
+        +'<div class="mob-stat"><div class="mob-stat-val" style="font-size:14px;">'+clockVal+'</div><div class="mob-stat-lbl">Stockout</div></div>';
+      // Insert after wh-dash-card in the grid
+      const whCard = document.getElementById('wh-dash-card');
+      if (whCard && whCard.nextSibling) grid.insertBefore(strip, whCard.nextSibling);
+      else grid.appendChild(strip);
+    }
   }
 
   function watchDashboard() {
