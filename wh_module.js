@@ -95,7 +95,12 @@ async function whFetchAll(endpoint, size, onProgress) {
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────
-function whSetStatus(msg) { const el = document.getElementById('wh-status-step'); if (el) el.textContent = msg; }
+function whSetStatus(msg) {
+  const el = document.getElementById('wh-status-step');
+  if (el) el.textContent = msg;
+  const det = document.getElementById('wh-dash-gen-detail');
+  if (det) det.textContent = msg;
+}
 function whSetProgress(pct, label) {
   const bar = document.getElementById('wh-progress-bar');
   const lbl = document.getElementById('wh-progress-label');
@@ -698,7 +703,65 @@ window.wtToggleEmpty = function() {
   wtRender();
 };
 
-function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// ─── DASHBOARD CARD ──────────────────────────────────────────
+// Injects a "Walk Replenish" card into the dashboard grid
+// whenever renderDashboard() rebuilds it.
+(function() {
+  function injectDashCard() {
+    const grid = document.getElementById('dashboard-body');
+    if (!grid) return;
+    // Remove any existing WH card to avoid duplicates
+    document.getElementById('wh-dash-card')?.remove();
+
+    // Count urgent+replenish from WHState if data loaded
+    const urgent  = WHState.allRows.filter(r => r.priority === 'urgent').length;
+    const replen  = WHState.allRows.filter(r => r.priority === 'replenish').length;
+    const total   = urgent + replen;
+    const hasData = WHState.allRows.length > 0;
+
+    const card = document.createElement('div');
+    card.id = 'wh-dash-card';
+    card.className = 'dash-card' + (urgent > 0 ? ' dash-card-red' : replen > 0 ? ' dash-card-yellow' : '');
+    card.style.cursor = 'pointer';
+    card.innerHTML = `
+      <div class="dash-label">Walk Replenish</div>
+      <div class="dash-num" style="color:var(--accent);font-size:28px;">${hasData ? total : '—'}</div>
+      <div class="dash-sub">${hasData
+        ? (urgent > 0 ? urgent + ' urgent · ' : '') + replen + ' need stock'
+        : 'Click to generate'
+      }</div>
+      <div style="margin-top:12px;">
+        <button onclick="event.stopPropagation();startReplenishRun()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;width:100%;">
+          ▶ ${hasData ? 'Start Replenish Run' : 'Generate & Start'}
+        </button>
+      </div>
+    `;
+    card.addEventListener('click', () => startReplenishRun());
+
+    // Insert as first card in the dash-grid
+    const dashGrid = grid.querySelector('.dash-grid');
+    if (dashGrid) {
+      dashGrid.insertBefore(card, dashGrid.firstChild);
+    }
+  }
+
+  // Watch for dashboard rebuilds
+  let _dashObserver = null;
+  function watchDashboard() {
+    const body = document.getElementById('dashboard-body');
+    if (!body) { setTimeout(watchDashboard, 500); return; }
+    _dashObserver = new MutationObserver(() => {
+      // Only inject if the dashboard is currently visible
+      const view = document.getElementById('view-dashboard');
+      if (view && !view.classList.contains('hidden')) {
+        setTimeout(injectDashCard, 0);
+      }
+    });
+    _dashObserver.observe(body, { childList: true, subtree: false });
+  }
+
+  document.addEventListener('DOMContentLoaded', watchDashboard);
+})();
 
 // ═══════════════════════════════════════════════════════════════
 // PICKER MODE
@@ -735,7 +798,7 @@ function pickerBuildQueue() {
       return 0;
     });
     return {
-      row,
+      row:      r,
       bulkLoc:  sorted[0].name,
       bulkQty:  sorted[0].qty,
       qty:      r.suggest,
@@ -744,15 +807,46 @@ function pickerBuildQueue() {
   });
 }
 
-window.startPickerMode = function() {
-  if (!WHState.allRows.length) { alert('Run the replenishment report first.'); return; }
+window.startPickerMode = window.startReplenishRun = async function() {
+  // If no data yet, run the report first then launch
+  if (!WHState.allRows.length) {
+    await whRunAndLaunch();
+    return;
+  }
+  pickerLaunch();
+};
+
+async function whRunAndLaunch() {
+  // Show the replenishment view with a status overlay
+  switchView('replenishment');
+  // Open WH nav if closed
+  const sub = document.getElementById('wh-nav-sub');
+  if (sub) sub.style.display = 'block';
+  const arrow = document.getElementById('wh-nav-arrow');
+  if (arrow) arrow.textContent = '▾';
+
+  // Show generating banner
+  const banner = document.getElementById('wh-dash-generating');
+  if (banner) banner.style.display = 'flex';
+
+  try {
+    await runReplenishment();
+  } catch(e) {
+    if (banner) banner.style.display = 'none';
+    return;
+  }
+  if (banner) banner.style.display = 'none';
+  pickerLaunch();
+}
+
+function pickerLaunch() {
   PickerState.queue      = pickerBuildQueue();
   PickerState.index      = 0;
   PickerState.completed  = [];
   PickerState.startedAt  = new Date();
   if (!PickerState.queue.length) { alert('No items need replenishment right now.'); return; }
   pickerOpen();
-};
+}
 
 function pickerOpen() {
   document.getElementById('picker-overlay').style.display = 'flex';
@@ -796,7 +890,7 @@ function pickerRender() {
 
       <!-- Header bar -->
       <div style="background:var(--accent);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.9;">FP Warehouse Pick</div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.9;">FP Warehouse Replenish</div>
         <div style="display:flex;align-items:center;gap:16px;">
           <span style="font-size:14px;font-weight:700;">${current} <span style="opacity:0.6;font-weight:400;">of</span> ${total}</span>
           <button onclick="pickerClose()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">✕ Exit</button>
@@ -956,8 +1050,8 @@ function pickerRenderComplete() {
       <!-- Success header -->
       <div style="background:var(--green);color:#fff;padding:24px 32px;text-align:center;">
         <div style="font-size:40px;margin-bottom:8px;">✓</div>
-        <div style="font-size:20px;font-weight:700;margin-bottom:4px;">Pick Run Complete</div>
-        <div style="font-size:13px;opacity:0.85;">${picked.length} locations picked · ${totalUnits.toLocaleString()} units · ${skipped.length} skipped${elapsed !== null ? ' · ' + elapsed + ' min' : ''}</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:4px;">Replenish Run Complete</div>
+        <div style="font-size:13px;opacity:0.85;">${picked.length} locations replenished · ${totalUnits.toLocaleString()} units · ${skipped.length} skipped${elapsed !== null ? ' · ' + elapsed + ' min' : ''}</div>
       </div>
 
       <!-- Summary note -->
@@ -1008,7 +1102,7 @@ window.pickerPrintSummary = function() {
   }).join('');
 
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick Summary — ${now}</title>
+  win.document.write(`<!DOCTYPE html><html><head><title>FP Replenish Summary — ${now}</title>
   <style>
     @page { margin: 0.5in; size: portrait; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1043,7 +1137,7 @@ window.pickerPrintSummary = function() {
   </style>
   </head><body>
   <div class="header">
-    <h1>Fat Possum Records — Pick Summary</h1>
+    <h1>Fat Possum Records — Replenish Summary</h1>
     <div class="meta">
       <span>📅 ${now}</span>
       <span>✓ ${picked.length} picked</span>
@@ -1066,7 +1160,7 @@ window.pickerPrintSummary = function() {
     <div class="t"><div class="t-val">${totalUnits.toLocaleString()}</div><div class="t-lbl">Total Units Moved</div></div>
     ${skipped.length ? '<div class="t"><div class="t-val">' + skipped.length + '</div><div class="t-lbl">Skipped</div></div>' : ''}
   </div>
-  <div class="footer">Fat Possum Records · Warehouse Pick Sheet · ${now}</div>
+  <div class="footer">Fat Possum Records · Warehouse Replenish Sheet · ${now}</div>
   </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
@@ -1191,10 +1285,12 @@ window.whPrintPickList = function() {
     <tbody>${tableRows}</tbody>
   </table>
   <div class="footer">
-    <span>Fat Possum Records · Warehouse Pick Sheet · ${now}</span>
+    <span>Fat Possum Records · Warehouse Replenish Sheet · ${now}</span>
     <span>Picker: _______________________   Time started: ____________   Time complete: ____________</span>
   </div>
   </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
 };
+
+function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
