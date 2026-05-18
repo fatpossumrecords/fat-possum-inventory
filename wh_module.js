@@ -53,9 +53,9 @@ function whCfg() {
   return {
     lookback:   parseInt(document.getElementById('wh-lookback')?.value)    || 30,
     daysSupply: parseInt(document.getElementById('wh-days-supply')?.value) || 7,
-    outlier:    parseInt(document.getElementById('wh-outlier')?.value)     || 25,
+    outlier:    parseInt(document.getElementById('wh-outlier')?.value)     || 20,
     maxUnits:   parseInt(document.getElementById('wh-max-units')?.value)   || 50,
-    minUnits:   parseInt(document.getElementById('wh-min-units')?.value)   || 2,
+    minUnits:   parseInt(document.getElementById('wh-min-units')?.value)   || 5,
   };
 }
 
