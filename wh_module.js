@@ -1052,8 +1052,7 @@ window.wtToggleEmpty = function() {
     const hasData = WHState.allRows.length > 0;
     const card = document.createElement('div');
     card.id = 'wh-dash-card';
-    card.className = 'dash-card wh-replenish-card'
-      + (urgent > 0 ? ' dash-card-red' : replen > 0 ? ' dash-card-yellow' : '');
+    card.className = 'dash-card wh-replenish-card';
     card.style.cursor = 'pointer';
     // order:4 places it as 5th item in the 4-col grid = first of row 2
     // existing cards get order:0 by default so they stay in rows 1 & 2
@@ -1081,22 +1080,58 @@ window.wtToggleEmpty = function() {
     // Remove stale WH card
     document.getElementById('wh-dash-card')?.remove();
 
-    // Give each existing card an explicit order so our card slots in correctly
-    // Cards from renderDashboard come in this order:
+    // Collect all current direct children (cards + section blocks)
+    const allChildren = [...grid.children];
+
+    // Cards from renderDashboard arrive in this order:
     //   0:Total Products  1:Global Stock  2:Reorder Alerts  3:Resolved
-    //   4:Mfg Predictions 5:Production Runs 6:Stockout Clock 7:Inbound(span4)
-    // We want WH card at order:4, pushing Mfg/Runs/Stockout to orders 5,6,7
-    const existingCards = [...grid.children];
-    existingCards.forEach((c, i) => {
-      c.style.order = i < 4 ? String(i) : String(i + 1); // shift everything after pos 3 up by 1
+    //   4:Mfg Predictions 5:Production Runs 6:Stockout Clock
+    //   then: full-width Inbound block, Warehouse+Movements row, Active Runs, Column Layout
+    // We want:
+    //   Row 1 (4-col): Total Products · Global Stock · Reorder Alerts · Resolved
+    //   Row 2 (4-col): Walk Replenish · Production Runs · Mfg Predictions · Stockout Clock
+    //   Row 3+: everything else full-width
+
+    // Identify the 7 stat cards (first 7 .dash-card children)
+    const statCards = allChildren.filter(c => c.classList.contains('dash-card')).slice(0, 7);
+    const rest = allChildren.filter(c => !statCards.includes(c));
+
+    if (statCards.length < 4) return; // not ready yet
+
+    const [cTotal, cGlobal, cAlerts, cResolved, cMfg, cRuns, cClock] = statCards;
+
+    // Build WH card — no red/yellow coloring per request
+    const wh = buildWHCard();
+    wh.classList.remove('dash-card-red','dash-card-yellow');
+
+    // Also remove red/yellow from Mfg Predictions
+    if (cMfg) cMfg.classList.remove('dash-card-red','dash-card-yellow');
+
+    // Reset all inline order/gridColumn styles from any prior run
+    [...statCards, ...rest, wh].forEach(c => {
+      if (c) { c.style.order = ''; c.style.gridColumn = ''; }
     });
 
-    // Append WH card --- its order:4 puts it between Resolved and Mfg Predictions
-    grid.appendChild(buildWHCard());
+    // Rebuild grid children in desired DOM order
+    grid.innerHTML = '';
 
-    // Make grid use flex so order property actually works
-    grid.style.display = 'flex';
-    grid.style.flexWrap = 'wrap';
+    // Row 1: 4 cards
+    [cTotal, cGlobal, cAlerts, cResolved].filter(Boolean).forEach(c => grid.appendChild(c));
+
+    // Row 2: WH card + 3 others
+    [wh, cRuns, cMfg, cClock].filter(Boolean).forEach(c => grid.appendChild(c));
+
+    // Row 3+: everything else — make full-width
+    rest.forEach(c => {
+      c.style.gridColumn = '1 / -1';
+      grid.appendChild(c);
+    });
+
+    // Ensure grid stays as CSS grid with 4 equal columns
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+    grid.style.gap = '16px';
+    grid.style.flexWrap = ''; // clear any leftover flex
   }
 
   function watchDashboard() {
