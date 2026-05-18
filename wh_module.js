@@ -279,7 +279,7 @@ function whBuildVelocityMap(orderItems, c) {
 function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, c) {
   return products.map(item => {
     const a = item.attributes || item;
-    const name = a.name || 'Unknown', sku = a.sku || '';
+    const name = a.name || 'Unknown', sku = a.sku || '', upc = a.barcode || '';
     const onHand = parseInt(a.quantity_on_hand ?? 0);
     const customerAllocated = liveCustomerAllocBySku[sku] || 0;
     const poAllocated       = livePOAllocBySku[sku]       || 0;
@@ -300,7 +300,7 @@ function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku
     let priority = 'ok';
     if (freePickQty === 0 && orderCount > 0) priority = 'urgent';
     else if (netSuggest > 0) priority = 'replenish';
-    return { name, sku, onHand, allocated, customerAllocated, poAllocated,
+    return { name, sku, upc, onHand, allocated, customerAllocated, poAllocated,
       pickQty, freePickQty, bulkQty, bulkLocs, pickLocs: replenishBins, pickLocsFallback,
       velocity, orderCount, suggest: netSuggest, priority };
   }).filter(r => r.onHand > 0 && (r.bulkQty > 0 || r.priority === 'ok'));
@@ -1077,18 +1077,21 @@ window.pickerConfirm = function() {
     return;
   }
 
-  // Validate UPC — normalize both sides (strip non-digits, strip leading zeros)
-  const expectedUpc = (item.row.upc || '').replace(/\D/g, '').replace(/^0+/, '');
-  const expectedSku = (item.row.sku || '').replace(/\s/g, '').toUpperCase();
-  const scannedRaw  = (scanInp ? scanInp.value.trim() : '');
-  const scannedUpper = scannedRaw.toUpperCase().replace(/\s/g, '');
+  // Validate UPC — normalize both sides (strip non-digits, then compare
+  // both with AND without leading zeros to handle scanner/barcode variations)
+  const rawBarcode   = (item.row.upc || '').replace(/\D/g, '');           // e.g. "045778030316"
+  const expectedUpc  = rawBarcode.replace(/^0+/, '');                      // e.g. "45778030316"
+  const expectedSku  = (item.row.sku || '').replace(/\s/g, '').toUpperCase();
+  const scannedDigits = scanned;                                            // already stripped non-digits
+  const scannedNorm   = scannedDigits.replace(/^0+/, '');                  // strip leading zeros too
+  const scannedUpper  = (scanInp ? scanInp.value.trim() : '').toUpperCase().replace(/\s/g, '');
 
-  const upcMatch = expectedUpc && scanned === expectedUpc;
-  const skuMatch = scannedUpper === expectedSku; // fallback: some scanners read SKU barcodes
+  const upcMatch = expectedUpc && (scannedNorm === expectedUpc || scannedDigits === rawBarcode);
+  const skuMatch = expectedSku && scannedUpper === expectedSku;
 
   if (!upcMatch && !skuMatch) {
     const errEl = document.getElementById('picker-scan-error');
-    if (errEl) errEl.textContent = '&#x2717; Wrong item — expected UPC ' + (item.row.upc || item.row.sku) + '. Try again.';
+    if (errEl) errEl.textContent = '\u2717 Wrong item \u2014 expected UPC ' + (rawBarcode || item.row.sku) + '. Got: ' + (scanInp?.value.trim() || scanned) + '. Try again.';
     if (scanInp) { scanInp.style.borderColor = 'var(--red)'; scanInp.value = ''; scanInp.focus(); }
     pickerPlayError();
     pickerFlash('rgba(240,74,74,0.6)');
