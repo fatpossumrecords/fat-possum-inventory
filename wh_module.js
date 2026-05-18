@@ -699,3 +699,502 @@ window.wtToggleEmpty = function() {
 };
 
 function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ═══════════════════════════════════════════════════════════════
+// PICKER MODE
+// ═══════════════════════════════════════════════════════════════
+
+const PickerState = {
+  queue:       [],   // walk-order sorted rows with bulkLoc resolved
+  index:       0,    // current pick
+  completed:   [],   // { row, bulkLoc, qty, skipped }
+  startedAt:   null,
+};
+
+// Build the pick queue from current filtered+walk-order rows
+function pickerBuildQueue() {
+  // Use replenish+urgent only, sorted by walk order
+  const rows = WHState.allRows
+    .filter(r => r.priority === 'urgent' || r.priority === 'replenish')
+    .filter(r => r.suggest > 0 && r.bulkLocs && r.bulkLocs.length > 0);
+
+  // Sort by first bulk location walk order
+  rows.sort((a, b) => {
+    const ka = whWalkSortKey(a), kb = whWalkSortKey(b);
+    for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+    return 0;
+  });
+
+  // Flatten — each row gets its primary bulk loc
+  return rows.map(r => {
+    const sorted = [...r.bulkLocs].sort((a, b) => {
+      const aN = whIsNowLoc(a.name), bN = whIsNowLoc(b.name);
+      if (aN !== bN) return aN ? 1 : -1;
+      const ka = whLocSortKey(a.name), kb = whLocSortKey(b.name);
+      for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+      return 0;
+    });
+    return {
+      row,
+      bulkLoc:  sorted[0].name,
+      bulkQty:  sorted[0].qty,
+      qty:      r.suggest,
+      destBins: r.pickLocs,
+    };
+  });
+}
+
+window.startPickerMode = function() {
+  if (!WHState.allRows.length) { alert('Run the replenishment report first.'); return; }
+  PickerState.queue      = pickerBuildQueue();
+  PickerState.index      = 0;
+  PickerState.completed  = [];
+  PickerState.startedAt  = new Date();
+  if (!PickerState.queue.length) { alert('No items need replenishment right now.'); return; }
+  pickerOpen();
+};
+
+function pickerOpen() {
+  document.getElementById('picker-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  pickerRender();
+}
+
+window.pickerClose = function() {
+  document.getElementById('picker-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+};
+
+function pickerRender() {
+  const overlay = document.getElementById('picker-overlay');
+  if (!overlay) return;
+
+  // Completion screen
+  if (PickerState.index >= PickerState.queue.length) {
+    pickerRenderComplete();
+    return;
+  }
+
+  const total   = PickerState.queue.length;
+  const current = PickerState.index + 1;
+  const item    = PickerState.queue[PickerState.index];
+  const pct     = Math.round(((current - 1) / total) * 100);
+  const destStr = item.destBins && item.destBins.length
+    ? item.destBins.join('  ·  ')
+    : '— no bin assigned —';
+  const isDark = document.body.classList.contains('dark-mode');
+
+  overlay.innerHTML = `
+    <div id="picker-card" style="
+      width:100%;max-width:680px;
+      background:var(--surface);
+      border-radius:12px;
+      box-shadow:0 24px 64px rgba(0,0,0,0.18);
+      display:flex;flex-direction:column;
+      overflow:hidden;
+    ">
+
+      <!-- Header bar -->
+      <div style="background:var(--accent);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.9;">FP Warehouse Pick</div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <span style="font-size:14px;font-weight:700;">${current} <span style="opacity:0.6;font-weight:400;">of</span> ${total}</span>
+          <button onclick="pickerClose()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">✕ Exit</button>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div style="height:6px;background:rgba(0,0,0,0.08);">
+        <div style="height:100%;width:${pct}%;background:var(--accent);opacity:0.4;transition:width 0.3s;"></div>
+      </div>
+
+      <!-- Main pick card -->
+      <div style="padding:32px 32px 24px;flex:1;">
+
+        <!-- PULL FROM -->
+        <div style="margin-bottom:28px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Pull From</div>
+          <div style="display:flex;align-items:center;gap:20px;">
+            <div style="font-family:'DM Mono',monospace;font-size:52px;font-weight:700;color:var(--accent);letter-spacing:2px;line-height:1;">${whEsc(item.bulkLoc)}</div>
+            <div style="font-size:13px;color:var(--text-muted);line-height:1.5;">
+              <div>${item.bulkQty.toLocaleString()} units in location</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- QUANTITY -->
+        <div style="display:flex;align-items:center;gap:32px;margin-bottom:28px;padding:20px 24px;background:var(--surface2);border-radius:8px;border:2px solid var(--border);">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:4px;">Pick Quantity</div>
+            <div style="font-family:'DM Mono',monospace;font-size:64px;font-weight:700;color:var(--text);line-height:1;">${item.qty}</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:4px;">Product</div>
+            <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px;line-height:1.3;">${whEsc(item.row.name)}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--text-muted);">${whEsc(item.row.sku)}</div>
+          </div>
+        </div>
+
+        <!-- PLACE INTO -->
+        <div style="margin-bottom:28px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Place Into Pick Bin</div>
+          <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:700;color:var(--green);letter-spacing:1px;">${whEsc(destStr)}</div>
+        </div>
+
+        <!-- Scan input -->
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Scan Location Barcode to Confirm</div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input
+              type="text"
+              id="picker-scan-input"
+              placeholder="Scan or type location barcode…"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              style="flex:1;font-family:'DM Mono',monospace;font-size:18px;padding:14px 16px;border:2px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);outline:none;"
+              onkeydown="pickerHandleKey(event)"
+              oninput="pickerClearError()"
+            />
+            <button onclick="pickerConfirm()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:14px 24px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap;letter-spacing:0.5px;">Confirm ↵</button>
+          </div>
+          <div id="picker-scan-error" style="color:var(--red);font-size:13px;font-weight:600;margin-top:8px;min-height:20px;"></div>
+        </div>
+
+      </div>
+
+      <!-- Footer actions -->
+      <div style="padding:16px 32px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:space-between;align-items:center;background:var(--surface2);">
+        <button onclick="pickerSkip()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">Skip This Item</button>
+        <div style="font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace;">${PickerState.completed.length} picked · ${PickerState.queue.length - current} remaining</div>
+        ${current > 1 ? '<button onclick="pickerBack()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">← Back</button>' : '<div></div>'}
+      </div>
+    </div>
+  `;
+
+  // Auto-focus the scan input
+  setTimeout(() => {
+    const inp = document.getElementById('picker-scan-input');
+    if (inp) inp.focus();
+  }, 80);
+}
+
+window.pickerHandleKey = function(e) {
+  if (e.key === 'Enter') pickerConfirm();
+};
+
+window.pickerClearError = function() {
+  const el = document.getElementById('picker-scan-error');
+  if (el) el.textContent = '';
+  const inp = document.getElementById('picker-scan-input');
+  if (inp) inp.style.borderColor = 'var(--border2)';
+};
+
+window.pickerConfirm = function() {
+  const inp = document.getElementById('picker-scan-input');
+  const val = (inp ? inp.value.trim() : '').toUpperCase();
+  const item = PickerState.queue[PickerState.index];
+  const expected = item.bulkLoc.toUpperCase();
+
+  // Validate scan — accept if empty (manual confirm) or matches location
+  if (val && val !== expected) {
+    // Show error — wrong location scanned
+    const errEl = document.getElementById('picker-scan-error');
+    if (errEl) errEl.textContent = '✕ Wrong location — expected ' + item.bulkLoc + ', got "' + val + '"';
+    if (inp) { inp.style.borderColor = 'var(--red)'; inp.select(); }
+    return;
+  }
+
+  PickerState.completed.push({ row: item.row, bulkLoc: item.bulkLoc, qty: item.qty, destBins: item.destBins, skipped: false });
+  PickerState.index++;
+  pickerRender();
+};
+
+window.pickerSkip = function() {
+  const item = PickerState.queue[PickerState.index];
+  PickerState.completed.push({ row: item.row, bulkLoc: item.bulkLoc, qty: item.qty, destBins: item.destBins, skipped: true });
+  PickerState.index++;
+  pickerRender();
+};
+
+window.pickerBack = function() {
+  if (PickerState.index === 0) return;
+  PickerState.index--;
+  PickerState.completed.pop();
+  pickerRender();
+};
+
+function pickerRenderComplete() {
+  const overlay = document.getElementById('picker-overlay');
+  if (!overlay) return;
+
+  const picked  = PickerState.completed.filter(c => !c.skipped);
+  const skipped = PickerState.completed.filter(c => c.skipped);
+  const totalUnits = picked.reduce((s, c) => s + c.qty, 0);
+  const elapsed = PickerState.startedAt
+    ? Math.round((Date.now() - PickerState.startedAt.getTime()) / 60000)
+    : null;
+
+  const rows = PickerState.completed.map(c => {
+    const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '—';
+    return `<tr style="${c.skipped ? 'opacity:0.45;' : ''}">
+      <td style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:${c.skipped ? 'var(--text-muted)' : 'var(--accent)'};padding:12px 16px;border-bottom:1px solid var(--border);white-space:nowrap;">${whEsc(c.bulkLoc)}</td>
+      <td style="padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div style="font-weight:600;font-size:14px;">${whEsc(c.row.name)}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);">${whEsc(c.row.sku)}</div>
+      </td>
+      <td style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;text-align:center;padding:12px 16px;border-bottom:1px solid var(--border);color:${c.skipped ? 'var(--text-dim)' : 'var(--text)'};">${c.skipped ? '—' : c.qty}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green);padding:12px 16px;border-bottom:1px solid var(--border);">${whEsc(dest)}</td>
+      <td style="padding:12px 16px;border-bottom:1px solid var(--border);text-align:center;">${c.skipped ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;text-transform:uppercase;">Skipped</span>' : '<span style="color:var(--green);font-size:16px;">✓</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div style="width:100%;max-width:800px;background:var(--surface);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.18);display:flex;flex-direction:column;max-height:92vh;overflow:hidden;">
+
+      <!-- Success header -->
+      <div style="background:var(--green);color:#fff;padding:24px 32px;text-align:center;">
+        <div style="font-size:40px;margin-bottom:8px;">✓</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:4px;">Pick Run Complete</div>
+        <div style="font-size:13px;opacity:0.85;">${picked.length} locations picked · ${totalUnits.toLocaleString()} units · ${skipped.length} skipped${elapsed !== null ? ' · ' + elapsed + ' min' : ''}</div>
+      </div>
+
+      <!-- Summary note -->
+      <div style="padding:16px 32px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px;color:var(--text-muted);">
+        Proceed to transfer stock to pick bins below. Stock movements can be completed in Packiyo once items are placed.
+      </div>
+
+      <!-- Summary table -->
+      <div style="overflow-y:auto;flex:1;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--surface2);">
+              <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Pull From</th>
+              <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Product</th>
+              <th style="padding:10px 16px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Qty</th>
+              <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Place Into</th>
+              <th style="padding:10px 16px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Status</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:16px 32px;border-top:1px solid var(--border);display:flex;gap:12px;justify-content:flex-end;background:var(--surface2);">
+        <button onclick="pickerPrintSummary()" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">⎙ Print Summary</button>
+        <button onclick="pickerClose()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;">Done</button>
+      </div>
+    </div>
+  `;
+}
+
+window.pickerPrintSummary = function() {
+  const picked  = PickerState.completed.filter(c => !c.skipped);
+  const skipped = PickerState.completed.filter(c => c.skipped);
+  const totalUnits = picked.reduce((s,c) => s + c.qty, 0);
+  const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+
+  const rows = PickerState.completed.map(c => {
+    const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '—';
+    return `<tr class="${c.skipped ? 'skipped' : ''}">
+      <td class="mono loc">${c.bulkLoc}</td>
+      <td><strong>${c.row.name}</strong><br><span class="mono small">${c.row.sku}</span></td>
+      <td class="mono center qty">${c.skipped ? '—' : c.qty}</td>
+      <td class="mono dest">${dest}</td>
+      <td class="center">${c.skipped ? 'SKIPPED' : '✓'}</td>
+    </tr>`;
+  }).join('');
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick Summary — ${now}</title>
+  <style>
+    @page { margin: 0.5in; size: portrait; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', Arial, sans-serif; font-size: 12px; color: #111; }
+    .header { margin-bottom: 20px; border-bottom: 2px solid #111; padding-bottom: 12px; }
+    .header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .header .meta { font-size: 11px; color: #555; display: flex; gap: 24px; flex-wrap: wrap; margin-top: 6px; }
+    .meta span { display: flex; align-items: center; gap: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f0f0f0; padding: 8px 10px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; color: #444; border-bottom: 1.5px solid #999; }
+    th.center { text-align: center; }
+    td { padding: 9px 10px; border-bottom: 1px solid #ddd; vertical-align: middle; }
+    tr:nth-child(even) td { background: #f8f8f8; }
+    td.mono { font-family: 'Courier New', monospace; }
+    td.loc  { font-size: 15px; font-weight: 700; color: #b83228; white-space: nowrap; }
+    td.dest { font-size: 12px; font-weight: 700; color: #1e7e4a; }
+    td.qty  { font-size: 18px; font-weight: 700; text-align: center; }
+    td.center { text-align: center; }
+    td.small { font-size: 10px; }
+    .small { font-size: 10px; color: #777; }
+    tr.skipped td { opacity: 0.45; }
+    tr.skipped td.loc { color: #888; }
+    .totals { margin-top: 16px; padding: 12px 16px; background: #f5f5f5; border: 1px solid #ddd; display: flex; gap: 32px; }
+    .totals .t { display: flex; flex-direction: column; }
+    .totals .t-val { font-size: 22px; font-weight: 700; font-family: 'Courier New', monospace; }
+    .totals .t-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #777; margin-top: 2px; }
+    .footer { margin-top: 20px; font-size: 9px; color: #aaa; text-align: right; }
+    @media print {
+      .no-print { display: none !important; }
+      a { text-decoration: none; color: inherit; }
+    }
+  </style>
+  </head><body>
+  <div class="header">
+    <h1>Fat Possum Records — Pick Summary</h1>
+    <div class="meta">
+      <span>📅 ${now}</span>
+      <span>✓ ${picked.length} picked</span>
+      <span>📦 ${totalUnits.toLocaleString()} units</span>
+      ${skipped.length ? '<span>⚠ ' + skipped.length + ' skipped</span>' : ''}
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Pull From</th>
+      <th>Product</th>
+      <th class="center">Qty</th>
+      <th>Place Into (Pick Bin)</th>
+      <th class="center">Status</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="totals">
+    <div class="t"><div class="t-val">${picked.length}</div><div class="t-lbl">Locations Picked</div></div>
+    <div class="t"><div class="t-val">${totalUnits.toLocaleString()}</div><div class="t-lbl">Total Units Moved</div></div>
+    ${skipped.length ? '<div class="t"><div class="t-val">' + skipped.length + '</div><div class="t-lbl">Skipped</div></div>' : ''}
+  </div>
+  <div class="footer">Fat Possum Records · Warehouse Pick Sheet · ${now}</div>
+  </body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// PRINT PICK LIST (pre-pick reference sheet)
+// ═══════════════════════════════════════════════════════════════
+window.whPrintPickList = function() {
+  const c = whCfg();
+  const rows = WHState.allRows
+    .filter(r => (r.priority === 'urgent' || r.priority === 'replenish') && r.suggest > 0 && r.bulkLocs && r.bulkLocs.length)
+    .sort((a, b) => {
+      const ka = whWalkSortKey(a), kb = whWalkSortKey(b);
+      for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+      return 0;
+    });
+
+  if (!rows.length) { alert('No items need replenishment.'); return; }
+
+  const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+
+  const tableRows = rows.map((r, i) => {
+    const sorted = [...r.bulkLocs].sort((a, b) => {
+      const aN = whIsNowLoc(a.name), bN = whIsNowLoc(b.name);
+      if (aN !== bN) return aN ? 1 : -1;
+      const ka = whLocSortKey(a.name), kb = whLocSortKey(b.name);
+      for (let j = 0; j < ka.length; j++) { if (ka[j] < kb[j]) return -1; if (ka[j] > kb[j]) return 1; }
+      return 0;
+    });
+    const bulkLoc  = sorted[0].name;
+    const bulkQty  = sorted[0].qty;
+    const destBins = r.pickLocs && r.pickLocs.length ? r.pickLocs.join(', ') : '—';
+    const urgCls   = r.priority === 'urgent' ? 'urgent' : '';
+    return `<tr class="${urgCls}">
+      <td class="num seq">${i+1}</td>
+      <td class="check"><span class="box"></span></td>
+      <td class="loc mono">${bulkLoc}</td>
+      <td class="qty mono">${r.suggest}</td>
+      <td class="prod"><strong>${r.name}</strong><br><span class="sku">${r.sku}</span></td>
+      <td class="dest mono">${destBins}</td>
+      <td class="avail mono">${bulkQty}</td>
+    </tr>`;
+  }).join('');
+
+  const urgent = rows.filter(r => r.priority === 'urgent').length;
+  const totalUnits = rows.reduce((s,r) => s + r.suggest, 0);
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick List — ${now}</title>
+  <style>
+    @page { margin: 0.4in 0.5in; size: landscape; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; }
+    .header { margin-bottom: 14px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid #111; padding-bottom: 10px; }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header .sub { font-size: 10px; color: #666; margin-top: 3px; }
+    .stats { display: flex; gap: 20px; align-items: flex-end; text-align: right; }
+    .stat { display: flex; flex-direction: column; align-items: flex-end; }
+    .stat-val { font-size: 20px; font-weight: 700; font-family: 'Courier New', monospace; line-height: 1; }
+    .stat-lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 0.8px; color: #888; }
+    table { width: 100%; border-collapse: collapse; }
+    col.col-seq  { width: 30px; }
+    col.col-chk  { width: 24px; }
+    col.col-loc  { width: 110px; }
+    col.col-qty  { width: 50px; }
+    col.col-prod { width: auto; }
+    col.col-dest { width: 140px; }
+    col.col-avail{ width: 60px; }
+    th { background: #111; color: #fff; padding: 7px 8px; text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.8px; }
+    th.right { text-align: right; }
+    td { padding: 7px 8px; border-bottom: 1px solid #ddd; vertical-align: middle; }
+    tr:nth-child(even) td { background: #f6f6f6; }
+    tr.urgent td { background: #fff5f5 !important; }
+    tr.urgent td.loc { color: #b83228; }
+    td.mono { font-family: 'Courier New', monospace; }
+    td.loc  { font-size: 14px; font-weight: 700; white-space: nowrap; }
+    td.qty  { font-size: 18px; font-weight: 700; text-align: center; color: #b83228; }
+    td.dest { font-size: 11px; font-weight: 700; color: #1e7e4a; }
+    td.avail{ font-size: 11px; text-align: right; color: #888; }
+    td.num  { text-align: right; color: #bbb; font-size: 10px; }
+    td.seq  { font-size: 10px; color: #ccc; text-align: center; }
+    td.check { text-align: center; }
+    .box { display: inline-block; width: 14px; height: 14px; border: 1.5px solid #999; border-radius: 2px; }
+    .prod strong { font-size: 11px; }
+    .sku { font-family: 'Courier New', monospace; font-size: 9px; color: #888; }
+    .footer { margin-top: 12px; font-size: 8px; color: #bbb; display: flex; justify-content: space-between; }
+    .legend { display: flex; gap: 16px; font-size: 9px; color: #888; margin-top: 8px; }
+    .leg { display: flex; align-items: center; gap: 4px; }
+    .leg-dot { width: 10px; height: 10px; border-radius: 2px; }
+  </style>
+  </head><body>
+  <div class="header">
+    <div>
+      <h1>Fat Possum Records — Warehouse Pick List</h1>
+      <div class="sub">${now} · Look-back: ${c.lookback}d · Days supply target: ${c.daysSupply}d · Walk order</div>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:#fff5f5;border:1px solid #b83228;"></div> Urgent (empty pick bin)</div>
+        <div class="leg"><div class="leg-dot" style="background:#f6f6f6;border:1px solid #ddd;"></div> Needs replenishment</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-val">${rows.length}</div><div class="stat-lbl">Locations</div></div>
+      <div class="stat"><div class="stat-val">${totalUnits.toLocaleString()}</div><div class="stat-lbl">Total Units</div></div>
+      ${urgent ? '<div class="stat"><div class="stat-val" style="color:#b83228">' + urgent + '</div><div class="stat-lbl">Urgent</div></div>' : ''}
+    </div>
+  </div>
+  <table>
+    <colgroup>
+      <col class="col-seq"><col class="col-chk"><col class="col-loc">
+      <col class="col-qty"><col class="col-prod"><col class="col-dest"><col class="col-avail">
+    </colgroup>
+    <thead><tr>
+      <th class="right">#</th>
+      <th>✓</th>
+      <th>Pull From</th>
+      <th class="right">Move Qty</th>
+      <th>Product</th>
+      <th>Place Into (Pick Bin)</th>
+      <th class="right">In Loc</th>
+    </tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+  <div class="footer">
+    <span>Fat Possum Records · Warehouse Pick Sheet · ${now}</span>
+    <span>Picker: _______________________   Time started: ____________   Time complete: ____________</span>
+  </div>
+  </body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+};
