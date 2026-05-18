@@ -75,7 +75,16 @@
         <span id="alert-badge" class="badge hidden">0</span>
       </a>
     </nav>
-      <a href="#" class="nav-item" data-view="suppressed" style="border-top:1px solid var(--border);opacity:0.65;">
+      <div class="nav-item" style="cursor:pointer;border-top:1px solid var(--border);" onclick="toggleWHNav(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        FP WH Action
+        <span id="wh-nav-arrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▸</span>
+      </div>
+      <div id="wh-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment')">Replenishment</div>
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('warehouse')">Warehouse View</div>
+      </div>
+      <a href="#" class="nav-item" data-view="suppressed" style="opacity:0.65;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
         Suppressed
       </a>
@@ -491,6 +500,137 @@
       </div>
     </div>
 
+    <!-- FP WH REPLENISHMENT VIEW -->
+    <div id="view-replenishment" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h2>FP Warehouse Replenishment</h2>
+          <p class="view-sub">Velocity-based pick bin replenishment suggestions</p>
+        </div>
+        <div class="view-actions">
+          <button id="wh-tabbtn-replen" class="tab-btn active" onclick="switchWHTab('replenishment')">📋 Replenishment</button>
+          <button id="wh-tabbtn-walk" class="tab-btn" onclick="switchWHTab('walkthrough')">🗺 Warehouse View</button>
+        </div>
+      </div>
+
+      <!-- Config panel -->
+      <div id="wh-config" style="background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Look-back (days)</label>
+            <input type="number" id="wh-lookback" value="30" min="7" max="90" style="width:80px;" oninput="whSaveSettings()" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Days Supply Target</label>
+            <input type="number" id="wh-days-supply" value="7" min="1" max="30" style="width:80px;" oninput="whSaveSettings()" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Outlier Threshold</label>
+            <input type="number" id="wh-outlier" value="25" min="1" style="width:80px;" oninput="whSaveSettings()" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Max Units Cap</label>
+            <input type="number" id="wh-max-units" value="50" min="1" style="width:80px;" oninput="whSaveSettings()" />
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Min Units</label>
+            <input type="number" id="wh-min-units" value="2" min="1" style="width:80px;" oninput="whSaveSettings()" />
+          </div>
+          <div style="align-self:flex-end;">
+            <button id="wh-run-btn" onclick="runReplenishment()" class="btn-primary">⟳ Run Report</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div id="wh-status-area" style="display:none;padding:24px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+          <div>
+            <div id="wh-status-step" style="font-size:13px;color:var(--text)">Starting…</div>
+            <div id="wh-status-detail" style="font-size:11px;color:var(--text-muted);margin-top:3px;"></div>
+          </div>
+        </div>
+        <div style="background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;margin-top:12px;">
+          <div id="wh-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;border-radius:3px;"></div>
+        </div>
+        <div id="wh-progress-label" style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:4px;"></div>
+      </div>
+
+      <div id="wh-error-area" style="display:none;background:var(--red-bg);border:1px solid var(--accent);border-radius:4px;padding:14px 18px;margin:16px 24px;">
+        <strong style="color:var(--red);">⚠ Error</strong>
+        <p id="wh-error-msg" style="font-size:12px;color:var(--text-muted);margin-top:4px;font-family:'DM Mono',monospace;"></p>
+      </div>
+
+      <!-- Replenishment tab -->
+      <div id="wh-tab-replenishment" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+        <div id="wh-results" style="display:none;flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+          <div id="wh-stat-grid" class="dash-grid" style="padding:16px 24px;flex-shrink:0;"></div>
+          <!-- Filter + action bar -->
+          <div style="padding:8px 24px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
+            <input type="text" id="wh-search-box" placeholder="Search product or SKU…" style="width:200px;" oninput="whApplyFilters()" />
+            <button class="wh-filter-btn btn-secondary btn-sm active" onclick="whSetFilter('all',this)">All</button>
+            <button class="wh-filter-btn btn-secondary btn-sm" onclick="whSetFilter('urgent',this)" style="color:var(--red)">⬤ Urgent</button>
+            <button class="wh-filter-btn btn-secondary btn-sm" onclick="whSetFilter('replenish',this)" style="color:var(--yellow)">⬤ Needs Stock</button>
+            <button class="wh-filter-btn btn-secondary btn-sm" onclick="whSetFilter('ok',this)" style="color:var(--green)">⬤ OK</button>
+            <button id="wh-walk-btn" class="btn-secondary btn-sm" onclick="whToggleWalkOrder()">⟳ Walk Order</button>
+            <button class="btn-secondary btn-sm" onclick="whExportCSV()">↓ CSV</button>
+            <button class="btn-secondary btn-sm" onclick="window.print()">⎙ Print</button>
+          </div>
+          <!-- Table -->
+          <div class="table-wrap" style="flex:1;overflow:auto;min-height:0;">
+            <table style="table-layout:fixed;min-width:1100px;">
+              <colgroup>
+                <col style="width:220px;"><col style="width:100px;"><col style="width:70px;"><col style="width:70px;"><col style="width:70px;"><col style="width:80px;">
+                <col style="width:200px;"><col style="width:200px;"><col style="width:65px;"><col style="width:65px;"><col style="width:70px;"><col style="width:80px;">
+              </colgroup>
+              <thead id="wh-table-head">
+                <tr>
+                  <th class="sortable" data-col="name" onclick="whSortBy('name')">Product Name</th>
+                  <th class="sortable" data-col="sku" onclick="whSortBy('sku')">SKU</th>
+                  <th class="sortable num" data-col="allocated" onclick="whSortBy('allocated')" style="text-align:right;">Allocated</th>
+                  <th class="sortable num" data-col="pickQty" onclick="whSortBy('pickQty')" style="text-align:right;" title="Stock in pick bin locations">Pick Qty</th>
+                  <th class="sortable num" data-col="freePickQty" onclick="whSortBy('freePickQty')" style="text-align:right;" title="Pick Qty minus Allocated">Free Pick</th>
+                  <th class="sortable num" data-col="bulkQty" onclick="whSortBy('bulkQty')" style="text-align:right;" title="Stock in bulk/floor locations">Bulk Qty</th>
+                  <th title="Pull from these bulk locations">Pull From</th>
+                  <th title="Pick bin locations to replenish">Replenish Bins</th>
+                  <th class="sortable num" data-col="velocity" onclick="whSortBy('velocity')" style="text-align:right;" title="Avg units/day">Avg/Day</th>
+                  <th class="sortable num" data-col="orderCount" onclick="whSortBy('orderCount')" style="text-align:right;">Orders</th>
+                  <th class="sortable num" data-col="suggest" onclick="whSortBy('suggest')" style="text-align:right;">Move Qty</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody id="wh-table-body">
+                <tr><td colspan="12" class="empty-cell">Run the report to see replenishment suggestions.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="wh-pagination" style="display:flex;align-items:center;gap:6px;padding:10px 24px;border-top:1px solid var(--border);flex-shrink:0;"></div>
+          <div id="wh-gen-info" style="font-size:10px;color:var(--text-muted);text-align:right;padding:6px 24px;flex-shrink:0;"></div>
+        </div>
+        <div id="wh-empty-state" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;">
+          Configure settings above and click <strong style="margin:0 4px;">⟳ Run Report</strong> to generate replenishment suggestions.
+        </div>
+      </div>
+
+      <!-- Walkthrough tab -->
+      <div id="wh-tab-walkthrough" class="hidden" style="flex:1;overflow:auto;padding:24px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+          <button id="wt-toggle-empty" onclick="wtToggleEmpty()" style="font-size:11px;color:var(--accent);background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:5px 12px;cursor:pointer;">Hide unused bins</button>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-left:auto;">
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:rgba(184,50,40,0.8);border:1px solid var(--red);vertical-align:middle;margin-right:4px;"></span>Urgent</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:rgba(138,92,8,0.5);border:1px solid var(--yellow);vertical-align:middle;margin-right:4px;"></span>Replenish</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--green-bg);border:1px solid var(--green);vertical-align:middle;margin-right:4px;"></span>OK</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:transparent;border:1px solid rgba(184,50,40,0.3);vertical-align:middle;margin-right:4px;"></span>Vacated</span>
+          </div>
+        </div>
+        <div id="wt-empty" style="text-align:center;color:var(--text-muted);padding:60px;font-size:13px;">Run the report first, then switch to this tab.</div>
+        <div id="wt-content" style="display:none;">
+          <div id="wt-sections"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ALERTS VIEW -->
     <div id="view-alerts" class="view hidden">
       <div class="view-header">
@@ -578,11 +718,13 @@
     <div id="notif-popup-body" style="overflow-y:auto;flex:1;padding:8px 0;"></div>
   </div>
 </div>
+  <div id="wt-pop" style="position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:12px 14px;min-width:220px;max-width:280px;box-shadow:0 8px 24px rgba(0,0,0,0.15);display:none;pointer-events:none;font-size:12px;"></div>
 
 </div>
 </div>
 <div id="toast" class="toast hidden"></div>
 
+<script src="wh_module.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
