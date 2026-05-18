@@ -533,11 +533,8 @@ td { overflow: hidden; }
   #needs-attention-banner { font-size: 11px; padding: 8px 12px; }
   #needs-attention-banner .possum-walk { display: none; }
 
-  /* ── Dashboard WH card first on mobile ── */
-  .wh-replenish-card { order: -1; }
-  #dash-row-1, #dash-row-2 { grid-column: 1/-1; }
-  #dash-row-1 { grid-template-columns: 1fr 1fr !important; }
-  #dash-row-2 { grid-template-columns: 1fr 1fr !important; }
+  /* ── Dashboard WH card: first on mobile ── */
+  .wh-replenish-card { order: -1 !important; }
 
   /* ── Bottom nav with mfg sub-items ── */
   #mfg-nav-sub { display: none !important; } /* hide desktop sub-menu on mobile */
