@@ -703,11 +703,12 @@ window.wtToggleEmpty = function() {
   wtRender();
 };
 
-// ─── DASHBOARD CARD + GRID REORDER ───────────────────────────
-// Injects Walk Replenish card and reorders the dashboard grid:
-//   Desktop Row 1: Total Products · Global Stock · Reorder Alerts
-//   Desktop Row 2: Walk Replenish · Mfg Predictions · Production Runs · Stockout Clock
-//   Mobile: Walk Replenish first
+// ─── DASHBOARD CARD ──────────────────────────────────────────
+// Injects Walk Replenish card into the dashboard grid.
+// Uses CSS order to position it:
+//   Desktop: after first 4 cards (start of row 2 in 4-col grid)
+//   Mobile: first card (order:-1)
+// Does NOT touch or reorder existing cards — avoids fragility.
 (function() {
 
   function buildWHCard() {
@@ -717,8 +718,12 @@ window.wtToggleEmpty = function() {
     const hasData = WHState.allRows.length > 0;
     const card = document.createElement('div');
     card.id = 'wh-dash-card';
-    card.className = 'dash-card' + (urgent > 0 ? ' dash-card-red' : replen > 0 ? ' dash-card-yellow' : '');
+    card.className = 'dash-card wh-replenish-card'
+      + (urgent > 0 ? ' dash-card-red' : replen > 0 ? ' dash-card-yellow' : '');
     card.style.cursor = 'pointer';
+    // order:4 places it as 5th item in the 4-col grid = first of row 2
+    // existing cards get order:0 by default so they stay in rows 1 & 2
+    card.style.order = '4';
     card.innerHTML =
       '<div class="dash-label">Walk Replenish</div>'
       + '<div class="dash-num" style="font-size:28px;color:var(--accent);">' + (hasData ? total : '—') + '</div>'
@@ -733,7 +738,7 @@ window.wtToggleEmpty = function() {
     return card;
   }
 
-  function reorderDashGrid() {
+  function injectDashCard() {
     const body = document.getElementById('dashboard-body');
     if (!body) return;
     const grid = body.querySelector('.dash-grid');
@@ -742,59 +747,22 @@ window.wtToggleEmpty = function() {
     // Remove stale WH card
     document.getElementById('wh-dash-card')?.remove();
 
-    // Identify cards by label
-    const allCards = [...grid.querySelectorAll('.dash-card')];
-    function find(kw) {
-      return allCards.find(c => {
-        const lbl = c.querySelector('.dash-label');
-        return lbl && lbl.textContent.toLowerCase().includes(kw.toLowerCase());
-      });
-    }
-
-    const cTotal    = find('Total Products');
-    const cGlobal   = find('Global Stock');
-    const cAlerts   = find('Reorder Alerts');
-    const cResolved = find('Resolved');
-    const cMfg      = find('Mfg Predictions');
-    const cRuns     = find('Production Runs');
-    const cClock    = find('Stockout');
-    // Inbound is a span-4 card — find it separately
-    const cInbound  = [...body.querySelectorAll('.dash-card')].find(c => {
-      const lbl = c.querySelector('.dash-label');
-      return lbl && lbl.textContent.toLowerCase().includes('inbound');
+    // Give each existing card an explicit order so our card slots in correctly
+    // Cards from renderDashboard come in this order:
+    //   0:Total Products  1:Global Stock  2:Reorder Alerts  3:Resolved
+    //   4:Mfg Predictions 5:Production Runs 6:Stockout Clock 7:Inbound(span4)
+    // We want WH card at order:4, pushing Mfg/Runs/Stockout to orders 5,6,7
+    const existingCards = [...grid.children];
+    existingCards.forEach((c, i) => {
+      c.style.order = i < 4 ? String(i) : String(i + 1); // shift everything after pos 3 up by 1
     });
 
-    // Hide Resolved — frees up the slot
-    if (cResolved) cResolved.style.display = 'none';
+    // Append WH card — its order:4 puts it between Resolved and Mfg Predictions
+    grid.appendChild(buildWHCard());
 
-    const cWH = buildWHCard();
-
-    // Rebuild grid with two explicit row sub-grids
-    // Remove existing row wrappers to avoid stacking
-    ['dash-row-1','dash-row-2'].forEach(id => document.getElementById(id)?.remove());
-
-    const r1 = document.createElement('div');
-    r1.id = 'dash-row-1';
-    r1.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:16px;grid-column:1/-1;';
-
-    const r2 = document.createElement('div');
-    r2.id = 'dash-row-2';
-    r2.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:16px;grid-column:1/-1;';
-
-    [cTotal, cGlobal, cAlerts].filter(Boolean).forEach(c => r1.appendChild(c));
-    [cWH, cMfg, cRuns, cClock].filter(Boolean).forEach(c => r2.appendChild(c));
-
-    // Clear grid content, insert rows then Inbound
-    grid.innerHTML = '';
-    grid.appendChild(r1);
-    grid.appendChild(r2);
-    if (cInbound) {
-      cInbound.style.gridColumn = '1/-1';
-      grid.appendChild(cInbound);
-    }
-
-    // Mobile: WH card first in its row (CSS order)
-    cWH.classList.add('wh-replenish-card');
+    // Make grid use flex so order property actually works
+    grid.style.display = 'flex';
+    grid.style.flexWrap = 'wrap';
   }
 
   function watchDashboard() {
@@ -804,7 +772,7 @@ window.wtToggleEmpty = function() {
       const view = document.getElementById('view-dashboard');
       if (view && (view.classList.contains('active') || !view.classList.contains('hidden'))) {
         clearTimeout(window._whDashTimer);
-        window._whDashTimer = setTimeout(reorderDashGrid, 80);
+        window._whDashTimer = setTimeout(injectDashCard, 80);
       }
     }).observe(body, { childList: true, subtree: false });
   }
