@@ -103,7 +103,12 @@ function whSetProgress(pct, label) {
   if (lbl) lbl.textContent = label;
 }
 function whShowStatus(v)  { const el = document.getElementById('wh-status-area');  if (el) el.style.display = v ? 'block' : 'none'; }
-function whShowResults(v) { const el = document.getElementById('wh-results');       if (el) el.style.display = v ? 'block' : 'none'; }
+function whShowResults(v) {
+  const el = document.getElementById('wh-results');
+  const em = document.getElementById('wh-empty-state');
+  if (el) el.style.display = v ? 'flex' : 'none';
+  if (em) em.style.display = v ? 'none' : 'flex';
+}
 function whShowError(msg) {
   const el = document.getElementById('wh-error-area');
   const me = document.getElementById('wh-error-msg');
