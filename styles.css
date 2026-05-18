@@ -533,8 +533,8 @@ td { overflow: hidden; }
   #needs-attention-banner { font-size: 11px; padding: 8px 12px; }
   #needs-attention-banner .possum-walk { display: none; }
 
-  /* ── Dashboard WH card: first on mobile ── */
-  .wh-replenish-card { order: -1 !important; }
+  /* ── Dashboard WH card ── */
+  .wh-replenish-card { }
 
   /* ── Bottom nav with mfg sub-items ── */
   #mfg-nav-sub { display: none !important; } /* hide desktop sub-menu on mobile */
