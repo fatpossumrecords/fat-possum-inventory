@@ -708,21 +708,42 @@
       </div>
 
       <!-- Walkthrough tab -->
-      <div id="wh-tab-walkthrough" class="hidden" style="flex:1;overflow:auto;padding:24px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+      <div id="wh-tab-walkthrough" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+
+        <!-- Toolbar -->
+        <div style="padding:10px 24px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;">
+          <input type="text" id="wt-search-input" placeholder="Search by product, SKU or scan UPC…"
+            oninput="wtSearch(this.value)"
+            style="width:260px;font-size:13px;padding:7px 12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:'DM Mono',monospace;"
+          />
           <button id="wt-toggle-empty" onclick="wtToggleEmpty()" style="font-size:11px;color:var(--accent);background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:5px 12px;cursor:pointer;">Hide unused bins</button>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-left:auto;">
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:rgba(184,50,40,0.8);border:1px solid var(--red);vertical-align:middle;margin-right:4px;"></span>Urgent</span>
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:rgba(138,92,8,0.5);border:1px solid var(--yellow);vertical-align:middle;margin-right:4px;"></span>Replenish</span>
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--green-bg);border:1px solid var(--green);vertical-align:middle;margin-right:4px;"></span>OK</span>
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:transparent;border:1px solid rgba(184,50,40,0.3);vertical-align:middle;margin-right:4px;"></span>Vacated</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:rgba(184,50,40,0.15);border:1px solid var(--red);vertical-align:middle;margin-right:4px;"></span>Urgent</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--yellow-bg);border:1px solid var(--yellow);vertical-align:middle;margin-right:4px;"></span>Replenish</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--green-bg);border:1px solid rgba(30,126,74,0.35);vertical-align:middle;margin-right:4px;"></span>OK</span>
+            <span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:transparent;border:1px dashed rgba(184,50,40,0.3);vertical-align:middle;margin-right:4px;"></span>Vacated</span>
+            <span style="font-size:10px;color:var(--text-dim);">● dot = multiple SKUs</span>
           </div>
         </div>
-        <div id="wt-empty" style="text-align:center;color:var(--text-muted);padding:60px;font-size:13px;">Run the report first, then switch to this tab.</div>
-        <div id="wt-content" style="display:none;">
-          <div id="wt-sections"></div>
+
+        <!-- Main area: bin grid + detail panel side by side -->
+        <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+
+          <!-- Bin grid -->
+          <div style="flex:1;overflow:auto;padding:24px;" id="wt-scroll-area">
+            <div id="wt-empty" style="text-align:center;color:var(--text-muted);padding:60px;font-size:13px;">Run the report first, then switch to this tab.</div>
+            <div id="wt-content" style="display:none;">
+              <div id="wt-sections"></div>
+            </div>
+          </div>
+
+          <!-- Detail panel (slides in on bin click) -->
+          <div id="wt-detail-panel" style="display:none;width:320px;flex-shrink:0;border-left:1px solid var(--border);background:var(--surface);flex-direction:column;overflow:hidden;">
+          </div>
+
         </div>
       </div>
+
     </div>
 
     <!-- ALERTS VIEW -->
