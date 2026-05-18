@@ -61,11 +61,14 @@ function whCfg() {
 
 // ── TAB SWITCHER ─────────────────────────────────────────────
 window.switchWHTab = function(tab) {
-  document.getElementById('wh-tab-replenishment')?.classList.toggle('hidden', tab !== 'replenishment');
-  document.getElementById('wh-tab-walkthrough')?.classList.toggle('hidden',   tab !== 'walkthrough');
-  document.getElementById('wh-tabbtn-replen')?.classList.toggle('active', tab === 'replenishment');
-  document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',   tab === 'walkthrough');
-  if (tab === 'walkthrough') wtRender();
+  // Defer so switchView('replenishment') finishes rendering before tab switch
+  setTimeout(() => {
+    document.getElementById('wh-tab-replenishment')?.classList.toggle('hidden', tab !== 'replenishment');
+    document.getElementById('wh-tab-walkthrough')?.classList.toggle('hidden',   tab !== 'walkthrough');
+    document.getElementById('wh-tabbtn-replen')?.classList.toggle('active', tab === 'replenishment');
+    document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',   tab === 'walkthrough');
+    if (tab === 'walkthrough') wtRender();
+  }, 0);
 };
 
 // ── FETCH HELPERS ─────────────────────────────────────────────
