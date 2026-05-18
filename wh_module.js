@@ -912,7 +912,6 @@ function pickerRender() {
   const overlay = document.getElementById('picker-overlay');
   if (!overlay) return;
 
-  // Completion screen
   if (PickerState.index >= PickerState.queue.length) {
     pickerRenderComplete();
     return;
@@ -925,106 +924,111 @@ function pickerRender() {
   const destStr = item.destBins && item.destBins.length
     ? item.destBins.join('  ·  ')
     : '— no bin assigned —';
-  const isDark = document.body.classList.contains('dark-mode');
+  const suggestedQty = item.qty;
 
-  overlay.innerHTML = `
-    <div id="picker-card" style="
-      width:100%;max-width:680px;
-      background:var(--surface);
-      border-radius:12px;
-      box-shadow:0 24px 64px rgba(0,0,0,0.18);
-      display:flex;flex-direction:column;
-      overflow:hidden;
-    ">
+  overlay.innerHTML =
+    '<div id="picker-card" style="width:100%;max-width:680px;background:var(--surface);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.18);display:flex;flex-direction:column;overflow:hidden;position:relative;">'
 
-      <!-- Header bar -->
-      <div style="background:var(--accent);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.9;">FP Warehouse Replenish</div>
-        <div style="display:flex;align-items:center;gap:16px;">
-          <span style="font-size:14px;font-weight:700;">${current} <span style="opacity:0.6;font-weight:400;">of</span> ${total}</span>
-          <button onclick="pickerClose()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">✕ Exit</button>
-        </div>
-      </div>
+    // Flash overlay (for success/error animation)
+    + '<div id="picker-flash" style="position:absolute;inset:0;border-radius:12px;opacity:0;pointer-events:none;z-index:10;transition:opacity 0.15s;"></div>'
 
-      <!-- Progress bar -->
-      <div style="height:6px;background:rgba(0,0,0,0.08);">
-        <div style="height:100%;width:${pct}%;background:var(--accent);opacity:0.4;transition:width 0.3s;"></div>
-      </div>
+    // Header
+    + '<div style="background:var(--accent);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;">'
+    + '<div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.9;">FP Warehouse Replenish</div>'
+    + '<div style="display:flex;align-items:center;gap:16px;">'
+    + '<span style="font-size:14px;font-weight:700;">' + current + ' <span style="opacity:0.6;font-weight:400;">of</span> ' + total + '</span>'
+    + '<button onclick="pickerClose()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">&#x2715; Exit</button>'
+    + '</div></div>'
 
-      <!-- Main pick card -->
-      <div style="padding:32px 32px 24px;flex:1;">
+    // Progress bar
+    + '<div style="height:6px;background:rgba(0,0,0,0.08);"><div style="height:100%;width:' + pct + '%;background:var(--accent);opacity:0.4;transition:width 0.3s;border-radius:0 3px 3px 0;"></div></div>'
 
-        <!-- PULL FROM -->
-        <div style="margin-bottom:28px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Pull From</div>
-          <div style="display:flex;align-items:center;gap:20px;">
-            <div style="font-family:'DM Mono',monospace;font-size:52px;font-weight:700;color:var(--accent);letter-spacing:2px;line-height:1;">${whEsc(item.bulkLoc)}</div>
-            <div style="font-size:13px;color:var(--text-muted);line-height:1.5;">
-              <div>${item.bulkQty.toLocaleString()} units in location</div>
-            </div>
-          </div>
-        </div>
+    // Body
+    + '<div style="padding:28px 32px 20px;flex:1;">'
 
-        <!-- QUANTITY -->
-        <div style="display:flex;align-items:center;gap:32px;margin-bottom:28px;padding:20px 24px;background:var(--surface2);border-radius:8px;border:2px solid var(--border);">
-          <div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:4px;">Pick Quantity</div>
-            <div style="font-family:'DM Mono',monospace;font-size:64px;font-weight:700;color:var(--text);line-height:1;">${item.qty}</div>
-          </div>
-          <div style="flex:1;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:4px;">Product</div>
-            <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px;line-height:1.3;">${whEsc(item.row.name)}</div>
-            <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--text-muted);">${whEsc(item.row.sku)}</div>
-          </div>
-        </div>
+    // Pull From location — smaller, informational
+    + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:12px 16px;background:var(--surface2);border-radius:8px;border-left:4px solid var(--accent);">'
+    + '<div>'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:2px;">Go To Location</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:26px;font-weight:700;color:var(--accent);letter-spacing:2px;line-height:1;">' + whEsc(item.bulkLoc) + '</div>'
+    + '</div>'
+    + '<div style="margin-left:auto;text-align:right;">'
+    + '<div style="font-size:10px;color:var(--text-muted);">In location</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:600;color:var(--text-muted);">' + item.bulkQty.toLocaleString() + '</div>'
+    + '</div></div>'
 
-        <!-- PLACE INTO -->
-        <div style="margin-bottom:28px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Place Into Pick Bin</div>
-          <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:700;color:var(--green);letter-spacing:1px;">${whEsc(destStr)}</div>
-        </div>
+    // Product name + SKU — LARGE, this is what the picker confirms
+    + '<div style="margin-bottom:20px;">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:6px;">Grab This Product</div>'
+    + '<div style="font-size:22px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:4px;">' + whEsc(item.row.name) + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:14px;color:var(--text-muted);">' + whEsc(item.row.sku) + ' &nbsp;·&nbsp; UPC: ' + whEsc(item.row.upc || '—') + '</div>'
+    + '</div>'
 
-        <!-- Scan input -->
-        <div style="margin-bottom:20px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Scan Location Barcode to Confirm</div>
-          <div style="display:flex;gap:10px;align-items:center;">
-            <input
-              type="text"
-              id="picker-scan-input"
-              placeholder="Scan or type location barcode…"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="off"
-              spellcheck="false"
-              style="flex:1;font-family:'DM Mono',monospace;font-size:18px;padding:14px 16px;border:2px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);outline:none;"
-              onkeydown="pickerHandleKey(event)"
-              oninput="pickerClearError()"
-            />
-            <button onclick="pickerConfirm()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:14px 24px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap;letter-spacing:0.5px;">Confirm ↵</button>
-          </div>
-          <div id="picker-scan-error" style="color:var(--red);font-size:13px;font-weight:600;margin-top:8px;min-height:20px;"></div>
-        </div>
+    // Qty + Place Into row
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">'
 
-      </div>
+    // Qty input
+    + '<div style="padding:16px 20px;background:var(--surface2);border-radius:8px;border:2px solid var(--border);">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Qty to Pick <span style="font-weight:400;opacity:0.6;">(min ' + suggestedQty + ')</span></div>'
+    + '<input type="number" id="picker-qty-input" value="' + suggestedQty + '" min="' + suggestedQty + '"'
+    + ' style="width:100%;font-family:\'DM Mono\',monospace;font-size:48px;font-weight:700;color:var(--text);background:transparent;border:none;outline:none;padding:0;line-height:1;"'
+    + ' oninput="pickerQtyChange(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'picker-scan-input\')?.focus();}" />'
+    + '</div>'
 
-      <!-- Footer actions -->
-      <div style="padding:16px 32px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:space-between;align-items:center;background:var(--surface2);">
-        <button onclick="pickerSkip()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">Skip This Item</button>
-        <div style="font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace;">${PickerState.completed.length} picked · ${PickerState.queue.length - current} remaining</div>
-        ${current > 1 ? '<button onclick="pickerBack()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">← Back</button>' : '<div></div>'}
-      </div>
-    </div>
-  `;
+    // Place into
+    + '<div style="padding:16px 20px;background:var(--green-bg);border-radius:8px;border:2px solid rgba(30,126,74,0.3);">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--green);margin-bottom:8px;">Place Into Pick Bin</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:20px;font-weight:700;color:var(--green);line-height:1.3;">' + whEsc(destStr) + '</div>'
+    + '</div>'
+    + '</div>'
 
-  // Auto-focus the scan input
+    // Scan UPC input
+    + '<div>'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Scan Product Barcode (UPC) to Confirm</div>'
+    + '<div style="display:flex;gap:10px;align-items:stretch;">'
+    + '<input type="text" id="picker-scan-input" placeholder="Scan UPC barcode…"'
+    + ' autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="none"'
+    + ' style="flex:1;font-family:\'DM Mono\',monospace;font-size:20px;padding:14px 16px;border:2px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);outline:none;"'
+    + ' onkeydown="pickerHandleKey(event)" oninput="pickerClearError()" />'
+    + '</div>'
+    + '<div id="picker-scan-error" style="color:var(--red);font-size:13px;font-weight:600;margin-top:8px;min-height:20px;font-family:\'DM Mono\',monospace;"></div>'
+    + '</div>'
+
+    + '</div>' // end body
+
+    // Footer
+    + '<div style="padding:14px 32px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:space-between;align-items:center;background:var(--surface2);">'
+    + '<div style="font-size:11px;color:var(--text-dim);font-family:\'DM Mono\',monospace;">' + PickerState.completed.length + ' done &nbsp;·&nbsp; ' + (PickerState.queue.length - current) + ' remaining</div>'
+    + (current > 1 ? '<button onclick="pickerBack()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;">&#8592; Back</button>' : '<div></div>')
+    + '</div>'
+
+    + '</div>'; // end picker-card
+
+  // Auto-focus scan input
   setTimeout(() => {
     const inp = document.getElementById('picker-scan-input');
     if (inp) inp.focus();
   }, 80);
 }
 
+window.pickerQtyChange = function(input) {
+  const min = parseInt(input.min) || 1;
+  const val = parseInt(input.value) || 0;
+  if (val < min) {
+    input.style.color = 'var(--red)';
+  } else {
+    input.style.color = 'var(--text)';
+  }
+  // Also store on the queue item so confirm picks it up
+  const item = PickerState.queue[PickerState.index];
+  if (item) item._overrideQty = val;
+};
+
 window.pickerHandleKey = function(e) {
-  if (e.key === 'Enter') pickerConfirm();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    pickerConfirm();
+  }
 };
 
 window.pickerClearError = function() {
@@ -1034,31 +1038,109 @@ window.pickerClearError = function() {
   if (inp) inp.style.borderColor = 'var(--border2)';
 };
 
-window.pickerConfirm = function() {
-  const inp = document.getElementById('picker-scan-input');
-  const val = (inp ? inp.value.trim() : '').toUpperCase();
-  const item = PickerState.queue[PickerState.index];
-  const expected = item.bulkLoc.toUpperCase();
+// Audio feedback
+function pickerPlaySuccess() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+  } catch(e) {}
+}
 
-  // Validate scan — accept if empty (manual confirm) or matches location
-  if (val && val !== expected) {
-    // Show error — wrong location scanned
+function pickerPlayError() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18].forEach(offset => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(220, ctx.currentTime + offset);
+      osc.frequency.setValueAtTime(160, ctx.currentTime + offset + 0.12);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.28);
+      osc.start(ctx.currentTime + offset);
+      osc.stop(ctx.currentTime + offset + 0.28);
+    });
+  } catch(e) {}
+}
+
+function pickerFlash(color, cb) {
+  const flash = document.getElementById('picker-flash');
+  if (!flash) { if (cb) cb(); return; }
+  flash.style.background = color;
+  flash.style.opacity = '0.55';
+  setTimeout(() => {
+    flash.style.opacity = '0';
+    setTimeout(() => { if (cb) cb(); }, 150);
+  }, 320);
+}
+
+window.pickerConfirm = function() {
+  const scanInp = document.getElementById('picker-scan-input');
+  const qtyInp  = document.getElementById('picker-qty-input');
+  const scanned = (scanInp ? scanInp.value.trim() : '').replace(/\D/g, '').replace(/^0+/, '');
+  const item    = PickerState.queue[PickerState.index];
+
+  // Qty validation
+  const pickedQty = parseInt(qtyInp?.value) || item.qty;
+  const minQty    = item.qty;
+  if (pickedQty < minQty) {
     const errEl = document.getElementById('picker-scan-error');
-    if (errEl) errEl.textContent = '✕ Wrong location — expected ' + item.bulkLoc + ', got "' + val + '"';
-    if (inp) { inp.style.borderColor = 'var(--red)'; inp.select(); }
+    if (errEl) errEl.textContent = '&#x26A0; Qty cannot be less than the suggested ' + minQty + ' units. Adjust if you picked more.';
+    if (qtyInp) { qtyInp.style.color = 'var(--red)'; qtyInp.focus(); qtyInp.select(); }
+    pickerPlayError();
     return;
   }
 
-  PickerState.completed.push({ row: item.row, bulkLoc: item.bulkLoc, qty: item.qty, destBins: item.destBins, skipped: false });
-  PickerState.index++;
-  pickerRender();
-};
+  // Must scan — no empty confirm
+  if (!scanned) {
+    const errEl = document.getElementById('picker-scan-error');
+    if (errEl) errEl.textContent = 'Scan the product UPC barcode to confirm.';
+    if (scanInp) { scanInp.style.borderColor = 'var(--red)'; scanInp.focus(); }
+    pickerPlayError();
+    pickerFlash('rgba(240,74,74,0.6)');
+    return;
+  }
 
-window.pickerSkip = function() {
-  const item = PickerState.queue[PickerState.index];
-  PickerState.completed.push({ row: item.row, bulkLoc: item.bulkLoc, qty: item.qty, destBins: item.destBins, skipped: true });
-  PickerState.index++;
-  pickerRender();
+  // Validate UPC — normalize both sides (strip non-digits, strip leading zeros)
+  const expectedUpc = (item.row.upc || '').replace(/\D/g, '').replace(/^0+/, '');
+  const expectedSku = (item.row.sku || '').replace(/\s/g, '').toUpperCase();
+  const scannedRaw  = (scanInp ? scanInp.value.trim() : '');
+  const scannedUpper = scannedRaw.toUpperCase().replace(/\s/g, '');
+
+  const upcMatch = expectedUpc && scanned === expectedUpc;
+  const skuMatch = scannedUpper === expectedSku; // fallback: some scanners read SKU barcodes
+
+  if (!upcMatch && !skuMatch) {
+    const errEl = document.getElementById('picker-scan-error');
+    if (errEl) errEl.textContent = '&#x2717; Wrong item — expected UPC ' + (item.row.upc || item.row.sku) + '. Try again.';
+    if (scanInp) { scanInp.style.borderColor = 'var(--red)'; scanInp.value = ''; scanInp.focus(); }
+    pickerPlayError();
+    pickerFlash('rgba(240,74,74,0.6)');
+    return;
+  }
+
+  // SUCCESS
+  pickerPlaySuccess();
+  pickerFlash('rgba(74,240,160,0.5)', () => {
+    PickerState.completed.push({
+      row:      item.row,
+      bulkLoc:  item.bulkLoc,
+      qty:      pickedQty,
+      suggestedQty: item.qty,
+      destBins: item.destBins,
+      skipped:  false,
+    });
+    PickerState.index++;
+    pickerRender();
+  });
 };
 
 window.pickerBack = function() {
@@ -1081,16 +1163,15 @@ function pickerRenderComplete() {
 
   const rows = PickerState.completed.map(c => {
     const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '—';
-    return `<tr style="${c.skipped ? 'opacity:0.45;' : ''}">
-      <td style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:${c.skipped ? 'var(--text-muted)' : 'var(--accent)'};padding:12px 16px;border-bottom:1px solid var(--border);white-space:nowrap;">${whEsc(c.bulkLoc)}</td>
-      <td style="padding:12px 16px;border-bottom:1px solid var(--border);">
-        <div style="font-weight:600;font-size:14px;">${whEsc(c.row.name)}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);">${whEsc(c.row.sku)}</div>
-      </td>
-      <td style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;text-align:center;padding:12px 16px;border-bottom:1px solid var(--border);color:${c.skipped ? 'var(--text-dim)' : 'var(--text)'};">${c.skipped ? '—' : c.qty}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green);padding:12px 16px;border-bottom:1px solid var(--border);">${whEsc(dest)}</td>
-      <td style="padding:12px 16px;border-bottom:1px solid var(--border);text-align:center;">${c.skipped ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;text-transform:uppercase;">Skipped</span>' : '<span style="color:var(--green);font-size:16px;">✓</span>'}</td>
-    </tr>`;
+    const qtyExtra = (!c.skipped && c.suggestedQty && c.qty > c.suggestedQty)
+      ? '<div style="font-size:9px;color:var(--green);margin-top:2px;">+' + (c.qty - c.suggestedQty) + ' extra</div>' : '';
+    return '<tr style="' + (c.skipped ? 'opacity:0.45;' : '') + '">'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:700;color:' + (c.skipped ? 'var(--text-muted)' : 'var(--accent)') + ';padding:12px 16px;border-bottom:1px solid var(--border);white-space:nowrap;">' + whEsc(c.bulkLoc) + '</td>'
+      + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);"><div style="font-weight:600;font-size:14px;">' + whEsc(c.row.name) + '</div><div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">' + whEsc(c.row.sku) + '</div></td>'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:700;text-align:center;padding:12px 16px;border-bottom:1px solid var(--border);color:' + (c.skipped ? 'var(--text-dim)' : 'var(--text)') + ';">' + (c.skipped ? '—' : c.qty) + qtyExtra + '</td>'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--green);padding:12px 16px;border-bottom:1px solid var(--border);">' + whEsc(dest) + '</td>'
+      + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);text-align:center;">' + (c.skipped ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;text-transform:uppercase;">Skipped</span>' : '<span style="color:var(--green);font-size:16px;">&#x2713;</span>') + '</td>'
+      + '</tr>';
   }).join('');
 
   overlay.innerHTML = `
@@ -1141,12 +1222,14 @@ window.pickerPrintSummary = function() {
 
   const rows = PickerState.completed.map(c => {
     const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '—';
+    const extra = (!c.skipped && c.suggestedQty && c.qty > c.suggestedQty)
+      ? '<br><span style="font-size:9px;color:#1e7e4a">+' + (c.qty - c.suggestedQty) + ' extra</span>' : '';
     return `<tr class="${c.skipped ? 'skipped' : ''}">
       <td class="mono loc">${c.bulkLoc}</td>
       <td><strong>${c.row.name}</strong><br><span class="mono small">${c.row.sku}</span></td>
-      <td class="mono center qty">${c.skipped ? '—' : c.qty}</td>
+      <td class="mono center qty">${c.skipped ? '—' : c.qty}${extra}</td>
       <td class="mono dest">${dest}</td>
-      <td class="center">${c.skipped ? 'SKIPPED' : '✓'}</td>
+      <td class="center">${c.skipped ? 'SKIPPED' : '&#x2713;'}</td>
     </tr>`;
   }).join('');
 
