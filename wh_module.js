@@ -1056,7 +1056,7 @@ function pickerFlash(color, cb) {
 window.pickerConfirm = function() {
   const scanInp = document.getElementById('picker-scan-input');
   const qtyInp  = document.getElementById('picker-qty-input');
-  const scanned = (scanInp ? scanInp.value.trim() : '').replace(/\D/g, '').replace(/^0+/, '');
+  const scanRaw = scanInp ? scanInp.value.trim() : '';
   const item    = PickerState.queue[PickerState.index];
 
   // Qty validation
@@ -1064,40 +1064,36 @@ window.pickerConfirm = function() {
   const minQty    = item.qty;
   if (pickedQty < minQty) {
     const errEl = document.getElementById('picker-scan-error');
-    if (errEl) errEl.textContent = '&#x26A0; Qty cannot be less than the suggested ' + minQty + ' units. Adjust if you picked more.';
+    if (errEl) errEl.textContent = '\u26A0 Qty cannot be less than ' + minQty + '. Adjust if you picked more.';
     if (qtyInp) { qtyInp.style.color = 'var(--red)'; qtyInp.focus(); qtyInp.select(); }
     pickerPlayError();
     return;
   }
 
   // Must scan — no empty confirm
-  if (!scanned) {
+  if (!scanRaw) {
     const errEl = document.getElementById('picker-scan-error');
-    if (errEl) errEl.textContent = 'Scan the product UPC barcode to confirm.';
+    if (errEl) errEl.textContent = 'Scan or enter the product UPC barcode to confirm.';
     if (scanInp) { scanInp.style.borderColor = 'var(--red)'; scanInp.focus(); }
     pickerPlayError();
     pickerFlash('rgba(240,74,74,0.6)');
     return;
   }
 
-  // Debug — log what we're comparing so we can see mismatches in console
-  const rawBarcode   = (item.row.upc || '').replace(/\D/g, '');
-  const expectedUpc  = rawBarcode.replace(/^0+/, '');
-  const expectedSku  = (item.row.sku || '').replace(/\s/g, '').toUpperCase();
-  const scannedDigits = scanned;
-  const scannedNorm   = scannedDigits.replace(/^0+/, '');
-  const scannedUpper  = (scanInp ? scanInp.value.trim() : '').toUpperCase().replace(/\s/g, '');
+  // Match UPC only — no SKU fallback (we want barcode scanning, not SKU)
+  const rawBarcode  = (item.row.upc || '').replace(/\D/g, '');  // stored barcode, digits only
+  const scannedDig  = (scanInp ? scanInp.value.trim() : '').replace(/\D/g, ''); // what was entered/scanned
 
-  // Debug
-  console.log('[ReplenishScan] rawBarcode="'+rawBarcode+'" expectedUpc="'+expectedUpc+'" scannedDigits="'+scannedDigits+'" scannedNorm="'+scannedNorm+'" skuExpected="'+expectedSku+'" scannedUpper="'+scannedUpper+'"');
-  console.log('[ReplenishScan] upcMatch1='+(scannedNorm===expectedUpc)+' upcMatch2='+(scannedDigits===rawBarcode)+' skuMatch='+(scannedUpper===expectedSku)+' row.upc="'+item.row.upc+'"');
+  // Compare digits-only — handles leading zero mismatches (045778... vs 45778...)
+  const upcMatch = rawBarcode.length > 0 && scannedDig.length > 0
+    && (scannedDig === rawBarcode || scannedDig.replace(/^0+/,'') === rawBarcode.replace(/^0+/,''));
 
-  const upcMatch = expectedUpc && (scannedNorm === expectedUpc || scannedDigits === rawBarcode);
-  const skuMatch = expectedSku && scannedUpper === expectedSku;
-
-  if (!upcMatch && !skuMatch) {
+  if (!upcMatch) {
     const errEl = document.getElementById('picker-scan-error');
-    if (errEl) errEl.textContent = '\u2717 Wrong item \u2014 expected UPC: ' + (rawBarcode || '(none on file)') + '  |  got: "' + (scanInp?.value.trim() || scanned) + '"';
+    if (errEl) errEl.innerHTML =
+      '<strong>Wrong barcode.</strong>&nbsp; '
+      + 'Expected: <code>' + (rawBarcode || '(no UPC on file)') + '</code> &nbsp;|&nbsp; '
+      + 'Got: <code>' + whEsc(scanInp?.value.trim() || '') + '</code>';
     if (scanInp) { scanInp.style.borderColor = 'var(--red)'; scanInp.value = ''; scanInp.focus(); }
     pickerPlayError();
     pickerFlash('rgba(240,74,74,0.6)');
