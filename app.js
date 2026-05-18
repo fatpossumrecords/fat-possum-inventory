@@ -236,6 +236,7 @@ function bootApp() {
     ur.textContent = 'Hi ' + display;
   }
   loadColumnLayout();
+   if (window.whLoadSettings) whLoadSettings();
   // Restore hidden mfg items from localStorage
   try {
     const hidden = JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]');
@@ -4959,6 +4960,7 @@ function switchView(viewName, pushHistory=true) {
     }
   }
   document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
+  if (viewName === 'replenishment') { setTimeout(() => { if (window.whLoadSettings) whLoadSettings(); }, 50); }
   if (viewName === 'suppressed') renderSuppressedLog();
   if (viewName === 'manufacturing') setTimeout(() => { if (!window._mfgTabOverride) switchMfgTab('runs'); window._mfgTabOverride = false; }, 80);
 }
