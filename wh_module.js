@@ -600,9 +600,12 @@ function wtParseBin(name) {
   // P standard: P1-A-01
   m = name.match(/^(P\d+)-([A-Z]+)-(\d+)$/i);
   if (m) return {type:'P',section:m[1].toUpperCase(),col:m[2].toUpperCase(),level:parseInt(m[3]),sub:null};
-  // MW: MW-01-A1
+  // MW sub-slot: MW-06-E3-B  (aisle-letter+level-sub)
+  m = name.match(/^MW-(\d+)-([A-Z]+)(\d+)-([A-Z])$/i);
+  if (m) return {type:'MW',aisle:m[1],col:m[2].toUpperCase(),level:parseInt(m[3]),sub:m[4].toUpperCase(),section:'MW-'+m[1]};
+  // MW standard: MW-01-A1
   m = name.match(/^MW-(\d+)-([A-Z]+)(\d+)$/i);
-  if (m) return {type:'MW',aisle:m[1],col:m[2].toUpperCase(),level:parseInt(m[3]),section:'MW-'+m[1]};
+  if (m) return {type:'MW',aisle:m[1],col:m[2].toUpperCase(),level:parseInt(m[3]),sub:null,section:'MW-'+m[1]};
   return null;
 }
 
@@ -792,8 +795,9 @@ function wtRenderStandardShelf(shelf, binEntries, sid, locMap) {
   const lu = {}; for (const b of binEntries) lu[b.parsed.col+'-'+b.parsed.level] = b;
   for (const col of cols) {
     const up = document.createElement('div');
-    up.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
-    up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+col+'</div>';
+    const isLastCol = col === cols[cols.length-1];
+    up.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;'+(isLastCol?'':'border-right:2px solid #333;');
+    up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#555;font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:1px;">'+col+'</div>';
     for (let l=1; l<=maxLvl; l++) {
       const b = lu[col+'-'+l];
       up.appendChild(wtMakeBinEl(b ? b.locName : sid+'-'+col+'-'+String(l).padStart(2,'0'), b ? b.items : null, false, locMap));
@@ -808,8 +812,9 @@ function wtRenderP3Shelf(shelf, binEntries, locMap) {
   const lu={}; for (const b of binEntries) lu[b.parsed.col+'-'+b.parsed.level+'-'+(b.parsed.sub||'A')] = b;
   for (const col of cols) {
     const up = document.createElement('div');
-    up.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
-    up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+col+'</div>';
+    const isLastColP3 = col === cols[cols.length-1];
+    up.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;'+(isLastColP3?'':'border-right:2px solid #333;');
+    up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#555;font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:1px;">'+col+'</div>';
     for (let l=1; l<=maxLvl; l++) {
       const row = document.createElement('div'); row.style.cssText='display:flex;gap:2px;';
       for (const s of ['A','B','C','D']) {
@@ -859,17 +864,33 @@ function wtRenderMWAisle(aisleData, binEntries, locMap) {
     const shelfEl = document.createElement('div');
     shelfEl.style.cssText = 'display:flex;gap:4px;align-items:flex-start;';
 
-    const lu={}; for (const b of binEntries) lu[b.parsed.col+'-'+b.parsed.level]=b;
+    const lu={}; for (const b of binEntries) { const key = b.parsed.sub ? b.parsed.col+'-'+b.parsed.level+'-'+b.parsed.sub : b.parsed.col+'-'+b.parsed.level; lu[key]=b; }
     const maxLvl = binEntries.length ? Math.max(...binEntries.map(b=>b.parsed.level),1) : 6;
 
     for (const letter of letters) {
       const up = document.createElement('div');
-      up.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
-      up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px;">'+letter+'</div>';
+      const isLastLetter = letter === letters[letters.length-1];
+      up.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;'+(isLastLetter?'':'border-right:2px solid #333;');
+      up.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:#555;font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:1px;">'+letter+'</div>';
       for (let l=1; l<=maxLvl; l++) {
-        const b = lu[letter+'-'+l];
-        const locName = 'MW-'+aisleData.aisle+'-'+letter+l;
-        up.appendChild(wtMakeBinEl(locName, b?b.items:null, false, locMap, true));
+        // Check if this level has sub-slots (e.g. MW-06-E3-A, MW-06-E3-B)
+        const subKeys = ['A','B','C','D'].filter(s => lu[letter+'-'+l+'-'+s]);
+        if (subKeys.length > 0) {
+          // Render sub-slots as a small row
+          const subRow = document.createElement('div');
+          subRow.style.cssText = 'display:flex;gap:2px;';
+          for (const s of ['A','B','C','D']) {
+            const b = lu[letter+'-'+l+'-'+s];
+            if (!b && !WHState.wtShowEmpty) continue;
+            const locName = 'MW-'+aisleData.aisle+'-'+letter+l+'-'+s;
+            subRow.appendChild(wtMakeBinEl(locName, b?b.items:null, true, locMap, false));
+          }
+          if (subRow.children.length) up.appendChild(subRow);
+        } else {
+          const b = lu[letter+'-'+l];
+          const locName = 'MW-'+aisleData.aisle+'-'+letter+l;
+          up.appendChild(wtMakeBinEl(locName, b?b.items:null, false, locMap, true));
+        }
       }
       shelfEl.appendChild(up);
     }
@@ -900,21 +921,26 @@ function wtMakeBinEl(locName, items, isSub, locMap, isMW) {
   el.dataset.loc = locName;
 
   const S = {
-    urgent:   'background:rgba(184,50,40,0.15);border:1px solid var(--red);',
-    replenish:'background:var(--yellow-bg);border:1px solid var(--yellow);',
-    ok:       'background:var(--green-bg);border:1px solid rgba(30,126,74,0.35);',
-    vacated:  'background:transparent;border:1px dashed rgba(184,50,40,0.3);',
-    empty:    'background:var(--surface2);border:1px solid var(--border);cursor:default;',
+    urgent:   'background:#f04a4a;border:2px solid #c0392b;color:#fff;',
+    replenish:'background:#f0b84a;border:2px solid #d4971f;color:#111;',
+    ok:       'background:#d4f5e4;border:2px solid #1e7e4a;color:#0a4a28;',
+    vacated:  'background:#f8f0ee;border:2px dashed #c0392b;color:#c0392b;',
+    empty:    'background:#f0ede7;border:1px solid #c8c4ba;color:#b8b3aa;cursor:default;',
   };
 
   // MW bins slightly wider to fit location text
-  const w = isSub ? '20px' : isMW ? '52px' : '44px';
-  const minH = isMW ? '40px' : '34px';
+  const w = isSub ? '28px' : isMW ? '64px' : '56px';
+  const minH = isMW ? '44px' : '38px';
+  const textColor = (worstState==='urgent')?'color:#fff;'
+    :(worstState==='replenish')?'color:#5a3a00;'
+    :(worstState==='ok')?'color:#0a4a28;'
+    :(worstState==='vacated')?'color:#8b2a1e;'
+    :'color:#888;';
 
   el.style.cssText = 'width:'+w+';min-height:'+minH+';border-radius:3px;display:flex;align-items:center;justify-content:center;'
-    +'font-family:\'DM Mono\',monospace;font-size:7px;font-weight:600;flex-shrink:0;text-align:center;'
+    +'font-family:\'DM Mono\',monospace;font-size:8px;font-weight:700;flex-shrink:0;text-align:center;'
     +'padding:2px;transition:transform 0.1s,box-shadow 0.1s;position:relative;overflow:visible;'
-    +(S[worstState]||S.empty);
+    +(S[worstState]||S.empty)+textColor;
 
   if (!WHState.wtShowEmpty && worstState==='empty') { el.style.display='none'; return el; }
 
