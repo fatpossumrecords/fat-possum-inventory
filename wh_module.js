@@ -319,13 +319,17 @@ function whRenderStats() {
   const total  = WHState.allRows.reduce((s,r) => s + r.suggest, 0);
   const el = document.getElementById('wh-stat-grid');
   if (!el) return;
-  el.innerHTML = `
-    <div class="dash-card"><div class="dash-label">Total SKUs</div><div class="dash-num" style="color:var(--accent)">${WHState.allRows.length}</div></div>
-    <div class="dash-card dash-card-red"><div class="dash-label">Urgent (empty pick)</div><div class="dash-num">${urgent}</div></div>
-    <div class="dash-card dash-card-yellow"><div class="dash-label">Needs Replenishment</div><div class="dash-num">${needs}</div></div>
-    <div class="dash-card dash-card-green"><div class="dash-label">Pick Stock OK</div><div class="dash-num">${ok}</div></div>
-    <div class="dash-card"><div class="dash-label">Total Units to Move</div><div class="dash-num" style="color:var(--accent)">${total}</div></div>
-  `;
+  const stat = (label, val, color) =>
+    '<div style="flex:1;padding:10px 20px;border-right:1px solid var(--border);display:flex;align-items:center;gap:12px;">'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:600;color:' + color + '">' + val + '</span>'
+    + '<span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);line-height:1.3;">' + label + '</span>'
+    + '</div>';
+  el.innerHTML =
+    stat('Total SKUs',          WHState.allRows.length, 'var(--text)')
+  + stat('Urgent',              urgent,  'var(--red)')
+  + stat('Needs Replenishment', needs,   'var(--yellow)')
+  + stat('Pick Stock OK',       ok,      'var(--green)')
+  + stat('Units to Move',       total,   'var(--accent)');
 }
 
 function whApplyFilters() {
