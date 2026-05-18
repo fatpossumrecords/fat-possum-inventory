@@ -703,61 +703,110 @@ window.wtToggleEmpty = function() {
   wtRender();
 };
 
-// ─── DASHBOARD CARD ──────────────────────────────────────────
-// Injects a "Walk Replenish" card into the dashboard grid
-// whenever renderDashboard() rebuilds it.
+// ─── DASHBOARD CARD + GRID REORDER ───────────────────────────
+// Injects Walk Replenish card and reorders the dashboard grid:
+//   Desktop Row 1: Total Products · Global Stock · Reorder Alerts
+//   Desktop Row 2: Walk Replenish · Mfg Predictions · Production Runs · Stockout Clock
+//   Mobile: Walk Replenish first
 (function() {
-  function injectDashCard() {
-    const grid = document.getElementById('dashboard-body');
-    if (!grid) return;
-    // Remove any existing WH card to avoid duplicates
-    document.getElementById('wh-dash-card')?.remove();
 
-    // Count urgent+replenish from WHState if data loaded
+  function buildWHCard() {
     const urgent  = WHState.allRows.filter(r => r.priority === 'urgent').length;
     const replen  = WHState.allRows.filter(r => r.priority === 'replenish').length;
     const total   = urgent + replen;
     const hasData = WHState.allRows.length > 0;
-
     const card = document.createElement('div');
     card.id = 'wh-dash-card';
     card.className = 'dash-card' + (urgent > 0 ? ' dash-card-red' : replen > 0 ? ' dash-card-yellow' : '');
     card.style.cursor = 'pointer';
-    card.innerHTML = `
-      <div class="dash-label">Walk Replenish</div>
-      <div class="dash-num" style="color:var(--accent);font-size:28px;">${hasData ? total : '—'}</div>
-      <div class="dash-sub">${hasData
-        ? (urgent > 0 ? urgent + ' urgent · ' : '') + replen + ' need stock'
-        : 'Click to generate'
-      }</div>
-      <div style="margin-top:12px;">
-        <button onclick="event.stopPropagation();startReplenishRun()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;width:100%;">
-          ▶ ${hasData ? 'Start Replenish Run' : 'Generate & Start'}
-        </button>
-      </div>
-    `;
+    card.innerHTML =
+      '<div class="dash-label">Walk Replenish</div>'
+      + '<div class="dash-num" style="font-size:28px;color:var(--accent);">' + (hasData ? total : '—') + '</div>'
+      + '<div class="dash-sub">' + (hasData
+          ? (urgent > 0 ? urgent + ' urgent · ' : '') + replen + ' need stock'
+          : 'Click to generate') + '</div>'
+      + '<div style="margin-top:12px;">'
+      + '<button onclick="event.stopPropagation();startReplenishRun()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;width:100%;">'
+      + '&#9654; ' + (hasData ? 'Start Replenish Run' : 'Generate &amp; Start')
+      + '</button></div>';
     card.addEventListener('click', () => startReplenishRun());
-
-    // Insert as first card in the dash-grid
-    const dashGrid = grid.querySelector('.dash-grid');
-    if (dashGrid) {
-      dashGrid.insertBefore(card, dashGrid.firstChild);
-    }
+    return card;
   }
 
-  // Watch for dashboard rebuilds
-  let _dashObserver = null;
+  function reorderDashGrid() {
+    const body = document.getElementById('dashboard-body');
+    if (!body) return;
+    const grid = body.querySelector('.dash-grid');
+    if (!grid) return;
+
+    // Remove stale WH card
+    document.getElementById('wh-dash-card')?.remove();
+
+    // Identify cards by label
+    const allCards = [...grid.querySelectorAll('.dash-card')];
+    function find(kw) {
+      return allCards.find(c => {
+        const lbl = c.querySelector('.dash-label');
+        return lbl && lbl.textContent.toLowerCase().includes(kw.toLowerCase());
+      });
+    }
+
+    const cTotal    = find('Total Products');
+    const cGlobal   = find('Global Stock');
+    const cAlerts   = find('Reorder Alerts');
+    const cResolved = find('Resolved');
+    const cMfg      = find('Mfg Predictions');
+    const cRuns     = find('Production Runs');
+    const cClock    = find('Stockout');
+    // Inbound is a span-4 card — find it separately
+    const cInbound  = [...body.querySelectorAll('.dash-card')].find(c => {
+      const lbl = c.querySelector('.dash-label');
+      return lbl && lbl.textContent.toLowerCase().includes('inbound');
+    });
+
+    // Hide Resolved — frees up the slot
+    if (cResolved) cResolved.style.display = 'none';
+
+    const cWH = buildWHCard();
+
+    // Rebuild grid with two explicit row sub-grids
+    // Remove existing row wrappers to avoid stacking
+    ['dash-row-1','dash-row-2'].forEach(id => document.getElementById(id)?.remove());
+
+    const r1 = document.createElement('div');
+    r1.id = 'dash-row-1';
+    r1.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:16px;grid-column:1/-1;';
+
+    const r2 = document.createElement('div');
+    r2.id = 'dash-row-2';
+    r2.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:16px;grid-column:1/-1;';
+
+    [cTotal, cGlobal, cAlerts].filter(Boolean).forEach(c => r1.appendChild(c));
+    [cWH, cMfg, cRuns, cClock].filter(Boolean).forEach(c => r2.appendChild(c));
+
+    // Clear grid content, insert rows then Inbound
+    grid.innerHTML = '';
+    grid.appendChild(r1);
+    grid.appendChild(r2);
+    if (cInbound) {
+      cInbound.style.gridColumn = '1/-1';
+      grid.appendChild(cInbound);
+    }
+
+    // Mobile: WH card first in its row (CSS order)
+    cWH.classList.add('wh-replenish-card');
+  }
+
   function watchDashboard() {
     const body = document.getElementById('dashboard-body');
     if (!body) { setTimeout(watchDashboard, 500); return; }
-    _dashObserver = new MutationObserver(() => {
-      // Only inject if the dashboard is currently visible
+    new MutationObserver(() => {
       const view = document.getElementById('view-dashboard');
-      if (view && !view.classList.contains('hidden')) {
-        setTimeout(injectDashCard, 0);
+      if (view && (view.classList.contains('active') || !view.classList.contains('hidden'))) {
+        clearTimeout(window._whDashTimer);
+        window._whDashTimer = setTimeout(reorderDashGrid, 80);
       }
-    });
-    _dashObserver.observe(body, { childList: true, subtree: false });
+    }).observe(body, { childList: true, subtree: false });
   }
 
   document.addEventListener('DOMContentLoaded', watchDashboard);
