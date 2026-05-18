@@ -1,5 +1,5 @@
 /* ============================================================
-   FAT POSSUM â€” GLOBAL INVENTORY SYSTEM
+   FAT POSSUM — GLOBAL INVENTORY SYSTEM
    Light warm theme. DM Mono + DM Sans.
    ============================================================ */
 
@@ -36,7 +36,7 @@ html, body {
 }
 .hidden { display: none !important; }
 
-/* â”€â”€ LOGIN â”€â”€ */
+/* ── LOGIN ── */
 .login-screen {
   position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -63,10 +63,10 @@ html, body {
 }
 .login-error { color: var(--red); font-size: 12px; text-align: center; }
 
-/* â”€â”€ LAYOUT â”€â”€ */
+/* ── LAYOUT ── */
 #app { display: flex; height: 100vh; overflow: hidden; }
 
-/* â”€â”€ SIDEBAR â”€â”€ */
+/* ── SIDEBAR ── */
 #sidebar {
   width: var(--sidebar-w); min-width: var(--sidebar-w);
   background: var(--surface); border-right: 1px solid var(--border);
@@ -117,11 +117,12 @@ nav { padding: 8px 0; flex: 1; }
 .status-label { margin-left: auto; font-size: 10px; }
 .user-row { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* â”€â”€ MAIN CONTENT â”€â”€ */
+/* ── MAIN CONTENT ── */
 #main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .view { display: none; }
 .view.hidden { display: none !important; }
 .view.active { display: flex; flex-direction: column; min-height: 0; overflow: hidden; height: 100%; }
+/* Sticky headers — each scroll container handles its own */
 .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .table-wrap thead th.is-pinned { z-index: 20 !important; }
 
@@ -135,14 +136,15 @@ nav { padding: 8px 0; flex: 1; }
 .view-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
 .view-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* â”€â”€ TABLE â”€â”€ */
+/* ── TABLE ── */
 .table-wrap { overflow: auto; flex: 1; max-height: 100%; }
 
+/* Inventory single-table scrolling container */
 .inv-body-wrap {
   overflow: auto;
   flex: 1;
   min-height: 0;
-  height: 0;
+  height: 0; /* forces flex child to respect parent height */
 }
 .inv-body-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .inv-body-wrap thead th.is-pinned { z-index: 20 !important; }
@@ -153,6 +155,7 @@ nav { padding: 8px 0; flex: 1; }
   min-width: 100%;
 }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
+/* Single header row - all th cells sticky at top:0 */
 thead th {
   position: sticky;
   top: 0;
@@ -174,13 +177,15 @@ th {
   overflow: hidden;
   word-break: break-word;
 }
+/* Frozen columns always have solid background */
 th.is-pinned { background: var(--surface2) !important; }
 th.num { text-align: right; }
 th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--text); background: var(--border); }
-th.sort-asc::after  { content: ' â†‘'; color: var(--accent); }
-th.sort-desc::after { content: ' â†“'; color: var(--accent); }
+th.sort-asc::after  { content: ' ↑'; color: var(--accent); }
+th.sort-desc::after { content: ' ↓'; color: var(--accent); }
 
+/* Pinned columns */
 th.pinned, td.pinned {
   position: sticky; z-index: 5;
   box-shadow: 3px 0 6px rgba(0,0,0,0.06);
@@ -189,6 +194,7 @@ th.pinned { z-index: 11; background: var(--surface2); }
 td.pinned { background: var(--surface); }
 tr:hover td.pinned { background: #ece8e0; }
 
+/* Collapsed warehouse group header */
 th.group-header {
   text-align: center; background: var(--surface2);
   cursor: pointer; letter-spacing: 1px;
@@ -232,9 +238,10 @@ tr:hover td.is-pinned { background: #e8e3d8 !important; }
 .pill-soon     { background: var(--yellow-bg);  color: var(--yellow); }
 .pill-plan     { background: var(--blue-bg);    color: var(--blue); }
 .num-zero      { color: var(--text-dim); }
+/* orange for critical warehouse cells */
 :root { --orange: #c45f00; --orange-bg: #fdeede; }
 
-/* â”€â”€ BUTTONS â”€â”€ */
+/* ── BUTTONS ── */
 .btn-primary {
   background: var(--accent); color: #fff; border: none;
   padding: 8px 16px; font-family: inherit; font-size: 12px; font-weight: 500;
@@ -257,7 +264,7 @@ tr:hover td.is-pinned { background: #e8e3d8 !important; }
 .btn-danger { color: var(--red); background: transparent; border: none; cursor: pointer; font-size: 18px; line-height: 1; }
 .btn-danger:hover { opacity: 0.7; }
 
-/* â”€â”€ INPUTS â”€â”€ */
+/* ── INPUTS ── */
 input[type="text"], input[type="number"], select {
   background: var(--surface); border: 1px solid var(--border2);
   color: var(--text); padding: 7px 10px;
@@ -268,7 +275,7 @@ select { cursor: pointer; }
 .search-input { width: 260px; }
 .select-sm { padding: 6px 8px; font-size: 11px; }
 
-/* â”€â”€ CARD â”€â”€ */
+/* ── CARD ── */
 .card {
   background: var(--surface); border: 1px solid var(--border);
   padding: 20px 24px; margin: 0 24px 24px;
@@ -278,7 +285,7 @@ select { cursor: pointer; }
   letter-spacing: 1px; margin-bottom: 16px; color: var(--text-muted);
 }
 
-/* â”€â”€ MOVEMENT BUILDER â”€â”€ */
+/* ── MOVEMENT BUILDER ── */
 .movement-builder { overflow-y: auto; padding: 24px 0 0; flex: 1; }
 .form-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
 .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; position: relative; }
@@ -309,11 +316,12 @@ select { cursor: pointer; }
 }
 .badge-inline { font-size: 11px; font-weight: 400; color: var(--text-muted); margin-left: 8px; }
 
-/* â”€â”€ ALERTS â”€â”€ */
+/* ── ALERTS ── */
 #alerts-container {
   overflow-y: auto; padding: 24px; flex: 1;
   display: flex; flex-direction: column; gap: 24px;
 }
+/* Dashboard, movements, suppressed — need their own scroll */
 #view-dashboard > #dashboard-body,
 #view-movements > .movement-builder,
 #view-suppressed { overflow-y: auto; flex: 1; min-height: 0; }
@@ -326,7 +334,7 @@ select { cursor: pointer; }
 .alert-section .table-wrap { border: 1px solid var(--border); max-height: calc(100vh - 220px); }
 .suggest-qty { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--accent); }
 
-/* â”€â”€ TOAST â”€â”€ */
+/* ── TOAST ── */
 .toast {
   position: fixed; bottom: 24px; right: 24px;
   background: var(--text); color: var(--surface);
@@ -338,8 +346,9 @@ select { cursor: pointer; }
 
 @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* â”€â”€ RESIZABLE COLUMNS â”€â”€ */
+/* ── RESIZABLE + PINNABLE COLUMNS ── */
 .resize-handle {
   position: absolute;
   right: 0; top: 0; bottom: 0;
@@ -353,10 +362,15 @@ select { cursor: pointer; }
 .resize-handle:active {
   border-right-color: var(--accent);
 }
+/* th position handled inline in JS */
 
+/* pin buttons removed - artist/title/catalog always frozen */
+
+/* Allow columns to clip but show full text on hover via title; no ellipsis clipping */
 td { overflow: hidden; }
 
-/* â”€â”€ DASHBOARD â”€â”€ */
+
+/* ── DASHBOARD ── */
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -386,10 +400,11 @@ td { overflow: hidden; }
 .dash-table tr:last-child td { border-bottom: none; }
 .dash-table tr:hover td { background: var(--surface2); }
 
-/* â”€â”€ MOBILE â”€â”€ */
+/* ── MOBILE ── */
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; }
 
+  /* ── Bottom nav bar ── */
   #sidebar {
     position: fixed; bottom: 0; left: 0; right: 0;
     width: 100% !important; min-width: 100% !important;
@@ -411,6 +426,7 @@ td { overflow: hidden; }
   .nav-item.active { border-top-color: var(--accent); color: var(--accent); }
   .nav-item svg { width: 16px; height: 16px; }
 
+  /* ── Layout ── */
   #app { flex-direction: column; }
   #main-content { padding-bottom: 70px; overflow-y: auto; }
   .view { padding: 0; }
@@ -419,14 +435,17 @@ td { overflow: hidden; }
   .view-sub { font-size: 11px; }
   .view-actions { flex-wrap: wrap; gap: 6px; padding: 0 16px 10px; }
 
+  /* ── Floating action bar above bottom nav ── */
   #inv-action-bar { bottom: 60px !important; }
 
+  /* ── Dashboard ── */
   .dash-grid { grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; }
   .dash-card { padding: 12px; }
   .dash-num  { font-size: 22px; }
   .dash-section { padding: 0 16px 16px; }
   .dash-table { font-size: 11px; }
 
+  /* ── Inventory — card layout ── */
   .mobile-hide { display: none !important; }
   .inv-body-wrap { overflow-x: hidden; }
   #inventory-table thead { display: none; }
@@ -453,25 +472,32 @@ td { overflow: hidden; }
   }
   #inventory-table td.mob-status  { display: inline-block; margin-top: 6px; vertical-align: middle; }
 
+  /* ── Alerts — readable on mobile ── */
   .alert-section { margin: 0 0 16px; }
   .alert-section h3 { font-size: 13px; padding: 10px 16px; }
   #alerts-container .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   #alerts-container table { min-width: 700px; font-size: 11px; }
 
+  /* ── Movements — readable ── */
   #movements-tbody tr { font-size: 11px; }
   #movements-tbody td { padding: 6px 8px; }
 
+  /* ── Manufacturing ── */
   #mfg-table { min-width: 700px; font-size: 11px; }
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
+  /* ── Search ── */
   #search-input { width: 100%; box-sizing: border-box; }
 
+  /* ── Filters wrap nicely ── */
   .filter-row { flex-wrap: wrap; gap: 6px; }
   select.select-sm { font-size: 12px; }
 
+  /* ── Top bar ── */
   #top-bar { padding: 0 12px; }
   #search-input { width: 120px; }
 
+  /* ── Dashboard improvements ── */
   .dash-grid { grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; }
   .dash-card { padding: 10px 12px; border-radius: 6px; }
   .dash-num { font-size: 20px; }
@@ -480,31 +506,38 @@ td { overflow: hidden; }
   .warehouse-snapshot-wrap { flex-direction: column; gap: 8px; padding: 0 12px 12px; }
   .warehouse-snapshot, .active-movements { width: 100% !important; }
 
+  /* ── Inventory card improvements ── */
   #inventory-table td.mob-total { font-size: 22px; }
   .inv-body-wrap { padding-bottom: 0; }
+  /* Show stock by warehouse on mobile cards */
   #inventory-table td.mob-fp   { display: inline-block; font-size: 10px; color: var(--text-muted); margin-right: 6px; }
   #inventory-table td.mob-fp::before { content: 'FP: '; color: var(--text-dim); }
   #inventory-table td.mob-us   { display: inline-block; font-size: 10px; color: var(--text-muted); margin-right: 6px; }
   #inventory-table td.mob-us::before { content: 'US: '; color: var(--text-dim); }
 
+  /* ── Alerts mobile ── */
   .alert-section h3 { font-size: 12px; padding: 10px 12px; }
   .alert-section h3 a { font-size: 10px; }
 
+  /* ── Production runs mobile ── */
   #runs-body { padding: 10px 12px; }
   #runs-body > div { margin-bottom: 14px; }
 
+  /* ── Modals ── */
   #alloc-modal > div,
   #run-modal > div { width: 96vw !important; max-height: 92vh !important; }
   #run-modal-body { padding: 12px; }
   #run-modal-body input { font-size: 13px !important; padding: 6px 8px !important; }
 
+  /* ── Needs attention banner ── */
   #needs-attention-banner { font-size: 11px; padding: 8px 12px; }
   #needs-attention-banner .possum-walk { display: none; }
 
-  #mfg-nav-sub { display: none !important; }
+  /* ── Bottom nav with mfg sub-items ── */
+  #mfg-nav-sub { display: none !important; } /* hide desktop sub-menu on mobile */
 }
 
-/* â”€â”€ MFG TABS â”€â”€ */
+/* ── MFG TABS ── */
 .tab-switcher {
   display: flex; gap: 4px;
   background: var(--surface2);
@@ -524,18 +557,48 @@ td { overflow: hidden; }
 .mfg-tab .table-wrap { flex: 1; overflow: auto; min-height: 0; height: 0; }
 .mfg-tab .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 
+
+/* ── SUPPRESS BUTTON ── */
 .suppress-btn {
-  background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; line-height: 1; opacity: 0; transition: opacity 0.15s, color 0.15s; padding: 2px 6px; border-radius: 3px; font-family: inherit;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: inherit;
 }
 tr:hover .suppress-btn { opacity: 1; }
 .suppress-btn:hover { color: var(--red); background: var(--red-bg); }
 
-.alert-frozen, td.af { background: var(--surface); }
+/* ── ALERTS FROZEN COLUMNS ── */
+.alert-frozen, td.af {
+  background: var(--surface);
+}
 tr:nth-child(even) td.af { background: #f4f1ec; }
 tr:hover td.af { background: #e8e3d8 !important; }
 
+/* ── NOTIFICATION BADGES ── */
 .notif-badge {
-  position: absolute; top: 1px; right: 1px; background: var(--accent); color: #fff; font-size: 8px; font-weight: 700; min-width: 14px; height: 14px; border-radius: 7px; display: flex; align-items: center; justify-content: center; padding: 0 3px; line-height: 1; border: 1.5px solid var(--surface);
+  position: absolute;
+  top: 1px; right: 1px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
+  border: 1.5px solid var(--surface);
 }
 .notif-badge.hidden { display: none; }
 
@@ -554,38 +617,3 @@ tr:hover td.af { background: #e8e3d8 !important; }
   to { transform: rotate(360deg); }
 }
 .vinyl-spinning { animation: vinyl-spin 3s linear infinite; }
-
-/* ============================================================
-   FP WH ACTION â€” SUBSYSTEM INTEGRATION STYLES
-   ============================================================ */
-.wh-actions-tab { flex: 1; display: none; overflow-y: auto; }
-.wh-actions-tab.active { display: flex; }
-
-.wt-section { background: var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: 6px; }
-.wt-section-label { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 12px; display: flex; justify-content: space-between; }
-.wt-section-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-left: 6px; }
-.wt-shelf { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
-.wt-upright { display: flex; flex-direction: column; gap: 3px; background: var(--surface2); padding: 6px; border-radius: 4px; min-width: 54px; }
-.wt-upright-label { font-family: 'DM Mono', monospace; font-size: 9px; text-align: center; color: var(--text-muted); font-weight: 600; margin-bottom: 2px; }
-.wt-subrow { display: flex; gap: 2px; justify-content: center; }
-
-.wt-bin { width: 40px; height: 30px; border-radius: 3px; border: 1px solid transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; position: relative; }
-.wt-bin.sub { width: 19px; }
-.wt-bin:hover:not(.state-empty) { transform: scale(1.2); z-index: 10; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
-
-.wt-bin.state-urgent    { background: #e74c3c !important; border-color: #c0392b; color: #fff; font-weight: bold; }
-.wt-bin.state-replenish { background: #f39c12 !important; border-color: #d35400; color: #fff; font-weight: bold; }
-.wt-bin.state-ok        { background: rgba(39,174,96,0.15) !important; border-color: rgba(39,174,96,0.4); color: var(--green); }
-.wt-bin.state-vacated   { background: transparent !important; border-color: #e74c3c; border-style: dashed; color: #e74c3c; }
-.wt-bin.state-empty     { background: var(--surface2) !important; border-color: var(--border); opacity: 0.25; cursor: default; }
-
-.loc-chip { display: inline-block; padding: 2px 6px; font-family: 'DM Mono', monospace; font-size: 10px; border-radius: 3px; margin: 1px; }
-.loc-chip.bulk-std { background: var(--red-bg); color: var(--red); border: 1px solid var(--accent-dim); }
-.loc-chip.bulk-now { background: var(--yellow-bg); color: var(--yellow); border: 1px solid #f0d090; }
-.loc-chip.pick-bin { background: var(--green-bg); color: var(--green); border: 1px solid #c0d8f5; }
-
-.wt-bin[title]:hover::after {
-  content: attr(title); position: fixed; background: #2c3e50; color: #fff;
-  padding: 6px 10px; font-size: 11px; font-family: monospace; border-radius: 4px;
-  z-index: 99999; pointer-events: none; white-space: pre-line; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
