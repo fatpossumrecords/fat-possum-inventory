@@ -1,7 +1,7 @@
 /* ============================================================
-   FAT POSSUM — WH ACTION MODULE
-   wh_module.js — Replenishment & Warehouse Walkthrough
-   Uses packiyoFetch() from app.js — no separate API config needed
+   FAT POSSUM     WH ACTION MODULE
+   wh_module.js     Replenishment & Warehouse Walkthrough
+   Uses packiyoFetch() from app.js     no separate API config needed
    ============================================================ */
 
 const WHState = {
@@ -20,7 +20,7 @@ const WHState = {
 const WH_SETTINGS_KEY = 'fp_wh_replen_settings';
 const WH_CONCURRENCY  = 6;
 
-// ── NAV TOGGLE ───────────────────────────────────────────────
+// ------ NAV TOGGLE ---------------------------------------------------------------------------------------------------------------------------------------------
 window.toggleWHNav = function(e) {
   e.preventDefault();
   const sub   = document.getElementById('wh-nav-sub');
@@ -28,11 +28,11 @@ window.toggleWHNav = function(e) {
   if (!sub) return;
   const open = sub.style.display === 'none' || sub.style.display === '';
   sub.style.display = open ? 'block' : 'none';
-  if (arrow) arrow.textContent = open ? '▾' : '▸';
+  if (arrow) arrow.textContent = open ? '   ' : '   ';
   if (open) switchView('replenishment');
 };
 
-// ── SETTINGS ─────────────────────────────────────────────────
+// ------ SETTINGS ---------------------------------------------------------------------------------------------------------------------------------------------------
 window.whSaveSettings = function() {
   const ids = ['wh-lookback','wh-days-supply','wh-outlier','wh-max-units','wh-min-units'];
   const obj = {};
@@ -59,7 +59,7 @@ function whCfg() {
   };
 }
 
-// ── TAB SWITCHER ─────────────────────────────────────────────
+// ------ TAB SWITCHER ---------------------------------------------------------------------------------------------------------------------------------------
 window.switchWHTab = function(tab) {
   // Defer so switchView('replenishment') finishes rendering before tab switch
   setTimeout(() => {
@@ -71,7 +71,7 @@ window.switchWHTab = function(tab) {
   }, 0);
 };
 
-// ── FETCH HELPERS ─────────────────────────────────────────────
+// ------ FETCH HELPERS ---------------------------------------------------------------------------------------------------------------------------------------
 async function whFetchPage(endpoint, page, size) {
   const sep  = endpoint.includes('?') ? '&' : '?';
   const data = await packiyoFetch(endpoint + sep + 'page[number]=' + page + '&page[size]=' + size);
@@ -97,7 +97,7 @@ async function whFetchAll(endpoint, size, onProgress) {
   return { allData, allIncluded };
 }
 
-// ── UI HELPERS ────────────────────────────────────────────────
+// ------ UI HELPERS ------------------------------------------------------------------------------------------------------------------------------------------------
 function whSetStatus(msg) {
   const el = document.getElementById('wh-status-step');
   if (el) el.textContent = msg;
@@ -125,7 +125,7 @@ function whShowError(msg) {
 }
 function whHideError() { const el = document.getElementById('wh-error-area'); if (el) el.style.display = 'none'; }
 
-// ── MAIN REPORT ───────────────────────────────────────────────
+// ------ MAIN REPORT ---------------------------------------------------------------------------------------------------------------------------------------------
 window.runReplenishment = async function() {
   if (WHState.running) return;
   WHState.running = true;
@@ -139,7 +139,7 @@ window.runReplenishment = async function() {
   const c = whCfg();
 
   try {
-    whSetStatus('Fetching locations, orders & open orders in parallel…');
+    whSetStatus('Fetching locations, orders & open orders in parallel   ');
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - c.lookback);
     const dateStr = cutoff.toISOString().split('T')[0];
@@ -151,7 +151,7 @@ window.runReplenishment = async function() {
       whFetchAll('/orders?include=order_items&filter[fulfilled]=false', 100, (p,t) => whSetStatus('Open orders: page ' + p + ' of ' + t)),
     ]);
 
-    whSetProgress(40, locResult.allData.length + ' locations · ' + orderResult.allData.length + ' fulfilled orders · ' + openResult.allData.length + ' open orders');
+    whSetProgress(40, locResult.allData.length + ' locations    ' + orderResult.allData.length + ' fulfilled orders    ' + openResult.allData.length + ' open orders');
 
     // Location type maps
     const typePickable = {}, typeSellable = {};
@@ -198,10 +198,10 @@ window.runReplenishment = async function() {
       else { liveCustomerAllocBySku[sku] = (liveCustomerAllocBySku[sku] || 0) + qty; }
     }
 
-    whSetProgress(55, 'Building velocity map…');
+    whSetProgress(55, 'Building velocity map   ');
     const velocityMap = whBuildVelocityMap(rawOrderItems, c);
 
-    whSetStatus('Fetching products with locations…');
+    whSetStatus('Fetching products with locations   ');
     const prodResult = await whFetchAll('/products?include=location_products.location', 100, (p,t) => whSetStatus('Products: page ' + p + ' of ' + t));
     whSetProgress(85, prodResult.allData.length + ' products loaded');
     if (!prodResult.allData.length) throw new Error('No products returned from Packiyo.');
@@ -238,11 +238,11 @@ window.runReplenishment = async function() {
       pickQtyBySku[sku] = { pickQty, bulkQty, bulkLocs, pickLocs, emptyPickLocs };
     }
 
-    whSetStatus('Building report…');
+    whSetStatus('Building report   ');
     WHState.allRows = whBuildRows(prodResult.allData, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, c);
     window._whDebug = { pickQtyBySku, allRows: WHState.allRows };
 
-    whSetProgress(100, WHState.allRows.length + ' SKUs · ' + WHState.allRows.filter(r => r.suggest > 0).length + ' need replenishment');
+    whSetProgress(100, WHState.allRows.length + ' SKUs    ' + WHState.allRows.filter(r => r.suggest > 0).length + ' need replenishment');
     whRenderAll(false);
   } catch(err) {
     whShowStatus(false);
@@ -254,7 +254,7 @@ window.runReplenishment = async function() {
   }
 };
 
-// ── VELOCITY MAP ──────────────────────────────────────────────
+// ------ VELOCITY MAP ------------------------------------------------------------------------------------------------------------------------------------------
 function whBuildVelocityMap(orderItems, c) {
   const orderSkuQty = {};
   for (const item of orderItems) {
@@ -278,7 +278,7 @@ function whBuildVelocityMap(orderItems, c) {
   return map;
 }
 
-// ── BUILD ROWS ────────────────────────────────────────────────
+// ------ BUILD ROWS ------------------------------------------------------------------------------------------------------------------------------------------------
 function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, c) {
   return products.map(item => {
     const a = item.attributes || item;
@@ -309,7 +309,7 @@ function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku
   }).filter(r => r.onHand > 0 && (r.bulkQty > 0 || r.priority === 'ok'));
 }
 
-// ── RENDER ALL ────────────────────────────────────────────────
+// ------ RENDER ALL ------------------------------------------------------------------------------------------------------------------------------------------------
 function whRenderAll(keepPage) {
   if (!keepPage) WHState.currentPage = 1;
   whShowStatus(false);
@@ -317,7 +317,7 @@ function whRenderAll(keepPage) {
   whRenderStats();
   whShowResults(true);
   const gi = document.getElementById('wh-gen-info');
-  if (gi) gi.textContent = 'Generated ' + new Date().toLocaleString() + ' · ' + WHState.allRows.length + ' SKUs analysed';
+  if (gi) gi.textContent = 'Generated ' + new Date().toLocaleString() + '    ' + WHState.allRows.length + ' SKUs analysed';
 }
 
 function whRenderStats() {
@@ -391,9 +391,9 @@ function whWalkSortKey(row) {
   return whLocSortKey(sorted[0].name);
 }
 
-// ── TABLE RENDER ──────────────────────────────────────────────
+// ------ TABLE RENDER ------------------------------------------------------------------------------------------------------------------------------------------
 function whRenderBulkLocs(locs, suggest) {
-  if (!locs || !locs.length) return '<span style="color:var(--text-dim);font-size:10px;">—</span>';
+  if (!locs || !locs.length) return '<span style="color:var(--text-dim);font-size:10px;">   </span>';
   const sorted = [...locs].sort((a,b) => {
     const aN=whIsNowLoc(a.name), bN=whIsNowLoc(b.name);
     if (aN !== bN) return aN ? 1 : -1;
@@ -412,7 +412,7 @@ function whRenderBulkLocs(locs, suggest) {
 }
 
 function whRenderPickBins(pickLocs, isFallback) {
-  if (!pickLocs || !pickLocs.length) return '<span style="color:var(--text-dim);font-size:10px;">—</span>';
+  if (!pickLocs || !pickLocs.length) return '<span style="color:var(--text-dim);font-size:10px;">   </span>';
   const color = isFallback ? 'var(--yellow)' : 'var(--green)';
   const bg    = isFallback ? 'var(--yellow-bg)' : 'var(--green-bg)';
   return pickLocs.map(name => '<span style="display:inline-flex;align-items:center;font-family:\'DM Mono\',monospace;font-size:10px;background:' + bg + ';color:' + color + ';border-radius:2px;padding:1px 6px;margin:1px 2px 1px 0;white-space:nowrap;">' + whEsc(name) + (isFallback ? '<span style="font-size:8px;opacity:0.5;margin-left:3px">(last used)</span>' : '') + '</span>').join('');
@@ -430,7 +430,7 @@ function whRenderTable() {
       : '<span class="pill pill-ok">OK</span>';
     const suggest = r.suggest > 0
       ? '<span style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:700;color:var(--accent)">' + r.suggest + '</span>'
-      : '<span style="color:var(--text-dim)">—</span>';
+      : '<span style="color:var(--text-dim)">   </span>';
     const freeStyle = (r.freePickQty === 0 && r.orderCount > 0) ? 'color:var(--red);font-weight:700;' : '';
     return '<tr>'
       + '<td style="font-weight:600;font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;">' + whEsc(r.name) + '</td>'
@@ -455,20 +455,20 @@ function whRenderPagination() {
   if (!pg) return;
   if (total <= 1) { pg.innerHTML = ''; return; }
   let html = '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">' + WHState.filtered.length + ' items</span> ';
-  if (WHState.currentPage > 1) html += '<button class="btn-secondary btn-sm" onclick="whGoPage(' + (WHState.currentPage-1) + ')">‹</button> ';
+  if (WHState.currentPage > 1) html += '<button class="btn-secondary btn-sm" onclick="whGoPage(' + (WHState.currentPage-1) + ')">   </button> ';
   for (let i = 1; i <= total; i++) {
     if (i === 1 || i === total || Math.abs(i - WHState.currentPage) <= 2) {
       const active = i === WHState.currentPage ? 'background:var(--accent);color:#fff;border-color:var(--accent);' : '';
       html += '<button class="btn-secondary btn-sm" style="' + active + '" onclick="whGoPage(' + i + ')">' + i + '</button> ';
-    } else if (Math.abs(i - WHState.currentPage) === 3) html += '<span style="color:var(--text-dim)">… </span>';
+    } else if (Math.abs(i - WHState.currentPage) === 3) html += '<span style="color:var(--text-dim)">    </span>';
   }
-  if (WHState.currentPage < total) html += '<button class="btn-secondary btn-sm" onclick="whGoPage(' + (WHState.currentPage+1) + ')">›</button>';
+  if (WHState.currentPage < total) html += '<button class="btn-secondary btn-sm" onclick="whGoPage(' + (WHState.currentPage+1) + ')">   </button>';
   pg.innerHTML = html;
 }
 
 window.whGoPage = function(n) { WHState.currentPage = n; whRenderTable(); whRenderPagination(); };
 
-// ── CONTROLS ─────────────────────────────────────────────────
+// ------ CONTROLS ---------------------------------------------------------------------------------------------------------------------------------------------------
 window.whSortBy = function(key) {
   if (WHState.sortKey === key) WHState.sortDir *= -1;
   else { WHState.sortKey = key; WHState.sortDir = -1; }
@@ -490,10 +490,10 @@ window.whToggleWalkOrder = function() {
   WHState.walkOrderMode = !WHState.walkOrderMode;
   const btn = document.getElementById('wh-walk-btn');
   if (WHState.walkOrderMode) {
-    if (btn) { btn.style.background='var(--accent)';btn.style.color='#fff';btn.textContent='✓ Walk Order ON'; }
+    if (btn) { btn.style.background='var(--accent)';btn.style.color='#fff';btn.textContent='    Walk Order ON'; }
     WHState.activeFilter = 'replenish-and-urgent';
   } else {
-    if (btn) { btn.style.background='';btn.style.color='';btn.textContent='⟳ Walk Order'; }
+    if (btn) { btn.style.background='';btn.style.color='';btn.textContent='    Walk Order'; }
     if (WHState.activeFilter === 'replenish-and-urgent') WHState.activeFilter = 'all';
   }
   WHState.currentPage = 1;
@@ -513,34 +513,34 @@ window.whExportCSV = function() {
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fp-wh-replenishment-'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
 
-// ── WAREHOUSE WALKTHROUGH ─────────────────────────────────────
+// ------ WAREHOUSE WALKTHROUGH ---------------------------------------------------------------------------------------------------------------
 
-// ═══════════════════════════════════════════════════════════════
-// WAREHOUSE WALKTHROUGH — rewritten
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// WAREHOUSE WALKTHROUGH --- rewritten
 // Multi-item bins, MW sections, search/dim, click detail panel
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // P-section definitions (pick bins)
 const WT_P_SECTIONS = [
-  {id:'P1',label:'P1',sub:'Vinyl & CD — Pick Aisle',type:'standard'},
-  {id:'P2',label:'P2',sub:'Vinyl & CD — Pick Aisle',type:'standard'},
+  {id:'P1',label:'P1',sub:'Vinyl & CD     Pick Aisle',type:'standard'},
+  {id:'P2',label:'P2',sub:'Vinyl & CD     Pick Aisle',type:'standard'},
   {id:'P3',label:'P3',sub:'Apparel',                type:'p3'},
   {id:'P4',label:'P4',sub:'Books',                  type:'p4'},
   {id:'P5',label:'P5',sub:'7" Records',             type:'standard'},
 ];
 
-// MW aisle definitions — two halves per aisle
+// MW aisle definitions --- two halves per aisle
 // format: MW-{aisle}-{letter}{level}  e.g. MW-01-A1
 const WT_MW_AISLES = [
-  {aisle:'01', halves:[{letters:'A,B,C,D',label:'MW-01 A–D'},{letters:'E,F,G,H',label:'MW-01 E–H'}]},
-  {aisle:'02', halves:[{letters:'A,B,C,D',label:'MW-02 A–D'},{letters:'E,F,G,H',label:'MW-02 E–H'}]},
-  {aisle:'03', halves:[{letters:'A,B,C,D',label:'MW-03 A–D'},{letters:'E,F,G,H',label:'MW-03 E–H'}]},
-  {aisle:'04', halves:[{letters:'A,B,C,D,E',label:'MW-04 A–E'},{letters:'F,G,H,I,J',label:'MW-04 F–J'}]},
-  {aisle:'05', halves:[{letters:'A,B,C,D',label:'MW-05 A–D'},{letters:'E,F,G,H,I,J',label:'MW-05 E–J'}]},
-  {aisle:'06', halves:[{letters:'A,B,C,D',label:'MW-06 A–D'},{letters:'E',label:'MW-06 E'}]},
+  {aisle:'01', halves:[{letters:'A,B,C,D',label:'MW-01 A   D'},{letters:'E,F,G,H',label:'MW-01 E   H'}]},
+  {aisle:'02', halves:[{letters:'A,B,C,D',label:'MW-02 A   D'},{letters:'E,F,G,H',label:'MW-02 E   H'}]},
+  {aisle:'03', halves:[{letters:'A,B,C,D',label:'MW-03 A   D'},{letters:'E,F,G,H',label:'MW-03 E   H'}]},
+  {aisle:'04', halves:[{letters:'A,B,C,D,E',label:'MW-04 A   E'},{letters:'F,G,H,I,J',label:'MW-04 F   J'}]},
+  {aisle:'05', halves:[{letters:'A,B,C,D',label:'MW-05 A   D'},{letters:'E,F,G,H,I,J',label:'MW-05 E   J'}]},
+  {aisle:'06', halves:[{letters:'A,B,C,D',label:'MW-06 A   D'},{letters:'E',label:'MW-06 E'}]},
 ];
 
-// ── LOC MAP (multi-item) ──────────────────────────────────────
+// ------ LOC MAP (multi-item) ------------------------------------------------------------------------------------------------------------------
 // locMap[locName] = array of { sku, name, upc, row, state, isFallback }
 function wtBuildLocMap() {
   const locMap = {};
@@ -572,7 +572,7 @@ function wtBuildLocMap() {
           addEntry(loc, {sku,name:row?.name||'',upc:row?.upc||'',row:row||null,state:row?.priority||'ok',isFallback:false});
         }
       }
-      // Bulk (MW) locations — show all products in each MW bin
+      // Bulk (MW) locations --- show all products in each MW bin
       for (const bulkLoc of (data.bulkLocs||[])) {
         addEntry(bulkLoc.name, {
           sku, name:row?.name||'', upc:row?.upc||'',
@@ -589,7 +589,7 @@ function wtBuildLocMap() {
   return locMap;
 }
 
-// ── PARSERS ───────────────────────────────────────────────────
+// ------ PARSERS ---------------------------------------------------------------------------------------------------------------------------------------------------------
 function wtParseBin(name) {
   // P3 sub: P3-A-01-B
   let m = name.match(/^(P\d+)-([A-Z]+)-(\d+)-([A-D])$/i);
@@ -611,7 +611,7 @@ function wtColKey(col) {
   return col.length===1 ? col.charCodeAt(0)-64 : 26+(col.charCodeAt(0)-64)*26+(col.charCodeAt(1)-64);
 }
 
-// ── SEARCH STATE ──────────────────────────────────────────────
+// ------ SEARCH STATE ------------------------------------------------------------------------------------------------------------------------------------------
 let _wtSearchTerm = '';
 
 window.wtSearch = function(val) {
@@ -637,7 +637,7 @@ function wtApplySearch() {
   });
 }
 
-// ── CLICK DETAIL PANEL ────────────────────────────────────────
+// ------ CLICK DETAIL PANEL ------------------------------------------------------------------------------------------------------------------------
 window.wtShowPanel = function(locName, locMap) {
   const items = locMap[locName] || [];
   const panel = document.getElementById('wt-detail-panel');
@@ -669,7 +669,7 @@ window.wtShowPanel = function(locName, locMap) {
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">'
       +'<div style="flex:1;">'
       +'<div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:2px;">'+whEsc(row.name)+'</div>'
-      +'<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">'+whEsc(row.sku)+(row.upc?' &nbsp;·&nbsp; '+whEsc(row.upc):'')+'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">'+whEsc(row.sku)+(row.upc?' &nbsp;  &nbsp; '+whEsc(row.upc):'')+'</div>'
       +'</div>'
       +badge
       +'</div>'
@@ -700,7 +700,7 @@ window.wtClosePanel = function() {
   if (panel) panel.style.display = 'none';
 };
 
-// ── MAIN RENDER ───────────────────────────────────────────────
+// ------ MAIN RENDER ---------------------------------------------------------------------------------------------------------------------------------------------
 function wtRender() {
   const empty   = document.getElementById('wt-empty');
   const content = document.getElementById('wt-content');
@@ -734,7 +734,7 @@ function wtRender() {
   if (!container) return;
   container.innerHTML = '';
 
-  // ── P sections ──
+  // ------ P sections ------
   const pHeader = document.createElement('div');
   pHeader.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-muted);margin:0 0 16px;padding-bottom:8px;border-bottom:2px solid var(--border);';
   pHeader.textContent = 'Pick Bins';
@@ -745,7 +745,7 @@ function wtRender() {
     container.appendChild(wtRenderPSection(def, bins, locMap));
   }
 
-  // ── MW sections ──
+  // ------ MW sections ------
   const mwHeader = document.createElement('div');
   mwHeader.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-muted);margin:32px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--border);';
   mwHeader.textContent = 'MW Bulk Locations';
@@ -760,7 +760,7 @@ function wtRender() {
   wtApplySearch();
 }
 
-// ── P SECTION RENDER ─────────────────────────────────────────
+// ------ P SECTION RENDER ---------------------------------------------------------------------------------------------------------------------------
 function wtRenderPSection(def, binEntries, locMap) {
   const el = document.createElement('div');
   el.style.marginBottom = '28px';
@@ -770,9 +770,9 @@ function wtRenderPSection(def, binEntries, locMap) {
   const replen   = binEntries.filter(b => b.items.some(i=>i.state==='replenish')).length;
   const vacated  = binEntries.filter(b => b.items.some(i=>i.state==='vacated')).length;
   let stats = '';
-  if (urgent) stats += '<span style="color:var(--red)">● '+urgent+' urgent</span> ';
-  if (replen) stats += '<span style="color:var(--yellow)">● '+replen+' replenish</span> ';
-  if (vacated) stats += '<span style="color:rgba(184,50,40,0.4)">● '+vacated+' vacated</span>';
+  if (urgent) stats += '<span style="color:var(--red)">    '+urgent+' urgent</span> ';
+  if (replen) stats += '<span style="color:var(--yellow)">    '+replen+' replenish</span> ';
+  if (vacated) stats += '<span style="color:rgba(184,50,40,0.4)">    '+vacated+' vacated</span>';
 
   el.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
     +def.label+'<span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">'+def.sub+'</span>'
@@ -836,7 +836,7 @@ function wtRenderP4Shelf(shelf, binEntries, locMap) {
   shelf.appendChild(up);
 }
 
-// ── MW AISLE RENDER ───────────────────────────────────────────
+// ------ MW AISLE RENDER ---------------------------------------------------------------------------------------------------------------------------------
 function wtRenderMWAisle(aisleData, binEntries, locMap) {
   const el = document.createElement('div');
   el.style.marginBottom = '28px';
@@ -845,7 +845,7 @@ function wtRenderMWAisle(aisleData, binEntries, locMap) {
 
   el.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
     +'Aisle MW-'+aisleData.aisle
-    +(urgent?'<span style="margin-left:auto;font-size:10px;color:var(--yellow);">● '+urgent+' need attention</span>':'')
+    +(urgent?'<span style="margin-left:auto;font-size:10px;color:var(--yellow);">    '+urgent+' need attention</span>':'')
     +'</div>'
     +'<div id="mw-aisle-'+aisleData.aisle+'" style="display:flex;gap:24px;flex-wrap:wrap;"></div>';
 
@@ -879,7 +879,7 @@ function wtRenderMWAisle(aisleData, binEntries, locMap) {
   return el;
 }
 
-// ── BIN ELEMENT ───────────────────────────────────────────────
+// ------ BIN ELEMENT ---------------------------------------------------------------------------------------------------------------------------------------------
 function wtMakeBinEl(locName, items, isSub, locMap, isMW) {
   const el = document.createElement('div');
   el.className = 'wt-bin-el';
@@ -949,7 +949,7 @@ function wtMakeBinEl(locName, items, isSub, locMap, isMW) {
   return el;
 }
 
-// ── MULTI-ITEM HOVER POPOVER ──────────────────────────────────
+// ------ MULTI-ITEM HOVER POPOVER ------------------------------------------------------------------------------------------------------
 function wtShowMultiPop(e, locName, items) {
   const pop = document.getElementById('wt-pop');
   if (!pop) return;
@@ -972,7 +972,7 @@ function wtShowMultiPop(e, locName, items) {
       +(item.row.suggest>0&&!item.isBulk?'<div style="font-size:9px;color:var(--accent);margin-top:2px;">Move '+item.row.suggest+' to pick bin</div>':'')
       +'</div>';
   }
-  if (items.length > 4) html += '<div style="font-size:9px;color:var(--text-muted);text-align:center;margin-top:4px;">+' + (items.length-4) + ' more — click to see all</div>';
+  if (items.length > 4) html += '<div style="font-size:9px;color:var(--text-muted);text-align:center;margin-top:4px;">+' + (items.length-4) + ' more     click to see all</div>';
   else if (items.length > 0) html += '<div style="font-size:9px;color:var(--text-dim);text-align:center;margin-top:4px;">Click for details</div>';
 
   pop.innerHTML = html;
@@ -1003,23 +1003,12 @@ window.wtToggleEmpty = function() {
   wtRender();
 };
 
-
-  WHState.wtShowEmpty = !WHState.wtShowEmpty;
-  const btn=document.getElementById('wt-toggle-empty');
-  if (btn) {
-    btn.style.background = WHState.wtShowEmpty ? 'var(--accent)' : 'var(--surface2)';
-    btn.style.color      = WHState.wtShowEmpty ? '#fff' : 'var(--text-muted)';
-    btn.textContent      = WHState.wtShowEmpty ? 'Hide unused bins' : 'Show unused bins';
-  }
-  wtRender();
-};
-
-// ─── DASHBOARD CARD ──────────────────────────────────────────
+// --------- DASHBOARD CARD ------------------------------------------------------------------------------------------------------------------------------
 // Injects Walk Replenish card into the dashboard grid.
 // Uses CSS order to position it:
 //   Desktop: after first 4 cards (start of row 2 in 4-col grid)
 //   Mobile: first card (order:-1)
-// Does NOT touch or reorder existing cards — avoids fragility.
+// Does NOT touch or reorder existing cards --- avoids fragility.
 (function() {
 
   function buildWHCard() {
@@ -1037,9 +1026,9 @@ window.wtToggleEmpty = function() {
     card.style.order = '4';
     card.innerHTML =
       '<div class="dash-label">Walk Replenish</div>'
-      + '<div class="dash-num" style="font-size:28px;color:var(--accent);">' + (hasData ? total : '—') + '</div>'
+      + '<div class="dash-num" style="font-size:28px;color:var(--accent);">' + (hasData ? total : '   ') + '</div>'
       + '<div class="dash-sub">' + (hasData
-          ? (urgent > 0 ? urgent + ' urgent · ' : '') + replen + ' need stock'
+          ? (urgent > 0 ? urgent + ' urgent    ' : '') + replen + ' need stock'
           : 'Click to generate') + '</div>'
       + '<div style="margin-top:12px;">'
       + '<button onclick="event.stopPropagation();startReplenishRun()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;width:100%;">'
@@ -1068,7 +1057,7 @@ window.wtToggleEmpty = function() {
       c.style.order = i < 4 ? String(i) : String(i + 1); // shift everything after pos 3 up by 1
     });
 
-    // Append WH card — its order:4 puts it between Resolved and Mfg Predictions
+    // Append WH card --- its order:4 puts it between Resolved and Mfg Predictions
     grid.appendChild(buildWHCard());
 
     // Make grid use flex so order property actually works
@@ -1091,9 +1080,9 @@ window.wtToggleEmpty = function() {
   document.addEventListener('DOMContentLoaded', watchDashboard);
 })();
 
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // PICKER MODE
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 const PickerState = {
   queue:       [],   // walk-order sorted rows with bulkLoc resolved
@@ -1116,7 +1105,7 @@ function pickerBuildQueue() {
     return 0;
   });
 
-  // Flatten — each row gets its primary bulk loc
+  // Flatten --- each row gets its primary bulk loc
   return rows.map(r => {
     const sorted = [...r.bulkLocs].sort((a, b) => {
       const aN = whIsNowLoc(a.name), bN = whIsNowLoc(b.name);
@@ -1151,7 +1140,7 @@ async function whRunAndLaunch() {
   const sub = document.getElementById('wh-nav-sub');
   if (sub) sub.style.display = 'block';
   const arrow = document.getElementById('wh-nav-arrow');
-  if (arrow) arrow.textContent = '▾';
+  if (arrow) arrow.textContent = '   ';
 
   // Show generating banner
   const banner = document.getElementById('wh-dash-generating');
@@ -1201,8 +1190,8 @@ function pickerRender() {
   const item    = PickerState.queue[PickerState.index];
   const pct     = Math.round(((current - 1) / total) * 100);
   const destStr = item.destBins && item.destBins.length
-    ? item.destBins.join('  ·  ')
-    : '— no bin assigned —';
+    ? item.destBins.join('      ')
+    : '    no bin assigned    ';
   const suggestedQty = item.qty;
 
   overlay.innerHTML =
@@ -1225,7 +1214,7 @@ function pickerRender() {
     // Body
     + '<div style="padding:28px 32px 20px;flex:1;">'
 
-    // Pull From location — smaller, informational
+    // Pull From location --- smaller, informational
     + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:12px 16px;background:var(--surface2);border-radius:8px;border-left:4px solid var(--accent);">'
     + '<div>'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:2px;">Go To Location</div>'
@@ -1236,11 +1225,11 @@ function pickerRender() {
     + '<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:600;color:var(--text-muted);">' + item.bulkQty.toLocaleString() + '</div>'
     + '</div></div>'
 
-    // Product name + SKU — LARGE, this is what the picker confirms
+    // Product name + SKU --- LARGE, this is what the picker confirms
     + '<div style="margin-bottom:20px;">'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:6px;">Grab This Product</div>'
     + '<div style="font-size:22px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:4px;">' + whEsc(item.row.name) + '</div>'
-    + '<div style="font-family:\'DM Mono\',monospace;font-size:14px;color:var(--text-muted);">' + whEsc(item.row.sku) + ' &nbsp;·&nbsp; UPC: ' + whEsc(item.row.upc || '—') + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:14px;color:var(--text-muted);">' + whEsc(item.row.sku) + ' &nbsp;  &nbsp; UPC: ' + whEsc(item.row.upc || '   ') + '</div>'
     + '</div>'
 
     // Qty + Place Into row
@@ -1265,7 +1254,7 @@ function pickerRender() {
     + '<div>'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Scan Product Barcode (UPC) to Confirm</div>'
     + '<div style="display:flex;gap:10px;align-items:stretch;">'
-    + '<input type="text" id="picker-scan-input" placeholder="Scan UPC barcode…"'
+    + '<input type="text" id="picker-scan-input" placeholder="Scan UPC barcode   "'
     + ' autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="none"'
     + ' style="flex:1;font-family:\'DM Mono\',monospace;font-size:20px;padding:14px 16px;border:2px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);outline:none;"'
     + ' onkeydown="pickerHandleKey(event)" oninput="pickerClearError()" />'
@@ -1277,7 +1266,7 @@ function pickerRender() {
 
     // Footer
     + '<div style="padding:14px 32px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:space-between;align-items:center;background:var(--surface2);">'
-    + '<div style="font-size:11px;color:var(--text-dim);font-family:\'DM Mono\',monospace;">' + PickerState.completed.length + ' done &nbsp;·&nbsp; ' + (PickerState.queue.length - current) + ' remaining</div>'
+    + '<div style="font-size:11px;color:var(--text-dim);font-family:\'DM Mono\',monospace;">' + PickerState.completed.length + ' done &nbsp;  &nbsp; ' + (PickerState.queue.length - current) + ' remaining</div>'
     + (current > 1 ? '<button onclick="pickerBack()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;">&#8592; Back</button>' : '<div></div>')
     + '</div>'
 
@@ -1378,7 +1367,7 @@ window.pickerConfirm = function() {
     return;
   }
 
-  // Must scan — no empty confirm
+  // Must scan --- no empty confirm
   if (!scanRaw) {
     const errEl = document.getElementById('picker-scan-error');
     if (errEl) errEl.textContent = 'Scan or enter the product UPC barcode to confirm.';
@@ -1388,11 +1377,11 @@ window.pickerConfirm = function() {
     return;
   }
 
-  // Match UPC only — no SKU fallback (we want barcode scanning, not SKU)
+  // Match UPC only --- no SKU fallback (we want barcode scanning, not SKU)
   const rawBarcode  = (item.row.upc || '').replace(/\D/g, '');  // stored barcode, digits only
   const scannedDig  = (scanInp ? scanInp.value.trim() : '').replace(/\D/g, ''); // what was entered/scanned
 
-  // Compare digits-only — handles leading zero mismatches (045778... vs 45778...)
+  // Compare digits-only --- handles leading zero mismatches (045778... vs 45778...)
   const upcMatch = rawBarcode.length > 0 && scannedDig.length > 0
     && (scannedDig === rawBarcode || scannedDig.replace(/^0+/,'') === rawBarcode.replace(/^0+/,''));
 
@@ -1443,13 +1432,13 @@ function pickerRenderComplete() {
     : null;
 
   const rows = PickerState.completed.map(c => {
-    const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '—';
+    const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '   ';
     const qtyExtra = (!c.skipped && c.suggestedQty && c.qty > c.suggestedQty)
       ? '<div style="font-size:9px;color:var(--green);margin-top:2px;">+' + (c.qty - c.suggestedQty) + ' extra</div>' : '';
     return '<tr style="' + (c.skipped ? 'opacity:0.45;' : '') + '">'
       + '<td style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:700;color:' + (c.skipped ? 'var(--text-muted)' : 'var(--accent)') + ';padding:12px 16px;border-bottom:1px solid var(--border);white-space:nowrap;">' + whEsc(c.bulkLoc) + '</td>'
       + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);"><div style="font-weight:600;font-size:14px;">' + whEsc(c.row.name) + '</div><div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">' + whEsc(c.row.sku) + '</div></td>'
-      + '<td style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:700;text-align:center;padding:12px 16px;border-bottom:1px solid var(--border);color:' + (c.skipped ? 'var(--text-dim)' : 'var(--text)') + ';">' + (c.skipped ? '—' : c.qty) + qtyExtra + '</td>'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:700;text-align:center;padding:12px 16px;border-bottom:1px solid var(--border);color:' + (c.skipped ? 'var(--text-dim)' : 'var(--text)') + ';">' + (c.skipped ? '   ' : c.qty) + qtyExtra + '</td>'
       + '<td style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--green);padding:12px 16px;border-bottom:1px solid var(--border);">' + whEsc(dest) + '</td>'
       + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);text-align:center;">' + (c.skipped ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;text-transform:uppercase;">Skipped</span>' : '<span style="color:var(--green);font-size:16px;">&#x2713;</span>') + '</td>'
       + '</tr>';
@@ -1460,9 +1449,9 @@ function pickerRenderComplete() {
 
       <!-- Success header -->
       <div style="background:var(--green);color:#fff;padding:24px 32px;text-align:center;">
-        <div style="font-size:40px;margin-bottom:8px;">✓</div>
+        <div style="font-size:40px;margin-bottom:8px;">   </div>
         <div style="font-size:20px;font-weight:700;margin-bottom:4px;">Replenish Run Complete</div>
-        <div style="font-size:13px;opacity:0.85;">${picked.length} locations replenished · ${totalUnits.toLocaleString()} units · ${skipped.length} skipped${elapsed !== null ? ' · ' + elapsed + ' min' : ''}</div>
+        <div style="font-size:13px;opacity:0.85;">${picked.length} locations replenished    ${totalUnits.toLocaleString()} units    ${skipped.length} skipped${elapsed !== null ? '    ' + elapsed + ' min' : ''}</div>
       </div>
 
       <!-- Summary note -->
@@ -1488,7 +1477,7 @@ function pickerRenderComplete() {
 
       <!-- Footer -->
       <div style="padding:16px 32px;border-top:1px solid var(--border);display:flex;gap:12px;justify-content:flex-end;background:var(--surface2);">
-        <button onclick="pickerPrintSummary()" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">⎙ Print Summary</button>
+        <button onclick="pickerPrintSummary()" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">    Print Summary</button>
         <button onclick="pickerClose()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;">Done</button>
       </div>
     </div>
@@ -1502,20 +1491,20 @@ window.pickerPrintSummary = function() {
   const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
 
   const rows = PickerState.completed.map(c => {
-    const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '—';
+    const dest = c.destBins && c.destBins.length ? c.destBins.join(', ') : '   ';
     const extra = (!c.skipped && c.suggestedQty && c.qty > c.suggestedQty)
       ? '<br><span style="font-size:9px;color:#1e7e4a">+' + (c.qty - c.suggestedQty) + ' extra</span>' : '';
     return `<tr class="${c.skipped ? 'skipped' : ''}">
       <td class="mono loc">${c.bulkLoc}</td>
       <td><strong>${c.row.name}</strong><br><span class="mono small">${c.row.sku}</span></td>
-      <td class="mono center qty">${c.skipped ? '—' : c.qty}${extra}</td>
+      <td class="mono center qty">${c.skipped ? '   ' : c.qty}${extra}</td>
       <td class="mono dest">${dest}</td>
       <td class="center">${c.skipped ? 'SKIPPED' : '&#x2713;'}</td>
     </tr>`;
   }).join('');
 
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>FP Replenish Summary — ${now}</title>
+  win.document.write(`<!DOCTYPE html><html><head><title>FP Replenish Summary     ${now}</title>
   <style>
     @page { margin: 0.5in; size: portrait; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1550,12 +1539,12 @@ window.pickerPrintSummary = function() {
   </style>
   </head><body>
   <div class="header">
-    <h1>Fat Possum Records — Replenish Summary</h1>
+    <h1>Fat Possum Records     Replenish Summary</h1>
     <div class="meta">
-      <span>📅 ${now}</span>
-      <span>✓ ${picked.length} picked</span>
-      <span>📦 ${totalUnits.toLocaleString()} units</span>
-      ${skipped.length ? '<span>⚠ ' + skipped.length + ' skipped</span>' : ''}
+      <span>     ${now}</span>
+      <span>    ${picked.length} picked</span>
+      <span>     ${totalUnits.toLocaleString()} units</span>
+      ${skipped.length ? '<span>    ' + skipped.length + ' skipped</span>' : ''}
     </div>
   </div>
   <table>
@@ -1573,15 +1562,15 @@ window.pickerPrintSummary = function() {
     <div class="t"><div class="t-val">${totalUnits.toLocaleString()}</div><div class="t-lbl">Total Units Moved</div></div>
     ${skipped.length ? '<div class="t"><div class="t-val">' + skipped.length + '</div><div class="t-lbl">Skipped</div></div>' : ''}
   </div>
-  <div class="footer">Fat Possum Records · Warehouse Replenish Sheet · ${now}</div>
+  <div class="footer">Fat Possum Records    Warehouse Replenish Sheet    ${now}</div>
   </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // PRINT PICK LIST (pre-pick reference sheet)
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 window.whPrintPickList = function() {
   const c = whCfg();
   const rows = WHState.allRows
@@ -1606,7 +1595,7 @@ window.whPrintPickList = function() {
     });
     const bulkLoc  = sorted[0].name;
     const bulkQty  = sorted[0].qty;
-    const destBins = r.pickLocs && r.pickLocs.length ? r.pickLocs.join(', ') : '—';
+    const destBins = r.pickLocs && r.pickLocs.length ? r.pickLocs.join(', ') : '   ';
     const urgCls   = r.priority === 'urgent' ? 'urgent' : '';
     return `<tr class="${urgCls}">
       <td class="num seq">${i+1}</td>
@@ -1623,7 +1612,7 @@ window.whPrintPickList = function() {
   const totalUnits = rows.reduce((s,r) => s + r.suggest, 0);
 
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick List — ${now}</title>
+  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick List     ${now}</title>
   <style>
     @page { margin: 0.4in 0.5in; size: landscape; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1668,8 +1657,8 @@ window.whPrintPickList = function() {
   </head><body>
   <div class="header">
     <div>
-      <h1>Fat Possum Records — Warehouse Pick List</h1>
-      <div class="sub">${now} · Look-back: ${c.lookback}d · Days supply target: ${c.daysSupply}d · Walk order</div>
+      <h1>Fat Possum Records     Warehouse Pick List</h1>
+      <div class="sub">${now}    Look-back: ${c.lookback}d    Days supply target: ${c.daysSupply}d    Walk order</div>
       <div class="legend">
         <div class="leg"><div class="leg-dot" style="background:#fff5f5;border:1px solid #b83228;"></div> Urgent (empty pick bin)</div>
         <div class="leg"><div class="leg-dot" style="background:#f6f6f6;border:1px solid #ddd;"></div> Needs replenishment</div>
@@ -1688,7 +1677,7 @@ window.whPrintPickList = function() {
     </colgroup>
     <thead><tr>
       <th class="right">#</th>
-      <th>✓</th>
+      <th>   </th>
       <th>Pull From</th>
       <th class="right">Move Qty</th>
       <th>Product</th>
@@ -1698,7 +1687,7 @@ window.whPrintPickList = function() {
     <tbody>${tableRows}</tbody>
   </table>
   <div class="footer">
-    <span>Fat Possum Records · Warehouse Replenish Sheet · ${now}</span>
+    <span>Fat Possum Records    Warehouse Replenish Sheet    ${now}</span>
     <span>Picker: _______________________   Time started: ____________   Time complete: ____________</span>
   </div>
   </body></html>`);
