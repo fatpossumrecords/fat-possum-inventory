@@ -555,7 +555,10 @@ function wtBuildLocMap() {
     const activeLocs   = row.pickLocsFallback ? [] : row.pickLocs;
     const fallbackLocs = row.pickLocsFallback ? row.pickLocs : [];
     for (const loc of activeLocs)   addEntry(loc, {sku:row.sku,name:row.name,upc:row.upc||'',row,state:row.priority,isFallback:false});
-    for (const loc of fallbackLocs) addEntry(loc, {sku:row.sku,name:row.name,upc:row.upc||'',row,state:'vacated',isFallback:true});
+    // Only show vacated/fallback bins if this product has no active pick bin
+    if (row.pickLocsFallback) {
+      for (const loc of fallbackLocs) addEntry(loc, {sku:row.sku,name:row.name,upc:row.upc||'',row,state:'vacated',isFallback:true});
+    }
   }
 
   // Also add MW bulk locations from pickQtyBySku debug data
@@ -563,8 +566,13 @@ function wtBuildLocMap() {
     for (const [sku, data] of Object.entries(window._whDebug.pickQtyBySku)) {
       const row = WHState.allRows.find(r => r.sku === sku);
       // Pick locations: empty (vacated) ones
-      for (const loc of (data.emptyPickLocs||[])) {
-        addEntry(loc, {sku,name:row?.name||'',upc:row?.upc||'',row:row||null,state:'vacated',isFallback:true});
+      // Only show vacated bins if this SKU has NO active pick bin with stock.
+      // If the product is already in P1-B-01, showing P1-A-01 as vacated is noise.
+      const hasActivePick = (data.pickLocs||[]).length > 0;
+      if (!hasActivePick) {
+        for (const loc of (data.emptyPickLocs||[])) {
+          addEntry(loc, {sku,name:row?.name||'',upc:row?.upc||'',row:row||null,state:'vacated',isFallback:true});
+        }
       }
       // Pick locations: active ones not already added
       for (const loc of (data.pickLocs||[])) {
