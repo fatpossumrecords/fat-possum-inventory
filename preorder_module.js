@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 175808');
+console.log('preorder_module.js loaded — build 180042');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -380,7 +380,7 @@ function poCampaignCard(c) {
 
   // Apply search + tag filter
   const filteredOrders = orders.filter(o => {
-    if (activeTags.length && !activeTags.some(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
+    if (activeTags.length && !activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       if (!o.orderNumber.toLowerCase().includes(term)) return false;
@@ -627,7 +627,7 @@ window.poConfirmRelease = function(campaignId) {
 
   // Filter by active tags — order must match ANY selected tag
   const orders = activeTags.length
-    ? allOrders.filter(o => activeTags.some(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase())))
+    ? allOrders.filter(o => activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase())))
     : allOrders;
 
   const tagNote = activeTags.length ? '\n\nFiltered to tags: ' + activeTags.join(', ') + ' (' + orders.length + ' of ' + allOrders.length + ' orders).' : '';
@@ -837,7 +837,7 @@ function poFilterInPlace(campaignId) {
   const searchTerm = (POState.searchTerms || {})[campaignId] || '';
 
   const filtered = orders.filter(o => {
-    if (activeTags.length && !activeTags.some(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
+    if (activeTags.length && !activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
     if (searchTerm && !o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
