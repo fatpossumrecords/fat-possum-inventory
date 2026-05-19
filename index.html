@@ -78,13 +78,17 @@
   }
   // Apply on load before paint to avoid flash
   (function() {
-    if (localStorage.getItem('fp_dark_mode') === '1') {
-      document.body.classList.add('dark-mode');
-      // Icon update runs after DOM ready since the button isn't in head
-      document.addEventListener('DOMContentLoaded', function() {
+    function applyDark() {
+      if (localStorage.getItem('fp_dark_mode') === '1') {
+        if (document.body) document.body.classList.add('dark-mode');
         const icon = document.getElementById('darkmode-icon');
         if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-      });
+      }
+    }
+    if (document.body) {
+      applyDark();
+    } else {
+      document.addEventListener('DOMContentLoaded', applyDark);
     }
   })();
   </script>
