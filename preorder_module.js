@@ -1,11 +1,12 @@
 /* ============================================================
-   FAT POSSUM -- PRE-ORDER CAMPAIGN MANAGER  v20260519014108
+   FAT POSSUM -- PRE-ORDER CAMPAIGN MANAGER  v20260519133858
    preorder_module.js
    Tracks operator-held pre-order campaigns and releases them
    via PATCH /orders/{id} operator_hold: 0
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
+console.log('preorder_module.js loaded — build 133858');
 const POState = {
   campaigns: [],   // [{ id, name, skus[], releaseDate, status, createdAt }]
   orders:    {},   // { campaignId: [{ orderId, orderNumber, createdAt, skus[], qty }] }
