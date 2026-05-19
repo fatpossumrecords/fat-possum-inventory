@@ -16,7 +16,7 @@ const POState = {
 // ── NAV TOGGLE ───────────────────────────────────────────────
 window.togglePreOrderNav = function(e) {
   e.preventDefault();
-  switchView('preorders');
+  switchToPreOrders();
 };
 
 // ── PERSISTENCE (plugs into app.js Gist system) ─────────────
@@ -45,8 +45,18 @@ async function savePreOrderData() {
 window.switchToPreOrders = function() {
   switchView('preorders');
   renderPreOrders();
-  // Check for any campaigns due for release on load
   checkReleaseDates();
+  // Load orders for active campaigns that haven't been loaded yet — one at a time
+  const toLoad = POState.campaigns.filter(c => c.status === 'active' && !POState.orders[c.id] && !POState.loading[c.id]);
+  if (toLoad.length) {
+    // Load sequentially to avoid rate limiting
+    (async () => {
+      for (const c of toLoad) {
+        await loadCampaignOrders(c);
+        await new Promise(r => setTimeout(r, 500)); // 500ms between campaigns
+      }
+    })();
+  }
 };
 
 // Auto-check release dates every time we load the view or on boot
@@ -114,11 +124,6 @@ function renderPreOrders() {
   }
 
   body.innerHTML = html;
-
-  // Auto-load order counts for active campaigns
-  for (const c of active) {
-    if (!POState.orders[c.id]) loadCampaignOrders(c);
-  }
 }
 
 function poSectionHeader(label, count) {
@@ -243,8 +248,13 @@ window.loadCampaignOrders = async function(campaign) {
     : campaign;
   if (!c) return;
 
+  // Guard: don't run if already loading this campaign
+  if (POState.loading[c.id]) return;
+
   POState.loading[c.id] = true;
-  renderPreOrders();
+  // Update just the loading indicator without triggering another load
+  const countEl = document.querySelector('[data-po-count="' + c.id + '"]');
+  if (countEl) countEl.textContent = '…';
 
   try {
     // Fetch all unfulfilled orders — paginated
