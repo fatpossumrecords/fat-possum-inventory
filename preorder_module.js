@@ -383,7 +383,7 @@ window.loadCampaignOrders = async function(campaign) {
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
-        'filter[operator_hold]': '1',
+        'filter[fulfilled]': 'false',
         'include': 'order_items',
       });
       allOrders = allOrders.concat(data.data || []);
@@ -406,6 +406,10 @@ window.loadCampaignOrders = async function(campaign) {
     const matched = [];
     for (const o of allOrders) {
       const attrs = o.attributes || {};
+
+      // Include orders that are held via hold_until OR operator_hold
+      const isHeld = attrs.operator_hold || attrs.hold_until;
+      if (!isHeld) continue;
 
       // Get order items via relationship references
       const itemRefs = o.relationships?.order_items?.data || [];
@@ -461,7 +465,7 @@ window.poConfirmRelease = function(campaignId) {
     loadCampaignOrders(c);
     return;
   }
-  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?\n\nThis will set operator_hold = 0 on each order, freeing them to move to your pack queue. Make sure you have also turned off the Co-Pilot hold rule first.\n\nClick OK to proceed.')) return;
+  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?\n\nThis will clear operator_hold and hold_until on each order, freeing them to move to your pack queue. Make sure you have also turned off the Co-Pilot hold rule first.\n\nClick OK to proceed.')) return;
   releaseHolds(campaignId);
 };
 
@@ -489,7 +493,7 @@ async function releaseHolds(campaignId) {
           data: {
             id: String(o.orderId),
             type: 'orders',
-            attributes: { operator_hold: 0 },
+            attributes: { operator_hold: 0, hold_until: null },
           }
         }),
       });
