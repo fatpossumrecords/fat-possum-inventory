@@ -115,20 +115,33 @@ window.switchToPreOrders = function() {
 // Load on boot — retry until CONFIG is ready (set by app.js)
 document.addEventListener('DOMContentLoaded', function() {
   let attempts = 0;
-  function tryLoad() {
-    attempts++;
-    // CONFIG is declared with const in app.js so it's not on window
-    // Access it directly — if it throws, it's not defined yet
+  function getCredentials() {
+    // Try direct CONFIG access first (works if in same scope)
     try {
-      if (CONFIG && CONFIG.GIST_ID && CONFIG.GIST_TOKEN) {
-        loadPreOrderData();
-        return;
+      if (typeof CONFIG !== 'undefined' && CONFIG.GIST_ID && CONFIG.GIST_TOKEN) {
+        return { gistId: CONFIG.GIST_ID, token: CONFIG.GIST_TOKEN };
       }
     } catch(e) {}
-    if (attempts < 20) {
+    // Fall back to reading from localStorage config cache
+    try {
+      const cached = localStorage.getItem('fp_config_cache');
+      if (cached) {
+        const obj = JSON.parse(cached);
+        if (obj.GIST_ID && obj.GIST_TOKEN) return { gistId: obj.GIST_ID, token: obj.GIST_TOKEN };
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function tryLoad() {
+    attempts++;
+    const creds = getCredentials();
+    if (creds) {
+      loadPreOrderData(creds);
+    } else if (attempts < 20) {
       setTimeout(tryLoad, 500);
     } else {
-      console.warn('Pre-order: CONFIG never became available after 10s');
+      console.warn('Pre-order: credentials never became available after 10s');
     }
   }
   setTimeout(tryLoad, 800); // first attempt after 800ms
