@@ -67,6 +67,10 @@ window.switchWHTab = function(tab) {
     document.getElementById('wh-tab-walkthrough')?.classList.toggle('hidden',   tab !== 'walkthrough');
     document.getElementById('wh-tabbtn-replen')?.classList.toggle('active', tab === 'replenishment');
     document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',   tab === 'walkthrough');
+    // Apply replen defaults from settings each time the tab opens
+    if (tab === 'replenishment' && window.FPSettings?.replen) {
+      if (window.applyReplenDefaults) applyReplenDefaults(window.FPSettings.replen);
+    }
     if (tab === 'walkthrough') wtRender();
   }, 0);
 };
