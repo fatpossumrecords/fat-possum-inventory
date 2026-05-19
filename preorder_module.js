@@ -286,13 +286,15 @@ function poCampaignCard(c) {
     + '</div>'
 
     // Action buttons
-    + '<div style="padding:10px 20px;background:var(--surface2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-    + (isActive ? '<button onclick="loadCampaignOrders({id:\'' + c.id + '\',skus:' + JSON.stringify(c.skus) + '})" class="btn-secondary btn-sm">&#8635; Refresh Orders</button>' : '')
-    + (isActive ? '<button onclick="poConfirmRelease(\'' + c.id + '\')" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;' + (releasing ? 'opacity:0.6;' : '') + '">' + (releasing ? 'Releasing…' : '&#9654; Release All Holds') + '</button>' : '')
-    + (isReleased ? '<button onclick="poArchive(\'' + c.id + '\')" class="btn-secondary btn-sm">Archive</button>' : '')
-    + '<button onclick="poOpenModal(\'' + c.id + '\')" class="btn-secondary btn-sm">Edit</button>'
-    + '<button onclick="poDelete(\'' + c.id + '\')" class="btn-secondary btn-sm" style="color:var(--red);margin-left:auto;">Delete</button>'
-    + '</div>'
+    + (function(){ var b=[];
+      b.push('<div style="padding:10px 20px;background:var(--surface2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">');
+      if(isActive) b.push('<button class="btn-secondary btn-sm" onclick="loadCampaignOrders(&quot;'+c.id+'&quot;)">&#8635; Refresh Orders</button>');
+      if(isActive) b.push('<button style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;'+(releasing?'opacity:0.6;':'')+'" onclick="poConfirmRelease(&quot;'+c.id+'&quot;)">'+( releasing?'Releasing…':'&#9654; Release All Holds')+'</button>');
+      if(isReleased) b.push('<button class="btn-secondary btn-sm" onclick="poArchive(&quot;'+c.id+'&quot;)">Archive</button>');
+      b.push('<button class="btn-secondary btn-sm" onclick="poOpenModal(&quot;'+c.id+'&quot;)">Edit</button>');
+      b.push('<button class="btn-secondary btn-sm" style="color:var(--red);margin-left:auto;" onclick="poDelete(&quot;'+c.id+'&quot;)">Delete</button>');
+      b.push('</div>'); return b.join('');
+    })()
 
     // Order list
     + (orderRowsHtml ? '<div style="border-top:1px solid var(--border);">' + orderRowsHtml + '</div>' : '')
