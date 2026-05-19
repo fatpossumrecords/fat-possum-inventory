@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 135258');
+console.log('preorder_module.js loaded — build 135909');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -248,8 +248,11 @@ function renderPreOrders() {
 
     // Attach tag pill listeners
     const orders = POState.orders[c.id] || [];
-    const allTags = [...new Set(orders.flatMap(o => o.tags || []))].sort();
-    allTags.forEach(function(tag) {
+    const ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
+    const presentTags = ALLOWED_TAGS.filter(t =>
+      orders.some(o => (o.tags||[]).some(ot => ot.toLowerCase() === t.toLowerCase()))
+    );
+    presentTags.forEach(function(tag) {
       const pill = document.getElementById('po-tag-' + c.id + '-' + tag.replace(/\s+/g, '-'));
       if (!pill) return;
       pill.addEventListener('click', function() {
@@ -340,15 +343,18 @@ function poCampaignCard(c) {
   const skuList = (c.skus || []).map(s => '<code style="background:var(--surface2);padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">' + poEsc(s) + '</code>').join('');
 
   // Order rows (show first 8, then expand)
-    // Collect all unique tags across orders
-  const allTags = [...new Set((orders || []).flatMap(o => o.tags || []))].sort();
+    // Only show these specific tags as filter options
+  const ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
+  const allTags = ALLOWED_TAGS.filter(t =>
+    (orders || []).some(o => (o.tags || []).some(ot => ot.toLowerCase() === t.toLowerCase()))
+  );
   const activeTag    = (POState.tagFilters    || {})[c.id] || '';
   const searchTerm   = (POState.searchTerms   || {})[c.id] || '';
   if (!POState.expandedOrders) POState.expandedOrders = {};
 
   // Apply search + tag filter
   const filteredOrders = orders.filter(o => {
-    if (activeTag && !(o.tags || []).includes(activeTag)) return false;
+    if (activeTag && !(o.tags || []).some(t => t.toLowerCase() === activeTag.toLowerCase())) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       if (!o.orderNumber.toLowerCase().includes(term)) return false;
