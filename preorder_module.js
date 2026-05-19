@@ -62,8 +62,8 @@ async function savePreOrderData() {
 async function loadPreOrderData() {
   try {
     // Wait for CONFIG to be available (set by app.js)
-    const gistId    = window.CONFIG?.GIST_ID;
-    const token     = window.CONFIG?.GIST_TOKEN;
+    const gistId = CONFIG.GIST_ID;
+    const token  = CONFIG.GIST_TOKEN;
     if (!gistId || !token) {
       console.warn('Pre-order load: CONFIG not ready yet');
       return;
@@ -117,10 +117,16 @@ document.addEventListener('DOMContentLoaded', function() {
   let attempts = 0;
   function tryLoad() {
     attempts++;
-    if (window.CONFIG && CONFIG.GIST_ID && CONFIG.GIST_TOKEN) {
-      loadPreOrderData();
-    } else if (attempts < 20) {
-      setTimeout(tryLoad, 500); // retry every 500ms, up to 10s
+    // CONFIG is declared with const in app.js so it's not on window
+    // Access it directly — if it throws, it's not defined yet
+    try {
+      if (CONFIG && CONFIG.GIST_ID && CONFIG.GIST_TOKEN) {
+        loadPreOrderData();
+        return;
+      }
+    } catch(e) {}
+    if (attempts < 20) {
+      setTimeout(tryLoad, 500);
     } else {
       console.warn('Pre-order: CONFIG never became available after 10s');
     }
