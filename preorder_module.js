@@ -60,24 +60,13 @@ async function savePreOrderData() {
 }
 
 async function loadPreOrderData() {
-  // 1. Restore from localStorage instantly
-  try {
-    const cached = localStorage.getItem(PO_LS_KEY);
-    if (cached) {
-      POState.campaigns = JSON.parse(cached);
-      updatePOBadge();
-      console.log('Pre-order campaigns from localStorage:', POState.campaigns.length);
-    }
-  } catch(e) {}
-
-  // 2. Fetch fresh from Gist
   try {
     const url = 'https://gist.githubusercontent.com/fatpossumrecords/'
       + CONFIG.GIST_ID + '/raw/' + PO_GIST_FILE + '?t=' + Date.now();
     const res = await fetch(url, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      if (data.preOrderCampaigns) {
+      if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
         POState.campaigns = data.preOrderCampaigns;
         try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
         updatePOBadge();
@@ -96,16 +85,41 @@ window.switchToPreOrders = function() {
   checkReleaseDates();
 };
 
-// Load on boot after app.js has set up CONFIG
-document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(() => {
-    if (window.CONFIG && CONFIG.GIST_ID) {
-      loadPreOrderData().then(() => {
-        checkReleaseDates();
-        renderPreOrders();
-      });
+// ── IMMEDIATE INIT — restore from localStorage before anything renders ──
+(function() {
+  try {
+    const cached = localStorage.getItem(PO_LS_KEY);
+    if (cached) {
+      POState.campaigns = JSON.parse(cached);
+      console.log('Pre-order campaigns restored immediately:', POState.campaigns.length);
+      // Badge update happens after DOM ready
+      document.addEventListener('DOMContentLoaded', () => updatePOBadge());
     }
-  }, 3000); // Wait 3s for app.js to finish boot and set CONFIG
+  } catch(e) {}
+})();
+
+// Load on boot — fetch fresh from Gist after CONFIG is available
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(async () => {
+    if (window.CONFIG && CONFIG.GIST_ID) {
+      try {
+        const url = 'https://gist.githubusercontent.com/fatpossumrecords/'
+          + CONFIG.GIST_ID + '/raw/' + PO_GIST_FILE + '?t=' + Date.now();
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
+            POState.campaigns = data.preOrderCampaigns;
+            try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
+            updatePOBadge();
+            console.log('Pre-order campaigns refreshed from Gist:', POState.campaigns.length);
+          }
+        }
+      } catch(e) {
+        console.warn('Pre-order Gist refresh failed:', e.message);
+      }
+    }
+  }, 4000);
 });
 
 // Manual refresh — loads all active campaigns sequentially
@@ -240,7 +254,9 @@ function poCampaignCard(c) {
           + '<td style="padding:8px 10px;color:var(--text-muted);">' + new Date(o.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '</td>'
           + '<td style="padding:8px 10px;">' + o.skus.map(s => '<code style="background:var(--surface2);padding:1px 5px;border-radius:2px;font-size:10px;margin-right:3px;">' + poEsc(s) + '</code>').join('') + '</td>'
           + '<td style="padding:8px 10px;text-align:right;font-family:\'DM Mono\',monospace;font-weight:600;">' + o.qty + '</td>'
-          + '<td style="padding:8px 10px;text-align:center;"><span style="color:var(--red);font-size:12px;">&#9632; Hold</span></td>'
+          + '<td style="padding:8px 10px;text-align:center;">'
+          + (o.operatorHold ? '<span style="color:var(--red);font-size:11px;font-weight:700;">&#9632; Held</span>' : '<span style="color:var(--text-dim);font-size:11px;">&#9633; Open</span>')
+          + '</td>'
           + '</tr>').join('')
       + '</tbody></table>'
       + (orders.length > 10 ? '<div style="text-align:center;padding:8px;font-size:11px;color:var(--text-muted);">+ ' + (orders.length - 10) + ' more orders not shown</div>' : '');
@@ -318,21 +334,21 @@ window.loadCampaignOrders = async function(campaign) {
   if (countEl) countEl.textContent = '…';
 
   try {
-    // Fetch all unfulfilled orders — paginated
+    // Fetch all orders — paginated (no fulfilled filter, we want all orders with these SKUs)
     let page = 1, allOrders = [], allIncluded = [];
     let lastPage = null;
     do {
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
-        'filter[fulfilled]': 'false',
         'include': 'order_items',
       });
       allOrders = allOrders.concat(data.data || []);
       allIncluded = allIncluded.concat(data.included || []);
       lastPage = data.meta?.page?.lastPage || 1;
       page++;
-    } while (page <= lastPage && page <= 20); // cap at 2000 orders
+      if (page <= lastPage) await new Promise(r => setTimeout(r, 200)); // avoid rate limit
+    } while (page <= lastPage && page <= 50); // cap at 5000 orders
 
     // Build order_items lookup
     const itemsById = {};
@@ -345,8 +361,9 @@ window.loadCampaignOrders = async function(campaign) {
     const matched = [];
     for (const o of allOrders) {
       const attrs = o.attributes || {};
-      // Must be operator held
-      if (!attrs.operator_hold) continue;
+
+      // Skip cancelled orders
+      if (attrs.cancelled_at) continue;
 
       // Get order items
       const itemRefs = o.relationships?.order_items?.data || [];
@@ -355,7 +372,7 @@ window.loadCampaignOrders = async function(campaign) {
         .map(i => (i.attributes?.sku || '').trim().toLowerCase())
         .filter(Boolean);
 
-      // Check if any campaign SKU matches any order line item
+      // Check if any campaign SKU matches
       const matchingSkus = itemSkus.filter(s => campaignSkus.has(s));
       if (!matchingSkus.length) continue;
 
@@ -364,11 +381,12 @@ window.loadCampaignOrders = async function(campaign) {
         .reduce((s, i) => s + parseInt(i.attributes?.quantity || 0), 0);
 
       matched.push({
-        orderId:     o.id,
-        orderNumber: attrs.number || ('#' + o.id),
-        createdAt:   attrs.ordered_at || attrs.created_at || '',
-        skus:        [...new Set(matchingSkus.map(s => {
-          // Return original-case SKU
+        orderId:      o.id,
+        orderNumber:  attrs.number || ('#' + o.id),
+        createdAt:    attrs.ordered_at || attrs.created_at || '',
+        operatorHold: attrs.operator_hold || 0,
+        statusText:   attrs.status_text || '',
+        skus:         [...new Set(matchingSkus.map(s => {
           const orig = items.find(i => (i.attributes?.sku||'').toLowerCase() === s);
           return orig?.attributes?.sku || s;
         }))],
