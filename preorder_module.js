@@ -277,14 +277,17 @@ function poCampaignCard(c) {
   } else if (!orders.length && isActive) {
     orderRowsHtml = '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px;">No held orders found for these SKUs. Make sure Co-Pilot operator hold is active.</div>';
   } else if (orders.length) {
-    const shown = orders.slice(0, 10);
+    if (!POState.expandedOrders) POState.expandedOrders = {};
+    const showAll = !!POState.expandedOrders[c.id];
+    const shown = showAll ? orders : orders.slice(0, 10);
+    const th = 'padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);';
     orderRowsHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
       + '<thead><tr style="background:var(--surface2);">'
-      + '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Order #</th>'
-      + '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Date</th>'
-      + '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">SKUs</th>'
-      + '<th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Units</th>'
-      + '<th style="padding:7px 10px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Hold</th>'
+      + '<th style="'+th+'text-align:left;">Order #</th>'
+      + '<th style="'+th+'text-align:left;">Date</th>'
+      + '<th style="'+th+'text-align:left;">SKUs</th>'
+      + '<th style="'+th+'text-align:right;">Units</th>'
+      + '<th style="'+th+'text-align:center;">Hold</th>'
       + '</tr></thead><tbody>'
       + shown.map(o => '<tr style="border-bottom:1px solid var(--border);">'
           + '<td style="padding:8px 10px;font-family:\'DM Mono\',monospace;font-weight:600;color:var(--accent);">' + poEsc(o.orderNumber) + '</td>'
@@ -292,11 +295,18 @@ function poCampaignCard(c) {
           + '<td style="padding:8px 10px;">' + o.skus.map(s => '<code style="background:var(--surface2);padding:1px 5px;border-radius:2px;font-size:10px;margin-right:3px;">' + poEsc(s) + '</code>').join('') + '</td>'
           + '<td style="padding:8px 10px;text-align:right;font-family:\'DM Mono\',monospace;font-weight:600;">' + o.qty + '</td>'
           + '<td style="padding:8px 10px;text-align:center;">'
-          + (o.operatorHold ? '<span style="color:var(--red);font-size:11px;font-weight:700;">&#9632; Held</span>' : '<span style="color:var(--text-dim);font-size:11px;">&#9633; Open</span>')
+          + (o.operatorHold ? '<span style="color:var(--red);font-size:11px;font-weight:700;">&#9632; Op Hold</span>'
+            : o.holdUntil ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;">&#9632; Date Hold</span>'
+            : '<span style="color:var(--text-dim);font-size:11px;">&#9633; Open</span>')
           + '</td>'
           + '</tr>').join('')
       + '</tbody></table>'
-      + (orders.length > 10 ? '<div style="text-align:center;padding:8px;font-size:11px;color:var(--text-muted);">+ ' + (orders.length - 10) + ' more orders not shown</div>' : '');
+      + (orders.length > 10
+        ? '<div style="text-align:center;padding:10px;border-top:1px solid var(--border);">'
+          + '<button class="btn-secondary btn-sm po-btn" data-action="' + (showAll ? 'collapse' : 'expand') + '" data-cid="' + c.id + '">'
+          + (showAll ? '&#9650; Show less' : '&#9660; Show all ' + orders.length + ' orders') + '</button>'
+          + '</div>'
+        : '');
   }
 
   return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;'
@@ -407,6 +417,10 @@ window.loadCampaignOrders = async function(campaign) {
     for (const o of allOrders) {
       const attrs = o.attributes || {};
 
+      // Skip fulfilled or cancelled orders
+      if (attrs.cancelled_at) continue;
+      if (attrs.status_text && /^fulfilled$/i.test(attrs.status_text.trim())) continue;
+
       // Include orders that are held via hold_until OR operator_hold
       const isHeld = attrs.operator_hold || attrs.hold_until;
       if (!isHeld) continue;
@@ -431,6 +445,7 @@ window.loadCampaignOrders = async function(campaign) {
         orderNumber:  attrs.number || ('#' + o.id),
         createdAt:    attrs.ordered_at || attrs.created_at || '',
         operatorHold: attrs.operator_hold || 0,
+        holdUntil:    attrs.hold_until || null,
         statusText:   attrs.status_text || '',
         skus:         [...new Set(matchingSkus.map(s => {
           const orig = items.find(i => (i.attributes?.sku||'').toLowerCase() === s);
@@ -664,6 +679,8 @@ document.addEventListener('click', function(e) {
   if (action === 'archive') poArchive(cid);
   if (action === 'edit')    poOpenModal(cid);
   if (action === 'delete')  poDelete(cid);
+  if (action === 'expand')  { if (!POState.expandedOrders) POState.expandedOrders = {}; POState.expandedOrders[cid] = true;  renderPreOrders(); }
+  if (action === 'collapse'){ if (!POState.expandedOrders) POState.expandedOrders = {}; POState.expandedOrders[cid] = false; renderPreOrders(); }
 });
 
 function poEsc(s) {
