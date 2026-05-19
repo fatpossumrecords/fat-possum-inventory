@@ -6,12 +6,15 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 134440');
+console.log('preorder_module.js loaded — build 135258');
 const POState = {
-  campaigns: [],   // [{ id, name, skus[], releaseDate, status, createdAt }]
-  orders:    {},   // { campaignId: [{ orderId, orderNumber, createdAt, skus[], qty }] }
-  loading:   {},   // { campaignId: bool }
-  releasing: {},   // { campaignId: bool }
+  campaigns:       [],
+  orders:          {},
+  loading:         {},
+  releasing:       {},
+  expandedOrders:  {},
+  tagFilters:      {},  // { campaignId: 'tagName' }
+  searchTerms:     {},  // { campaignId: 'searchText' }
 };
 
 // ── NAV TOGGLE ───────────────────────────────────────────────
@@ -232,6 +235,29 @@ function renderPreOrders() {
     const isActive   = c.status === 'active';
     const isReleased = c.status === 'released';
     poAttachButtons(c.id, isActive, isReleased);
+
+    // Attach search input listener
+    const searchInput = document.getElementById('po-search-' + c.id);
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        if (!POState.searchTerms) POState.searchTerms = {};
+        POState.searchTerms[c.id] = this.value;
+        renderPreOrders();
+      });
+    }
+
+    // Attach tag pill listeners
+    const orders = POState.orders[c.id] || [];
+    const allTags = [...new Set(orders.flatMap(o => o.tags || []))].sort();
+    allTags.forEach(function(tag) {
+      const pill = document.getElementById('po-tag-' + c.id + '-' + tag.replace(/\s+/g, '-'));
+      if (!pill) return;
+      pill.addEventListener('click', function() {
+        if (!POState.tagFilters) POState.tagFilters = {};
+        POState.tagFilters[c.id] = (POState.tagFilters[c.id] === tag) ? '' : tag;
+        renderPreOrders();
+      });
+    });
   }
 }
 
@@ -314,28 +340,60 @@ function poCampaignCard(c) {
   const skuList = (c.skus || []).map(s => '<code style="background:var(--surface2);padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">' + poEsc(s) + '</code>').join('');
 
   // Order rows (show first 8, then expand)
+    // Collect all unique tags across orders
+  const allTags = [...new Set((orders || []).flatMap(o => o.tags || []))].sort();
+  const activeTag    = (POState.tagFilters    || {})[c.id] || '';
+  const searchTerm   = (POState.searchTerms   || {})[c.id] || '';
+  if (!POState.expandedOrders) POState.expandedOrders = {};
+
+  // Apply search + tag filter
+  const filteredOrders = orders.filter(o => {
+    if (activeTag && !(o.tags || []).includes(activeTag)) return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      if (!o.orderNumber.toLowerCase().includes(term)) return false;
+    }
+    return true;
+  });
+
+  const showAll = !!POState.expandedOrders[c.id];
+  const shown   = showAll ? filteredOrders : filteredOrders.slice(0, 10);
+
   let orderRowsHtml = '';
   if (loading) {
     orderRowsHtml = '<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Loading orders…</div>';
   } else if (!orders.length && isActive) {
-    orderRowsHtml = '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px;">No held orders found for these SKUs. Make sure Co-Pilot operator hold is active.</div>';
+    orderRowsHtml = '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px;">No held orders found. Refresh orders first.</div>';
   } else if (orders.length) {
-    if (!POState.expandedOrders) POState.expandedOrders = {};
-    const showAll = !!POState.expandedOrders[c.id];
-    const shown = showAll ? orders : orders.slice(0, 10);
     const th = 'padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);';
-    orderRowsHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+
+    // Search + tag filter bar
+    const tagPills = allTags.map(t =>
+      '<span id="po-tag-' + c.id + '-' + poEsc(t.replace(/\s+/g,'-')) + '" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px;margin-bottom:4px;'
+      + (activeTag === t ? 'background:var(--accent);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
+      + poEsc(t) + '</span>'
+    ).join('');
+
+    const filterBar = '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface2);">'
+      + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(searchTerm) + '"'
+      + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
+      + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + tagPills + '</div>' : '')
+      + (activeTag || searchTerm ? '<span style="font-size:11px;color:var(--text-muted);">' + filteredOrders.length + ' of ' + orders.length + ' orders</span>' : '')
+      + '</div>';
+
+    orderRowsHtml = filterBar
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
       + '<thead><tr style="background:var(--surface2);">'
       + '<th style="'+th+'text-align:left;">Order #</th>'
       + '<th style="'+th+'text-align:left;">Date</th>'
-      + '<th style="'+th+'text-align:left;">SKUs</th>'
+      + '<th style="'+th+'text-align:left;">Tags</th>'
       + '<th style="'+th+'text-align:right;">Units</th>'
       + '<th style="'+th+'text-align:center;">Hold</th>'
       + '</tr></thead><tbody>'
-      + shown.map(o => '<tr style="border-bottom:1px solid var(--border);">'
+      + (shown.length ? shown.map(o => '<tr style="border-bottom:1px solid var(--border);">'
           + '<td style="padding:8px 10px;font-family:\'DM Mono\',monospace;font-weight:600;color:var(--accent);">' + poEsc(o.orderNumber) + '</td>'
-          + '<td style="padding:8px 10px;color:var(--text-muted);">' + new Date(o.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '</td>'
-          + '<td style="padding:8px 10px;">' + o.skus.map(s => '<code style="background:var(--surface2);padding:1px 5px;border-radius:2px;font-size:10px;margin-right:3px;">' + poEsc(s) + '</code>').join('') + '</td>'
+          + '<td style="padding:8px 10px;color:var(--text-muted);white-space:nowrap;">' + new Date(o.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + '</td>'
+          + '<td style="padding:8px 10px;">' + (o.tags||[]).map(t => '<span style="background:var(--surface2);padding:1px 6px;border-radius:10px;font-size:10px;margin-right:3px;border:1px solid var(--border2);">' + poEsc(t) + '</span>').join('') + '</td>'
           + '<td style="padding:8px 10px;text-align:right;font-family:\'DM Mono\',monospace;font-weight:600;">' + o.qty + '</td>'
           + '<td style="padding:8px 10px;text-align:center;">'
           + (o.operatorHold ? '<span style="color:var(--red);font-size:11px;font-weight:700;">&#9632; Op Hold</span>'
@@ -343,15 +401,15 @@ function poCampaignCard(c) {
             : '<span style="color:var(--text-dim);font-size:11px;">&#9633; Open</span>')
           + '</td>'
           + '</tr>').join('')
+        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">No orders match this filter.</td></tr>')
       + '</tbody></table>'
-      + (orders.length > 10
+      + (filteredOrders.length > 10
         ? '<div style="text-align:center;padding:10px;border-top:1px solid var(--border);">'
           + '<button class="btn-secondary btn-sm po-btn" data-action="' + (showAll ? 'collapse' : 'expand') + '" data-cid="' + c.id + '">'
-          + (showAll ? '&#9650; Show less' : '&#9660; Show all ' + orders.length + ' orders') + '</button>'
+          + (showAll ? '&#9650; Show less' : '&#9660; Show all ' + filteredOrders.length + ' orders') + '</button>'
           + '</div>'
         : '');
   }
-
   return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;'
     + (isActive && (isPast || isToday) ? 'border-left:4px solid var(--red);' : isActive ? 'border-left:4px solid var(--green);' : '')
     + '">'
@@ -490,6 +548,7 @@ window.loadCampaignOrders = async function(campaign) {
         operatorHold: attrs.operator_hold || 0,
         holdUntil:    attrs.hold_until || null,
         statusText:   attrs.status_text || '',
+        tags:         (attrs.tags || '').split(',').map(t => t.trim()).filter(Boolean),
         skus:         [...new Set(matchingSkus.map(s => {
           const orig = items.find(i => (i.attributes?.sku||'').toLowerCase() === s);
           return orig?.attributes?.sku || s;
@@ -498,8 +557,8 @@ window.loadCampaignOrders = async function(campaign) {
       });
     }
 
-    // Sort newest first
-    matched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Sort oldest first — shows longest-waiting orders at top
+    matched.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     POState.orders[c.id] = matched;
 
   } catch(e) {
@@ -517,20 +576,25 @@ window.loadCampaignOrders = async function(campaign) {
 window.poConfirmRelease = function(campaignId) {
   const c = POState.campaigns.find(x => x.id === campaignId);
   if (!c) return;
-  const orders = POState.orders[campaignId] || [];
+  const allOrders = POState.orders[campaignId] || [];
+  const activeTag = (POState.tagFilters || {})[campaignId] || '';
+  const orders = activeTag ? allOrders.filter(o => (o.tags||[]).includes(activeTag)) : allOrders;
+
   if (!orders.length) {
-    if (!confirm('No held orders loaded yet. Refresh orders first, or proceed to attempt release anyway?\n\nClick OK to refresh orders first.')) return;
+    if (!confirm('No held orders loaded yet. Refresh orders first?\n\nClick OK to refresh.')) return;
     loadCampaignOrders(c);
     return;
   }
-  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?\n\nThis will clear operator_hold and hold_until on each order, freeing them to move to your pack queue. Make sure you have also turned off the Co-Pilot hold rule first.\n\nClick OK to proceed.')) return;
-  releaseHolds(campaignId);
+
+  const tagNote = activeTag ? '\n\nFiltered to tag "' + activeTag + '" (' + orders.length + ' of ' + allOrders.length + ' orders).' : '';
+  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?' + tagNote + '\n\nThis will clear operator_hold and hold_until on each order. Make sure you have turned off the Co-Pilot hold rule first.\n\nClick OK to proceed.')) return;
+  releaseHolds(campaignId, orders);
 };
 
-async function releaseHolds(campaignId) {
+async function releaseHolds(campaignId, orders) {
   const c = POState.campaigns.find(x => x.id === campaignId);
   if (!c) return;
-  const orders = POState.orders[campaignId] || [];
+  if (!orders) orders = POState.orders[campaignId] || [];
   if (!orders.length) { toast('No held orders to release.', 'error'); return; }
 
   POState.releasing[campaignId] = true;
