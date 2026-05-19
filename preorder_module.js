@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 180353');
+console.log('preorder_module.js loaded — build 184237');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -426,7 +426,7 @@ function poCampaignCard(c) {
       + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
       + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + tagPills + '</div>' : '')
       + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (activeTags.length || searchTerm ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
-      + (activeTag || searchTerm ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
+      + (activeTags.length || searchTerm ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
       + '</div>';
 
     orderRowsHtml = filterBar
