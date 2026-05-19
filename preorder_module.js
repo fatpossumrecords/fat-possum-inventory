@@ -1,5 +1,5 @@
 /* ============================================================
-   FAT POSSUM -- PRE-ORDER CAMPAIGN MANAGER
+   FAT POSSUM -- PRE-ORDER CAMPAIGN MANAGER  v20260519014108
    preorder_module.js
    Tracks operator-held pre-order campaigns and releases them
    via PATCH /orders/{id} operator_hold: 0
@@ -199,6 +199,43 @@ function renderPreOrders() {
   body.innerHTML = html;
 }
 
+function poCardButtons(id, isActive, isReleased) {
+  var d = document.createElement('div');
+  d.style.cssText = 'padding:10px 20px;background:var(--surface2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+  if (isActive) {
+    var r = document.createElement('button');
+    r.className = 'btn-secondary btn-sm';
+    r.textContent = '↻ Refresh Orders';
+    r.addEventListener('click', function() { loadCampaignOrders(id); });
+    d.appendChild(r);
+    var rel = document.createElement('button');
+    rel.style.cssText = 'background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;';
+    rel.innerHTML = '&#9654; Release All Holds';
+    rel.addEventListener('click', function() { poConfirmRelease(id); });
+    d.appendChild(rel);
+  }
+  if (isReleased) {
+    var a = document.createElement('button');
+    a.className = 'btn-secondary btn-sm';
+    a.textContent = 'Archive';
+    a.addEventListener('click', function() { poArchive(id); });
+    d.appendChild(a);
+  }
+  var e = document.createElement('button');
+  e.className = 'btn-secondary btn-sm';
+  e.textContent = 'Edit';
+  e.addEventListener('click', function() { poOpenModal(id); });
+  d.appendChild(e);
+  var del = document.createElement('button');
+  del.className = 'btn-secondary btn-sm';
+  del.style.cssText = 'color:var(--red);margin-left:auto;';
+  del.textContent = 'Delete';
+  del.addEventListener('click', function() { poDelete(id); });
+  d.appendChild(del);
+  return d.outerHTML;
+}
+
+
 function poSectionHeader(label, count) {
   return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:2px solid var(--border);margin-bottom:16px;">'
     + label + ' <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;">' + count + '</span>'
@@ -302,15 +339,7 @@ function poCampaignCard(c) {
     + '</div>'
 
     // Action buttons
-    + (function(){ var b=[];
-      b.push('<div style="padding:10px 20px;background:var(--surface2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">');
-      if(isActive) b.push('<button class="btn-secondary btn-sm" onclick="loadCampaignOrders(&quot;'+c.id+'&quot;)">&#8635; Refresh Orders</button>');
-      if(isActive) b.push('<button style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;'+(releasing?'opacity:0.6;':'')+'" onclick="poConfirmRelease(&quot;'+c.id+'&quot;)">'+( releasing?'Releasing…':'&#9654; Release All Holds')+'</button>');
-      if(isReleased) b.push('<button class="btn-secondary btn-sm" onclick="poArchive(&quot;'+c.id+'&quot;)">Archive</button>');
-      b.push('<button class="btn-secondary btn-sm" onclick="poOpenModal(&quot;'+c.id+'&quot;)">Edit</button>');
-      b.push('<button class="btn-secondary btn-sm" style="color:var(--red);margin-left:auto;" onclick="poDelete(&quot;'+c.id+'&quot;)">Delete</button>');
-      b.push('</div>'); return b.join('');
-    })()
+    + poCardButtons(c.id, isActive, isReleased)
 
     // Order list
     + (orderRowsHtml ? '<div style="border-top:1px solid var(--border);">' + orderRowsHtml + '</div>' : '')
@@ -324,20 +353,33 @@ window.loadCampaignOrders = async function(campaign) {
     ? POState.campaigns.find(x => x.id === campaign)
     : campaign;
   if (!c) return;
-
-  // Guard: don't run if already loading this campaign
   if (POState.loading[c.id]) return;
 
   POState.loading[c.id] = true;
-  // Update just the loading indicator without triggering another load
-  const countEl = document.querySelector('[data-po-count="' + c.id + '"]');
-  if (countEl) countEl.textContent = '…';
+
+  // Show status bar
+  function setStatus(msg, pct) {
+    const bar = document.getElementById('po-status-bar');
+    const txt = document.getElementById('po-status-text');
+    const prg = document.getElementById('po-status-progress');
+    if (!bar) return;
+    bar.style.display = 'flex';
+    if (txt) txt.textContent = msg;
+    if (prg) prg.style.width = (pct || 0) + '%';
+  }
+  function hideStatus() {
+    const bar = document.getElementById('po-status-bar');
+    if (bar) bar.style.display = 'none';
+  }
+
+  setStatus('Connecting to Packiyo…', 5);
 
   try {
-    // Fetch all orders — paginated (no fulfilled filter, we want all orders with these SKUs)
+    // Fetch all orders — paginated
     let page = 1, allOrders = [], allIncluded = [];
     let lastPage = null;
     do {
+      setStatus('Fetching page ' + page + (lastPage ? ' of ' + lastPage : '') + '…', lastPage ? Math.round((page/lastPage)*80) : 10);
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
@@ -347,8 +389,10 @@ window.loadCampaignOrders = async function(campaign) {
       allIncluded = allIncluded.concat(data.included || []);
       lastPage = data.meta?.page?.lastPage || 1;
       page++;
-      if (page <= lastPage) await new Promise(r => setTimeout(r, 200)); // avoid rate limit
-    } while (page <= lastPage && page <= 50); // cap at 5000 orders
+      if (page <= lastPage) await new Promise(r => setTimeout(r, 200));
+    } while (page <= lastPage && page <= 50);
+
+    setStatus('Scanning ' + allOrders.length + ' orders for matching SKUs…', 85);
 
     // Build order_items lookup
     const itemsById = {};
@@ -404,6 +448,7 @@ window.loadCampaignOrders = async function(campaign) {
     toast('Failed to load orders: ' + e.message, 'error');
   } finally {
     POState.loading[c.id] = false;
+    hideStatus();
     renderPreOrders();
   }
 };
@@ -604,6 +649,21 @@ document.addEventListener('click', e => {
 // Gist integration handled via loadPreOrderData() and savePreOrderData()
 
 // ── UTILITY ───────────────────────────────────────────────────
+// ── EVENT DELEGATION for campaign buttons ────────────────────
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.po-btn');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const cid    = btn.dataset.cid;
+  if (!action || !cid) return;
+  e.stopPropagation();
+  if (action === 'refresh') loadCampaignOrders(cid);
+  if (action === 'release') poConfirmRelease(cid);
+  if (action === 'archive') poArchive(cid);
+  if (action === 'edit')    poOpenModal(cid);
+  if (action === 'delete')  poDelete(cid);
+});
+
 function poEsc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
