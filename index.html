@@ -171,6 +171,11 @@
         FP WH Action
         <span id="wh-nav-arrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▸</span>
       </div>
+      <!-- Mobile-only settings nav item -->
+      <div id="mobile-settings-btn" class="nav-item" style="display:none;cursor:pointer;border-top:1px solid var(--border);" onclick="openSettings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </div>
       <div id="wh-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">Replenishment</div>
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('walkthrough')">Warehouse View</div>
@@ -264,8 +269,14 @@
           <a href="https://claude.ai" target="_blank" rel="noopener" title="Ask Claude"
             style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:linear-gradient(135deg,#b83228,#8B4513);border-radius:4px;color:white;text-decoration:none;flex-shrink:0;"
             onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+          <a href="https://claude.ai" target="_blank" rel="noopener" title="Ask Claude"
+            style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:linear-gradient(135deg,#b83228,#8B4513);border-radius:4px;color:white;text-decoration:none;flex-shrink:0;"
+            onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           </a>
+          <button onclick="openSettings()" title="Settings" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);cursor:pointer;flex-shrink:0;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
           <button id="logout-btn" class="btn-ghost btn-sm" style="flex:1;text-align:left;font-size:10px;">Sign out</button>
         </div>
       </div>
@@ -930,8 +941,136 @@
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div id="settings-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:none;align-items:flex-start;justify-content:flex-end;padding:20px;">
+  <div style="background:var(--surface);border-radius:8px;width:480px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 16px 40px rgba(0,0,0,0.2);margin-top:8px;">
+
+    <!-- Header -->
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span style="font-size:14px;font-weight:700;">Settings</span>
+      </div>
+      <button onclick="closeSettings()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">&#x2715;</button>
+    </div>
+
+    <!-- Body -->
+    <div style="overflow-y:auto;flex:1;padding:0;">
+
+      <!-- APPEARANCE -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Appearance</div>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:10px;">
+          <span style="font-size:13px;">Default to dark mode</span>
+          <input type="checkbox" id="s-dark-mode" style="width:16px;height:16px;cursor:pointer;" />
+        </label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:13px;">Table density</span>
+          <select id="s-table-density" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Dashboard</div>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:10px;">
+          <span style="font-size:13px;">Show "Needs Attention" banner</span>
+          <input type="checkbox" id="s-needs-attention" style="width:16px;height:16px;cursor:pointer;" />
+        </label>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Visible stat cards</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-total" /> Total Products</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-global" /> Global Stock</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-alerts" /> Reorder Alerts</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-resolved" /> Resolved (30d)</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-wh" /> Walk Replenish</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-runs" /> Production Runs</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-mfg" /> Mfg Predictions</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-card-clock" /> Stockout Clock</label>
+        </div>
+      </div>
+
+      <!-- INVENTORY -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Inventory</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:13px;">Default warehouse view</span>
+          <select id="s-default-warehouse" style="font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">
+            <option value="fp">FP Warehouse</option>
+            <option value="us">US Total</option>
+            <option value="total">Global Total</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Alert Badges</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-badge-reorder" /> Reorder alerts badge</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-badge-movements" /> Movements badge</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="s-badge-runs" /> Production runs badge</label>
+        </div>
+      </div>
+
+      <!-- REPLENISHMENT DEFAULTS -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">Replenishment Defaults</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Applied on page load. Can be overridden in the WH Action panel — resets on refresh.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Look-back days</label>
+            <input type="number" id="s-replen-lookback" min="7" max="90" style="width:100%;padding:6px 8px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Supply target (days)</label>
+            <input type="number" id="s-replen-supply" min="1" max="30" style="width:100%;padding:6px 8px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Outlier threshold</label>
+            <input type="number" id="s-replen-outlier" min="1" style="width:100%;padding:6px 8px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Max units cap</label>
+            <input type="number" id="s-replen-max" min="1" style="width:100%;padding:6px 8px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Min units</label>
+            <input type="number" id="s-replen-min" min="1" style="width:100%;padding:6px 8px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" />
+          </div>
+        </div>
+      </div>
+
+      <!-- PRE-ORDER -->
+      <div style="padding:16px 20px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Pre-Order</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="s-po-autorefresh" />
+          Auto-refresh orders when opening Pre-Order view
+        </label>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">When off, use the Refresh Orders button manually to avoid rate limiting.</div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--surface2);">
+      <button onclick="resetSettings()" style="background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:4px;padding:7px 14px;font-size:12px;cursor:pointer;">Reset to defaults</button>
+      <div style="display:flex;gap:8px;">
+        <button onclick="closeSettings()" class="btn-secondary btn-sm">Cancel</button>
+        <button onclick="saveSettingsFromForm()" class="btn-primary btn-sm">Save Settings</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script src="wh_module.js"></script>
 <script src="app.js"></script>
-<script src="preorder_module.js?v=7"></script>
+<script src="preorder_module.js?v=8"></script>
+<script src="settings_module.js"></script>
 </body>
 </html>
