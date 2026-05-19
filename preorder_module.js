@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 184237');
+console.log('preorder_module.js loaded — build 184659');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -610,6 +610,9 @@ window.loadCampaignOrders = async function(campaign) {
     POState.orders[c.id] = matched;
     if (!POState.ordersRefreshedAt) POState.ordersRefreshedAt = {};
     POState.ordersRefreshedAt[c.id] = Date.now();
+
+    // Save to Gist and localStorage so orders persist across sessions
+    savePreOrderData();
 
   } catch(e) {
     console.error('Pre-order load failed:', e);
