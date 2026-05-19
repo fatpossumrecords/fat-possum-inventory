@@ -375,7 +375,7 @@ window.loadCampaignOrders = async function(campaign) {
   setStatus('Connecting to Packiyo…', 5);
 
   try {
-    // Fetch all orders — paginated
+    // Fetch only operator-held orders — these are the pre-orders
     let page = 1, allOrders = [], allIncluded = [];
     let lastPage = null;
     do {
@@ -383,6 +383,7 @@ window.loadCampaignOrders = async function(campaign) {
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
+        'filter[operator_hold]': '1',
         'include': 'order_items',
       });
       allOrders = allOrders.concat(data.data || []);
@@ -406,10 +407,7 @@ window.loadCampaignOrders = async function(campaign) {
     for (const o of allOrders) {
       const attrs = o.attributes || {};
 
-      // Skip cancelled orders
-      if (attrs.cancelled_at) continue;
-
-      // Get order items
+      // Get order items via relationship references
       const itemRefs = o.relationships?.order_items?.data || [];
       const items = itemRefs.map(r => itemsById[r.id]).filter(Boolean);
       const itemSkus = items
