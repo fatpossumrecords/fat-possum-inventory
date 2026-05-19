@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 152733');
+console.log('preorder_module.js loaded — build 175808');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -47,7 +47,11 @@ async function savePreOrderData() {
   // 2. Save to a dedicated Gist file (separate from fp_config.json)
   try {
     const body = JSON.stringify({
-      files: { [PO_GIST_FILE]: { content: JSON.stringify({ preOrderCampaigns: POState.campaigns }) } }
+      files: { [PO_GIST_FILE]: { content: JSON.stringify({
+          preOrderCampaigns: POState.campaigns,
+          ordersCache: POState.orders,
+          ordersCacheTs: Date.now(),
+        }) } }
     });
     let _gistId, _token;
     try { _gistId = CONFIG.GIST_ID; _token = CONFIG.GIST_TOKEN; } catch(e) {}
@@ -86,7 +90,16 @@ async function loadPreOrderData(creds) {
         const data = JSON.parse(fileContent);
         if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
           POState.campaigns = data.preOrderCampaigns;
-          try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
+          // Restore cached orders so we don't need to re-scan on every load
+          if (data.ordersCache) {
+            POState.orders = data.ordersCache;
+            const ts = data.ordersCacheTs ? new Date(data.ordersCacheTs).toLocaleString() : 'unknown';
+            console.log('Pre-order orders restored from cache (last refreshed: ' + ts + ')');
+          }
+          try {
+      localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns));
+      localStorage.setItem(PO_LS_KEY + '_orders', JSON.stringify({ orders: POState.orders, ts: Date.now() }));
+    } catch(e) {}
           updatePOBadge();
           console.log('Pre-order campaigns from Gist:', POState.campaigns.length);
           const view = document.getElementById('view-preorders');
@@ -117,8 +130,14 @@ window.switchToPreOrders = function() {
     if (cached) {
       POState.campaigns = JSON.parse(cached);
       console.log('Pre-order campaigns restored immediately:', POState.campaigns.length);
-      // Badge update happens after DOM ready
       document.addEventListener('DOMContentLoaded', () => updatePOBadge());
+    }
+    // Also restore orders cache from localStorage
+    const ordersCache = localStorage.getItem(PO_LS_KEY + '_orders');
+    if (ordersCache) {
+      const parsed = JSON.parse(ordersCache);
+      POState.orders = parsed.orders || {};
+      console.log('Pre-order orders cache restored from localStorage');
     }
   } catch(e) {}
 })();
@@ -387,11 +406,18 @@ function poCampaignCard(c) {
       + poEsc(t) + '</span>'
     ).join('');
 
+    // Last refreshed timestamp
+    const refreshedAt = POState.orders[c.id]?._refreshedAt;
+    const refreshedStr = refreshedAt
+      ? 'Last refreshed ' + timeAgo(refreshedAt)
+      : 'Not yet refreshed this session';
+
     const filterBar = '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface2);">'
       + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(searchTerm) + '"'
       + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
       + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + tagPills + '</div>' : '')
       + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (activeTags.length || searchTerm ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
+      + (activeTag || searchTerm ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
       + '</div>';
 
     orderRowsHtml = filterBar
@@ -573,6 +599,7 @@ window.loadCampaignOrders = async function(campaign) {
     // Sort oldest first — shows longest-waiting orders at top
     matched.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     POState.orders[c.id] = matched;
+    POState.orders[c.id]._refreshedAt = Date.now(); // store as property
 
   } catch(e) {
     console.error('Pre-order load failed:', e);
@@ -667,8 +694,13 @@ async function releaseHolds(campaignId, orders) {
     POState.campaigns[idx].lastReleasedAt = new Date().toISOString();
   }
 
-  // Clear order cache so it refreshes
+  // Clear order cache for this campaign so it re-scans on next refresh
   delete POState.orders[campaignId];
+  // Also update localStorage orders cache
+  try {
+    const lsOrders = JSON.parse(localStorage.getItem(PO_LS_KEY + '_orders') || '{}');
+    if (lsOrders.orders) { delete lsOrders.orders[campaignId]; localStorage.setItem(PO_LS_KEY + '_orders', JSON.stringify(lsOrders)); }
+  } catch(e) {}
 
   await savePreOrderData();
 
@@ -882,6 +914,15 @@ document.addEventListener('click', function(e) {
 
 function poEsc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(ts) {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return hrs + 'h ago';
+  return Math.floor(hrs / 24) + 'd ago';
 }
 
 function updatePOBadge() {
