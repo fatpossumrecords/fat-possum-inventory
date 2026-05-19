@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 135909');
+console.log('preorder_module.js loaded — build 140612');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -242,7 +242,7 @@ function renderPreOrders() {
       searchInput.addEventListener('input', function() {
         if (!POState.searchTerms) POState.searchTerms = {};
         POState.searchTerms[c.id] = this.value;
-        renderPreOrders();
+        poFilterInPlace(c.id);
       });
     }
 
@@ -258,7 +258,7 @@ function renderPreOrders() {
       pill.addEventListener('click', function() {
         if (!POState.tagFilters) POState.tagFilters = {};
         POState.tagFilters[c.id] = (POState.tagFilters[c.id] === tag) ? '' : tag;
-        renderPreOrders();
+        poFilterInPlace(c.id);
       });
     });
   }
@@ -384,11 +384,11 @@ function poCampaignCard(c) {
       + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(searchTerm) + '"'
       + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
       + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + tagPills + '</div>' : '')
-      + (activeTag || searchTerm ? '<span style="font-size:11px;color:var(--text-muted);">' + filteredOrders.length + ' of ' + orders.length + ' orders</span>' : '')
+      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (activeTag || searchTerm ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
       + '</div>';
 
     orderRowsHtml = filterBar
-      + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+      + '<table id="po-table-' + c.id + '" style="width:100%;border-collapse:collapse;font-size:12px;">'
       + '<thead><tr style="background:var(--surface2);">'
       + '<th style="'+th+'text-align:left;">Order #</th>'
       + '<th style="'+th+'text-align:left;">Date</th>'
@@ -399,7 +399,7 @@ function poCampaignCard(c) {
       + (shown.length ? shown.map(o => '<tr style="border-bottom:1px solid var(--border);">'
           + '<td style="padding:8px 10px;font-family:\'DM Mono\',monospace;font-weight:600;color:var(--accent);">' + poEsc(o.orderNumber) + '</td>'
           + '<td style="padding:8px 10px;color:var(--text-muted);white-space:nowrap;">' + new Date(o.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + '</td>'
-          + '<td style="padding:8px 10px;">' + (o.tags||[]).map(t => '<span style="background:var(--surface2);padding:1px 6px;border-radius:10px;font-size:10px;margin-right:3px;border:1px solid var(--border2);">' + poEsc(t) + '</span>').join('') + '</td>'
+          + '<td style="padding:8px 10px;">' + (o.tags||[]).filter(t => ['B2B','D2C','International'].some(a => a.toLowerCase()===t.toLowerCase())).map(t => '<span style="background:var(--surface2);padding:1px 6px;border-radius:10px;font-size:10px;margin-right:3px;border:1px solid var(--border2);">' + poEsc(t) + '</span>').join('') + '</td>'
           + '<td style="padding:8px 10px;text-align:right;font-family:\'DM Mono\',monospace;font-weight:600;">' + o.qty + '</td>'
           + '<td style="padding:8px 10px;text-align:center;">'
           + (o.operatorHold ? '<span style="color:var(--red);font-size:11px;font-weight:700;">&#9632; Op Hold</span>'
@@ -779,6 +779,63 @@ document.addEventListener('click', e => {
 // Gist integration handled via loadPreOrderData() and savePreOrderData()
 
 // ── UTILITY ───────────────────────────────────────────────────
+// ── IN-PLACE FILTER — updates order table without full re-render ──
+// Avoids losing focus on search input
+function poFilterInPlace(campaignId) {
+  const orders    = POState.orders[campaignId] || [];
+  const activeTag = (POState.tagFilters  || {})[campaignId] || '';
+  const searchTerm = (POState.searchTerms || {})[campaignId] || '';
+
+  const filtered = orders.filter(o => {
+    if (activeTag && !(o.tags||[]).some(t => t.toLowerCase() === activeTag.toLowerCase())) return false;
+    if (searchTerm && !o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+
+  // Show/hide rows by toggling display
+  const tbody = document.querySelector('#po-table-' + campaignId + ' tbody');
+  if (!tbody) return;
+  const rows = [...tbody.querySelectorAll('tr[data-order-id]')];
+  const showAll = !!(POState.expandedOrders || {})[campaignId];
+  let shown = 0;
+  rows.forEach(row => {
+    const orderId = row.dataset.orderId;
+    const order   = filtered.find(o => o.orderId === orderId);
+    const withinLimit = showAll || shown < 10;
+    if (order && withinLimit) { row.style.display = ''; shown++; }
+    else row.style.display = 'none';
+  });
+
+  // Update no-results row
+  let noResults = tbody.querySelector('.po-no-results');
+  if (!filtered.length) {
+    if (!noResults) {
+      noResults = document.createElement('tr');
+      noResults.className = 'po-no-results';
+      noResults.innerHTML = '<td colspan="5" style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">No orders match this filter.</td>';
+      tbody.appendChild(noResults);
+    }
+    noResults.style.display = '';
+  } else if (noResults) {
+    noResults.style.display = 'none';
+  }
+
+  // Update count label
+  const countEl = document.getElementById('po-filter-count-' + campaignId);
+  if (countEl) {
+    countEl.textContent = (activeTag || searchTerm) ? filtered.length + ' of ' + orders.length + ' orders' : '';
+  }
+
+  // Update tag pill active states
+  const ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
+  ALLOWED_TAGS.forEach(tag => {
+    const pill = document.getElementById('po-tag-' + campaignId + '-' + tag.replace(/\s+/g,'-'));
+    if (!pill) return;
+    pill.style.background = (activeTag === tag) ? 'var(--accent)' : 'var(--surface2)';
+    pill.style.color      = (activeTag === tag) ? '#fff' : 'var(--text-muted)';
+  });
+}
+
 // ── EVENT DELEGATION for campaign buttons ────────────────────
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('.po-btn');
