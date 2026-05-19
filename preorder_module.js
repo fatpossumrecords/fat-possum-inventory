@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 133858');
+console.log('preorder_module.js loaded — build 134440');
 const POState = {
   campaigns: [],   // [{ id, name, skus[], releaseDate, status, createdAt }]
   orders:    {},   // { campaignId: [{ orderId, orderNumber, createdAt, skus[], qty }] }
@@ -226,9 +226,23 @@ function renderPreOrders() {
   }
 
   body.innerHTML = html;
+
+  // Attach real DOM buttons with event listeners to each campaign card
+  for (const c of POState.campaigns) {
+    const isActive   = c.status === 'active';
+    const isReleased = c.status === 'released';
+    poAttachButtons(c.id, isActive, isReleased);
+  }
 }
 
 function poCardButtons(id, isActive, isReleased) {
+  // Return a placeholder div — real buttons with listeners attached after render
+  return '<div id="po-btns-' + id + '" class="po-btn-placeholder"></div>';
+}
+
+function poAttachButtons(id, isActive, isReleased) {
+  var placeholder = document.getElementById('po-btns-' + id);
+  if (!placeholder) return;
   var d = document.createElement('div');
   d.style.cssText = 'padding:10px 20px;background:var(--surface2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
   if (isActive) {
@@ -261,7 +275,7 @@ function poCardButtons(id, isActive, isReleased) {
   del.textContent = 'Delete';
   del.addEventListener('click', function() { poDelete(id); });
   d.appendChild(del);
-  return d.outerHTML;
+  placeholder.replaceWith(d);
 }
 
 
