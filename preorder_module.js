@@ -33,11 +33,59 @@ window.getPreOrderSaveData = function() {
   return { preOrderCampaigns: POState.campaigns };
 };
 
+const PO_LS_KEY   = 'fp_preorder_campaigns';
+const PO_GIST_FILE = 'fp_preorders.json';
+
 async function savePreOrderData() {
-  // Merge into existing gist config and save
-  // We piggyback on app.js saveGistData which reads getPreOrderSaveData()
-  if (window.saveGistData) {
-    await saveGistData();
+  // 1. Always save to localStorage immediately
+  try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
+
+  // 2. Save to a dedicated Gist file (separate from fp_config.json)
+  try {
+    const body = JSON.stringify({
+      files: { [PO_GIST_FILE]: { content: JSON.stringify({ preOrderCampaigns: POState.campaigns }) } }
+    });
+    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+      method: 'PATCH',
+      headers: { 'Authorization': 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+      body,
+    });
+    if (!res.ok) console.warn('Pre-order Gist save failed:', res.status);
+    else console.log('Pre-order campaigns saved to Gist');
+  } catch(e) {
+    console.warn('Pre-order Gist save error:', e.message);
+  }
+
+  updatePOBadge();
+}
+
+async function loadPreOrderData() {
+  // 1. Restore from localStorage instantly
+  try {
+    const cached = localStorage.getItem(PO_LS_KEY);
+    if (cached) {
+      POState.campaigns = JSON.parse(cached);
+      updatePOBadge();
+      console.log('Pre-order campaigns from localStorage:', POState.campaigns.length);
+    }
+  } catch(e) {}
+
+  // 2. Fetch fresh from Gist
+  try {
+    const url = 'https://gist.githubusercontent.com/fatpossumrecords/'
+      + CONFIG.GIST_ID + '/raw/' + PO_GIST_FILE + '?t=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.preOrderCampaigns) {
+        POState.campaigns = data.preOrderCampaigns;
+        try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
+        updatePOBadge();
+        console.log('Pre-order campaigns from Gist:', POState.campaigns.length);
+      }
+    }
+  } catch(e) {
+    console.warn('Pre-order Gist load failed:', e.message);
   }
 }
 
@@ -47,6 +95,18 @@ window.switchToPreOrders = function() {
   renderPreOrders();
   checkReleaseDates();
 };
+
+// Load on boot after app.js has set up CONFIG
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(() => {
+    if (window.CONFIG && CONFIG.GIST_ID) {
+      loadPreOrderData().then(() => {
+        checkReleaseDates();
+        renderPreOrders();
+      });
+    }
+  }, 3000); // Wait 3s for app.js to finish boot and set CONFIG
+});
 
 // Manual refresh — loads all active campaigns sequentially
 window.poRefreshAll = async function() {
@@ -521,53 +581,7 @@ document.addEventListener('click', e => {
   if (e.target.id === 'po-modal') poCloseModal();
 });
 
-// -- GIST INTEGRATION ---------------------------------------------------
-// preorder_module.js loads AFTER app.js so applyConfigData is already defined.
-// We patch it to also load pre-order campaigns.
-// For save, we intercept the fetch call to the Gist PATCH to inject preOrderCampaigns.
-(function() {
-  // Patch applyConfigData to restore campaigns on Gist load
-  const origApply = window.applyConfigData;
-  if (origApply && !origApply._poPatched) {
-    window.applyConfigData = function(parsed) {
-      origApply(parsed);
-      if (parsed && parsed.preOrderCampaigns) {
-        POState.campaigns = parsed.preOrderCampaigns;
-        updatePOBadge();
-        console.log('Pre-order campaigns loaded:', POState.campaigns.length);
-      }
-    };
-    window.applyConfigData._poPatched = true;
-  }
-
-  // Intercept GitHub Gist PATCH to inject preOrderCampaigns into fp_config.json
-  const origFetch = window.fetch;
-  window.fetch = function(url, options) {
-    try {
-      if (typeof url === 'string'
-          && url.includes('api.github.com/gists')
-          && options && options.method === 'PATCH'
-          && options.body && typeof options.body === 'string') {
-        const body = JSON.parse(options.body);
-        const configFile = (body.files || {})['fp_config.json'];
-        if (configFile && configFile.content && typeof configFile.content === 'string') {
-          const payload = JSON.parse(configFile.content);
-          payload.preOrderCampaigns = POState.campaigns;
-          const newContent = JSON.stringify(payload);
-          // Only replace if serialization succeeded and is non-empty
-          if (newContent && newContent.length > 2) {
-            configFile.content = newContent;
-            options = Object.assign({}, options, { body: JSON.stringify(body) });
-          }
-        }
-      }
-    } catch(e) {
-      // Never break the original request - just skip injection on error
-      console.warn('PO Gist injection skipped:', e.message);
-    }
-    return origFetch.call(this, url, options);
-  };
-})();
+// Gist integration handled via loadPreOrderData() and savePreOrderData()
 
 // ── UTILITY ───────────────────────────────────────────────────
 function poEsc(s) {
