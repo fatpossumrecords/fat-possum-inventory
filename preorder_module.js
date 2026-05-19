@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 144444');
+console.log('preorder_module.js loaded — build 152733');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -105,7 +105,7 @@ window.switchToPreOrders = function() {
   renderPreOrders();
   checkReleaseDates();
   // Auto-refresh if enabled in settings
-  if (window.FPSettings?.poAutoRefresh) {
+  if (window._FPUserSettings?.poAutoRefresh) {
     setTimeout(() => poRefreshAll(), 500);
   }
 };
@@ -652,12 +652,19 @@ async function releaseHolds(campaignId, orders) {
 
   POState.releasing[campaignId] = false;
 
-  // Update campaign status
+  // Only mark as released if ALL orders were released (no tag filter active)
+  // For partial/tag-filtered releases, keep the campaign active
   const idx = POState.campaigns.findIndex(x => x.id === campaignId);
+  const activeTags = (POState.tagFilters || {})[campaignId] || [];
+  const wasFiltered = activeTags.length > 0;
   if (idx >= 0) {
-    POState.campaigns[idx].status = 'released';
-    POState.campaigns[idx].releasedAt = new Date().toISOString();
-    POState.campaigns[idx].releasedCount = released;
+    // Only auto-release if no tag filter (full release)
+    if (!wasFiltered) {
+      POState.campaigns[idx].status = 'released';
+      POState.campaigns[idx].releasedAt = new Date().toISOString();
+    }
+    POState.campaigns[idx].releasedCount = (POState.campaigns[idx].releasedCount || 0) + released;
+    POState.campaigns[idx].lastReleasedAt = new Date().toISOString();
   }
 
   // Clear order cache so it refreshes
@@ -805,8 +812,17 @@ function poFilterInPlace(campaignId) {
 
   // Show/hide rows by toggling display
   const tbody = document.querySelector('#po-table-' + campaignId + ' tbody');
-  if (!tbody) return;
+  if (!tbody) { renderPreOrders(); return; } // table not rendered yet, do full render
   const rows = [...tbody.querySelectorAll('tr[data-order-id]')];
+
+  // If we have fewer DOM rows than total orders, we need a full re-render
+  // to show all rows (tag filter may need rows not currently in DOM)
+  if (rows.length < orders.length && activeTags.length > 0) {
+    POState.expandedOrders[campaignId] = true;
+    renderPreOrders();
+    return;
+  }
+
   const showAll = !!(POState.expandedOrders || {})[campaignId];
   let shown = 0;
   rows.forEach(row => {
