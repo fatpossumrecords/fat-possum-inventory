@@ -156,6 +156,12 @@
         <span id="alert-badge" class="badge hidden">0</span>
       </a>
     </nav>
+      <!-- PRE-ORDER MANAGER -->
+      <div class="nav-item" style="cursor:pointer;border-top:1px solid var(--border);" onclick="togglePreOrderNav(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Pre-Order
+        <span id="po-badge" class="badge hidden">0</span>
+      </div>
       <div class="nav-item" style="cursor:pointer;border-top:1px solid var(--border);" onclick="toggleWHNav(event)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         FP WH Action
@@ -587,6 +593,29 @@
     </div>
 
     <!-- FP WH REPLENISHMENT VIEW -->
+    <!-- PRE-ORDER CAMPAIGN MANAGER VIEW -->
+    <div id="view-preorders" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h2>Pre-Order Campaigns</h2>
+          <p class="view-sub">Track operator-held pre-orders and release them on a fixed date</p>
+        </div>
+        <div class="view-actions">
+          <button onclick="if(POState.campaigns.find(c=>c.status==='active'))POState.campaigns.filter(c=>c.status==='active').forEach(c=>loadCampaignOrders(c))" class="btn-secondary btn-sm">&#8635; Refresh All</button>
+          <button onclick="poOpenModal()" class="btn-primary">+ New Campaign</button>
+        </div>
+      </div>
+
+      <!-- Release due banner -->
+      <div id="po-release-due-banner" style="display:none;background:var(--accent);color:#fff;padding:10px 20px;align-items:center;gap:12px;flex-shrink:0;"></div>
+
+      <!-- Release notification -->
+      <div id="po-release-notification" style="display:none;background:var(--green-bg);border-bottom:1px solid rgba(30,126,74,0.3);padding:12px 20px;align-items:center;gap:12px;flex-shrink:0;"></div>
+
+      <!-- Body -->
+      <div id="po-body" style="flex:1;overflow-y:auto;padding:24px;"></div>
+    </div>
+
     <div id="view-replenishment" class="view hidden" style="position:relative;">
       <div class="view-header">
 
@@ -851,7 +880,42 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<!-- PRE-ORDER MODAL -->
+<div id="po-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--surface);border-radius:8px;width:560px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 40px rgba(0,0,0,0.2);">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div style="font-size:14px;font-weight:700;" id="po-modal-title">New Pre-Order Campaign</div>
+      <button onclick="poCloseModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">&#x2715;</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:20px;display:flex;flex-direction:column;gap:16px;">
+      <div>
+        <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Campaign Name</label>
+        <input type="text" id="po-form-name" placeholder="e.g. Buffalo Nichols — New Album May 2026" style="width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Release Date</label>
+        <input type="date" id="po-form-date" style="width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;" />
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">On or after this date you can release all holds from this view.</div>
+      </div>
+      <div>
+        <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">SKUs (one per line)</label>
+        <textarea id="po-form-skus" rows="4" placeholder="FP1234-1&#10;FP1234-2&#10;FP1234-3" style="width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:4px;font-size:13px;font-family:'DM Mono',monospace;background:var(--surface);color:var(--text);resize:vertical;"></textarea>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Include all variants. Orders containing ANY of these SKUs with operator_hold=1 will be tracked.</div>
+      </div>
+      <div>
+        <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Notes (optional)</label>
+        <input type="text" id="po-form-notes" placeholder="e.g. Remember to turn off Co-Pilot rule on release day" style="width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;" />
+      </div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;">
+      <button onclick="poCloseModal()" class="btn-secondary btn-sm">Cancel</button>
+      <button onclick="poSaveModal()" class="btn-primary btn-sm">Save Campaign</button>
+    </div>
+  </div>
+</div>
+
 <script src="wh_module.js"></script>
 <script src="app.js"></script>
+<script src="preorder_module.js"></script>
 </body>
 </html>
