@@ -46,16 +46,15 @@ window.switchToPreOrders = function() {
   switchView('preorders');
   renderPreOrders();
   checkReleaseDates();
-  // Load orders for active campaigns that haven't been loaded yet — one at a time
-  const toLoad = POState.campaigns.filter(c => c.status === 'active' && !POState.orders[c.id] && !POState.loading[c.id]);
-  if (toLoad.length) {
-    // Load sequentially to avoid rate limiting
-    (async () => {
-      for (const c of toLoad) {
-        await loadCampaignOrders(c);
-        await new Promise(r => setTimeout(r, 500)); // 500ms between campaigns
-      }
-    })();
+};
+
+// Manual refresh — loads all active campaigns sequentially
+window.poRefreshAll = async function() {
+  const active = POState.campaigns.filter(c => c.status === 'active');
+  if (!active.length) { toast('No active campaigns to refresh.', ''); return; }
+  for (const c of active) {
+    await loadCampaignOrders(c);
+    if (active.length > 1) await new Promise(r => setTimeout(r, 800));
   }
 };
 
