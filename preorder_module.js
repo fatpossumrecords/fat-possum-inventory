@@ -6,14 +6,14 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 142309');
+console.log('preorder_module.js loaded — build 144444');
 const POState = {
   campaigns:       [],
   orders:          {},
   loading:         {},
   releasing:       {},
   expandedOrders:  {},
-  tagFilters:      {},  // { campaignId: 'tagName' }
+  tagFilters:      {},  // { campaignId: ['tag1','tag2'] }
   searchTerms:     {},  // { campaignId: 'searchText' }
 };
 
@@ -261,7 +261,10 @@ function renderPreOrders() {
       if (!pill) return;
       pill.addEventListener('click', function() {
         if (!POState.tagFilters) POState.tagFilters = {};
-        POState.tagFilters[c.id] = (POState.tagFilters[c.id] === tag) ? '' : tag;
+        if (!POState.tagFilters[c.id]) POState.tagFilters[c.id] = [];
+        const tagIdx = POState.tagFilters[c.id].indexOf(tag);
+        if (tagIdx > -1) POState.tagFilters[c.id].splice(tagIdx, 1);
+        else POState.tagFilters[c.id].push(tag);
         poFilterInPlace(c.id);
       });
     });
@@ -352,13 +355,13 @@ function poCampaignCard(c) {
   const allTags = ALLOWED_TAGS.filter(t =>
     (orders || []).some(o => (o.tags || []).some(ot => ot.toLowerCase() === t.toLowerCase()))
   );
-  const activeTag    = (POState.tagFilters    || {})[c.id] || '';
+  const activeTags   = (POState.tagFilters    || {})[c.id] || [];
   const searchTerm   = (POState.searchTerms   || {})[c.id] || '';
   if (!POState.expandedOrders) POState.expandedOrders = {};
 
   // Apply search + tag filter
   const filteredOrders = orders.filter(o => {
-    if (activeTag && !(o.tags || []).some(t => t.toLowerCase() === activeTag.toLowerCase())) return false;
+    if (activeTags.length && !activeTags.some(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       if (!o.orderNumber.toLowerCase().includes(term)) return false;
@@ -380,7 +383,7 @@ function poCampaignCard(c) {
     // Search + tag filter bar
     const tagPills = allTags.map(t =>
       '<span id="po-tag-' + c.id + '-' + poEsc(t.replace(/\s+/g,'-')) + '" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px;margin-bottom:4px;'
-      + (activeTag === t ? 'background:var(--accent);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
+      + (activeTags.includes(t) ? 'background:var(--accent);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
       + poEsc(t) + '</span>'
     ).join('');
 
@@ -388,7 +391,7 @@ function poCampaignCard(c) {
       + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(searchTerm) + '"'
       + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
       + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + tagPills + '</div>' : '')
-      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (activeTag || searchTerm ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
+      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (activeTags.length || searchTerm ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
       + '</div>';
 
     orderRowsHtml = filterBar
@@ -586,18 +589,22 @@ window.loadCampaignOrders = async function(campaign) {
 window.poConfirmRelease = function(campaignId) {
   const c = POState.campaigns.find(x => x.id === campaignId);
   if (!c) return;
-  const allOrders = POState.orders[campaignId] || [];
-  const activeTag = (POState.tagFilters || {})[campaignId] || '';
-  const orders = activeTag ? allOrders.filter(o => (o.tags||[]).includes(activeTag)) : allOrders;
+  const allOrders  = POState.orders[campaignId] || [];
+  const activeTags = (POState.tagFilters || {})[campaignId] || [];
 
-  if (!orders.length) {
-    if (!confirm('No held orders loaded yet. Refresh orders first?\n\nClick OK to refresh.')) return;
+  if (!allOrders.length) {
+    if (!confirm('No held orders loaded yet. Click Refresh Orders first, then try releasing.\n\nClick OK to refresh now.')) return;
     loadCampaignOrders(c);
     return;
   }
 
-  const tagNote = activeTag ? '\n\nFiltered to tag "' + activeTag + '" (' + orders.length + ' of ' + allOrders.length + ' orders).' : '';
-  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?' + tagNote + '\n\nThis will clear operator_hold and hold_until on each order. Make sure you have turned off the Co-Pilot hold rule first.\n\nClick OK to proceed.')) return;
+  // Filter by active tags — order must match ANY selected tag
+  const orders = activeTags.length
+    ? allOrders.filter(o => activeTags.some(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase())))
+    : allOrders;
+
+  const tagNote = activeTags.length ? '\n\nFiltered to tags: ' + activeTags.join(', ') + ' (' + orders.length + ' of ' + allOrders.length + ' orders).' : '';
+  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?' + tagNote + '\n\nThis will clear operator_hold and hold_until. Make sure Co-Pilot hold rule is turned off first.\n\nClick OK to proceed.')) return;
   releaseHolds(campaignId, orders);
 };
 
@@ -787,11 +794,11 @@ document.addEventListener('click', e => {
 // Avoids losing focus on search input
 function poFilterInPlace(campaignId) {
   const orders    = POState.orders[campaignId] || [];
-  const activeTag = (POState.tagFilters  || {})[campaignId] || '';
+  const activeTags = (POState.tagFilters || {})[campaignId] || [];
   const searchTerm = (POState.searchTerms || {})[campaignId] || '';
 
   const filtered = orders.filter(o => {
-    if (activeTag && !(o.tags||[]).some(t => t.toLowerCase() === activeTag.toLowerCase())) return false;
+    if (activeTags.length && !activeTags.some(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
     if (searchTerm && !o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
@@ -827,7 +834,7 @@ function poFilterInPlace(campaignId) {
   // Update count label
   const countEl = document.getElementById('po-filter-count-' + campaignId);
   if (countEl) {
-    countEl.textContent = (activeTag || searchTerm) ? filtered.length + ' of ' + orders.length + ' orders' : '';
+    countEl.textContent = (activeTags.length || searchTerm) ? filtered.length + ' of ' + orders.length + ' orders' : '';
   }
 
   // Update tag pill active states
@@ -835,8 +842,8 @@ function poFilterInPlace(campaignId) {
   ALLOWED_TAGS.forEach(tag => {
     const pill = document.getElementById('po-tag-' + campaignId + '-' + tag.replace(/\s+/g,'-'));
     if (!pill) return;
-    pill.style.background = (activeTag === tag) ? 'var(--accent)' : 'var(--surface2)';
-    pill.style.color      = (activeTag === tag) ? '#fff' : 'var(--text-muted)';
+    pill.style.background = activeTags.includes(tag) ? 'var(--accent)' : 'var(--surface2)';
+    pill.style.color      = activeTags.includes(tag) ? '#fff' : 'var(--text-muted)';
   });
 }
 
