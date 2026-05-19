@@ -45,9 +45,12 @@ async function savePreOrderData() {
     const body = JSON.stringify({
       files: { [PO_GIST_FILE]: { content: JSON.stringify({ preOrderCampaigns: POState.campaigns }) } }
     });
-    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+    let _gistId, _token;
+    try { _gistId = CONFIG.GIST_ID; _token = CONFIG.GIST_TOKEN; } catch(e) {}
+    if (!_gistId) { try { const c=JSON.parse(localStorage.getItem('fp_config_cache')||'{}'); _gistId=c.GIST_ID; _token=c.GIST_TOKEN; } catch(e) {} }
+    const res = await fetch('https://api.github.com/gists/' + _gistId, {
       method: 'PATCH',
-      headers: { 'Authorization': 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': 'token ' + _token, 'Content-Type': 'application/json' },
       body,
     });
     if (!res.ok) console.warn('Pre-order Gist save failed:', res.status);
@@ -59,15 +62,15 @@ async function savePreOrderData() {
   updatePOBadge();
 }
 
-async function loadPreOrderData() {
+async function loadPreOrderData(creds) {
   try {
-    // Wait for CONFIG to be available (set by app.js)
-    const gistId = CONFIG.GIST_ID;
-    const token  = CONFIG.GIST_TOKEN;
-    if (!gistId || !token) {
-      console.warn('Pre-order load: CONFIG not ready yet');
-      return;
+    let gistId, token;
+    if (creds) {
+      gistId = creds.gistId; token = creds.token;
+    } else {
+      try { gistId = CONFIG.GIST_ID; token = CONFIG.GIST_TOKEN; } catch(e) {}
     }
+    if (!gistId || !token) { console.warn('Pre-order load: no credentials'); return; }
     const res = await fetch('https://api.github.com/gists/' + gistId, {
       headers: { 'Authorization': 'token ' + token },
       cache: 'no-store',
