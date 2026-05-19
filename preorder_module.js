@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 141956');
+console.log('preorder_module.js loaded — build 142309');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -400,7 +400,7 @@ function poCampaignCard(c) {
       + '<th style="'+th+'text-align:right;">Units</th>'
       + '<th style="'+th+'text-align:center;">Hold</th>'
       + '</tr></thead><tbody>'
-      + (shown.length ? shown.map(o => '<tr style="border-bottom:1px solid var(--border);">'
+      + (shown.length ? shown.map(o => '<tr data-order-id="' + o.orderId + '" style="border-bottom:1px solid var(--border);">'
           + '<td style="padding:8px 10px;font-family:\'DM Mono\',monospace;font-weight:600;color:var(--accent);">' + poEsc(o.orderNumber) + '</td>'
           + '<td style="padding:8px 10px;color:var(--text-muted);white-space:nowrap;">' + new Date(o.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + '</td>'
           + '<td style="padding:8px 10px;">' + (o.tags||[]).filter(t => ['B2B','D2C','International'].some(a => a.toLowerCase()===t.toLowerCase())).map(t => '<span style="background:var(--surface2);padding:1px 6px;border-radius:10px;font-size:10px;margin-right:3px;border:1px solid var(--border2);">' + poEsc(t) + '</span>').join('') + '</td>'
