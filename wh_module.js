@@ -68,8 +68,8 @@ window.switchWHTab = function(tab) {
     document.getElementById('wh-tabbtn-replen')?.classList.toggle('active', tab === 'replenishment');
     document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',   tab === 'walkthrough');
     // Apply replen defaults from settings each time the tab opens
-    if (tab === 'replenishment' && window.FPSettings?.replen) {
-      if (window.applyReplenDefaults) applyReplenDefaults(window.FPSettings.replen);
+    if (tab === 'replenishment' && window._FPUserSettings && window._FPUserSettings.replen) {
+      if (window.applyReplenDefaults) applyReplenDefaults(window._FPUserSettings.replen);
     }
     if (tab === 'walkthrough') wtRender();
   }, 0);
@@ -1092,8 +1092,8 @@ window.wtToggleEmpty = function() {
     //   4:Mfg Predictions 5:Production Runs 6:Stockout Clock
     //   then: full-width Inbound block, Warehouse+Movements row, Active Runs, Column Layout
     // We want:
-    //   Row 1 (4-col): Total Products · Global Stock · Reorder Alerts · Resolved
-    //   Row 2 (4-col): Walk Replenish · Production Runs · Mfg Predictions · Stockout Clock
+    //   Row 1 (4-col): Total Products    Global Stock    Reorder Alerts    Resolved
+    //   Row 2 (4-col): Walk Replenish    Production Runs    Mfg Predictions    Stockout Clock
     //   Row 3+: everything else full-width
 
     // Identify the 7 stat cards (first 7 .dash-card children)
@@ -1104,7 +1104,7 @@ window.wtToggleEmpty = function() {
 
     const [cTotal, cGlobal, cAlerts, cResolved, cMfg, cRuns, cClock] = statCards;
 
-    // Build WH card — no red/yellow coloring per request
+    // Build WH card     no red/yellow coloring per request
     const wh = buildWHCard();
     wh.classList.remove('dash-card-red','dash-card-yellow');
 
@@ -1125,7 +1125,7 @@ window.wtToggleEmpty = function() {
     // Row 2: WH card + 3 others
     [wh, cRuns, cMfg, cClock].filter(Boolean).forEach(c => grid.appendChild(c));
 
-    // Row 3+: everything else — make full-width
+    // Row 3+: everything else     make full-width
     rest.forEach(c => {
       c.style.gridColumn = '1 / -1';
       grid.appendChild(c);
@@ -1137,13 +1137,13 @@ window.wtToggleEmpty = function() {
     grid.style.gap = '16px';
     grid.style.flexWrap = ''; // clear any leftover flex
 
-    // Mobile stat strip: Reorder Alerts · Mfg Predictions · Stockout
+    // Mobile stat strip: Reorder Alerts    Mfg Predictions    Stockout
     document.getElementById('mob-stat-strip')?.remove();
     if (window.innerWidth <= 768) {
       const alertCount = cAlerts ? (cAlerts.querySelector('.dash-num')?.textContent||'0') : '0';
       const mfgCount   = cMfg   ? (cMfg.querySelector('.dash-num')?.textContent||'0')   : '0';
       const clockEl    = cClock  ? cClock.querySelector('[style*="font-size:28"]') : null;
-      const clockVal   = clockEl ? clockEl.textContent.trim() : '—';
+      const clockVal   = clockEl ? clockEl.textContent.trim() : '   ';
       const alertColor = parseInt(alertCount) > 0 ? 'color:var(--red)' : 'color:var(--green)';
       const strip = document.createElement('div');
       strip.id = 'mob-stat-strip';
@@ -1299,7 +1299,7 @@ function pickerRender() {
     + '<div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:0.9;">FP Warehouse Replenish</div>'
     + '<div style="display:flex;align-items:center;gap:16px;">'
     + '<span style="font-size:14px;font-weight:700;">' + current + ' <span style="opacity:0.6;font-weight:400;">of</span> ' + total + '</span>'
-    + '<button onclick="pickerClose()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">&#x2715; Exit</button>'
+    + '<button onclick="pickerEndSession()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;touch-action:manipulation;">&#9654;&#9654; Finish</button>'    + '<button onclick="pickerClose()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;">&#x2715; Exit</button>'
     + '</div></div>'
 
     // Progress bar
@@ -1333,11 +1333,11 @@ function pickerRender() {
     + '<div style="padding:16px 20px;background:var(--surface2);border-radius:8px;border:2px solid var(--border);">'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:10px;">Qty to Pick <span style="font-weight:400;opacity:0.6;">(min ' + suggestedQty + ')</span></div>'
     + '<div style="display:flex;align-items:center;gap:12px;">'
-    + '<button onclick="pickerQtyAdj(-1)" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);font-size:24px;font-weight:700;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">&#8722;</button>'
+    + '<button onclick="pickerQtyAdj(-1)" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);font-size:24px;font-weight:700;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;touch-action:manipulation;">&#8722;</button>'
     + '<input type="number" id="picker-qty-input" value="' + suggestedQty + '" min="' + suggestedQty + '"'
     + ' style="flex:1;font-family:\'DM Mono\',monospace;font-size:48px;font-weight:700;color:var(--text);background:transparent;border:none;outline:none;padding:0;line-height:1;text-align:center;width:0;"'
     + ' oninput="pickerQtyChange(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'picker-scan-input\')?.focus();}" />'
-    + '<button onclick="pickerQtyAdj(1)" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);font-size:24px;font-weight:700;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">&#43;</button>'
+    + '<button onclick="pickerQtyAdj(1)" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);font-size:24px;font-weight:700;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;touch-action:manipulation;">&#43;</button>'
     + '</div>'
     + '</div>'
 
@@ -1352,10 +1352,11 @@ function pickerRender() {
     + '<div>'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">Scan Product Barcode (UPC) to Confirm</div>'
     + '<div style="display:flex;gap:10px;align-items:stretch;">'
-    + '<input type="text" id="picker-scan-input" placeholder="Scan UPC barcode   "'
-    + ' autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="none"'
+      + '<input type="text" id="picker-scan-input" placeholder="Scan or type UPC   "'
+    + ' autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"'
     + ' style="flex:1;font-family:\'DM Mono\',monospace;font-size:20px;padding:14px 16px;border:2px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);outline:none;"'
     + ' onkeydown="pickerHandleKey(event)" oninput="pickerClearError()" />'
+    + '<button onclick="pickerConfirm()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:14px 20px;font-size:18px;font-weight:700;cursor:pointer;flex-shrink:0;touch-action:manipulation;">&#10003;</button>'
     + '</div>'
     + '<div id="picker-scan-error" style="color:var(--red);font-size:13px;font-weight:600;margin-top:8px;min-height:20px;font-family:\'DM Mono\',monospace;"></div>'
     + '</div>'
@@ -1504,10 +1505,20 @@ window.pickerConfirm = function() {
     return;
   }
 
-  // SUCCESS — show confirmation prompt before advancing
+  // SUCCESS     show confirmation prompt before advancing
   pickerPlaySuccess();
   pickerFlash('rgba(74,240,160,0.5)');
   pickerShowConfirm(pickedQty, item);
+};
+
+window.pickerEndSession = function() {
+  if (!PickerState.completed.length) {
+    if (!confirm('No items picked yet. Exit without a summary?')) return;
+    pickerClose();
+    return;
+  }
+  if (!confirm('End session early? You\'ve picked ' + PickerState.completed.length + ' of ' + PickerState.queue.length + ' items. A summary will be shown.')) return;
+  pickerRenderComplete();
 };
 
 window.pickerBack = function() {
@@ -1517,14 +1528,14 @@ window.pickerBack = function() {
   pickerRender();
 };
 
-// ── CONFIRMATION STEP ─────────────────────────────────────────
-// Shown after successful UPC scan — green card overlaid on the
+//        CONFIRMATION STEP                                                                                                                            
+// Shown after successful UPC scan     green card overlaid on the
 // picker card. Picker can adjust qty one more time then confirm.
 function pickerShowConfirm(pickedQty, item) {
   const overlay = document.getElementById('picker-overlay');
   if (!overlay) return;
 
-  const destStr = item.destBins && item.destBins.length ? item.destBins.join('  ·  ') : '—';
+  const destStr = item.destBins && item.destBins.length ? item.destBins.join('      ') : '   ';
   const extra   = pickedQty > item.qty ? '+' + (pickedQty - item.qty) + ' extra' : '';
 
   overlay.innerHTML =
@@ -1540,7 +1551,7 @@ function pickerShowConfirm(pickedQty, item) {
     // Confirm qty block
     + '<div style="padding:28px 32px;display:flex;flex-direction:column;gap:20px;">'
 
-    // Qty confirm — with arrows again
+    // Qty confirm     with arrows again
     + '<div style="text-align:center;">'
     + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px;">Confirm Pick Quantity</div>'
     + '<div style="display:flex;align-items:center;justify-content:center;gap:20px;">'
