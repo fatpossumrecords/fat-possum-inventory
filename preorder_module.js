@@ -543,19 +543,27 @@ document.addEventListener('click', e => {
   // Intercept GitHub Gist PATCH to inject preOrderCampaigns into fp_config.json
   const origFetch = window.fetch;
   window.fetch = function(url, options) {
-    if (typeof url === 'string' && url.includes('api.github.com/gists') && options && options.method === 'PATCH') {
-      try {
+    try {
+      if (typeof url === 'string'
+          && url.includes('api.github.com/gists')
+          && options && options.method === 'PATCH'
+          && options.body && typeof options.body === 'string') {
         const body = JSON.parse(options.body);
         const configFile = (body.files || {})['fp_config.json'];
-        if (configFile && configFile.content) {
+        if (configFile && configFile.content && typeof configFile.content === 'string') {
           const payload = JSON.parse(configFile.content);
           payload.preOrderCampaigns = POState.campaigns;
-          configFile.content = JSON.stringify(payload);
-          options = Object.assign({}, options, { body: JSON.stringify(body) });
+          const newContent = JSON.stringify(payload);
+          // Only replace if serialization succeeded and is non-empty
+          if (newContent && newContent.length > 2) {
+            configFile.content = newContent;
+            options = Object.assign({}, options, { body: JSON.stringify(body) });
+          }
         }
-      } catch(e) {
-        console.warn('PO Gist injection failed:', e.message);
       }
+    } catch(e) {
+      // Never break the original request - just skip injection on error
+      console.warn('PO Gist injection skipped:', e.message);
     }
     return origFetch.call(this, url, options);
   };
