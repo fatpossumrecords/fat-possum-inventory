@@ -601,7 +601,7 @@
           <p class="view-sub">Track operator-held pre-orders and release them on a fixed date</p>
         </div>
         <div class="view-actions">
-          <button onclick="if(POState.campaigns.find(c=>c.status==='active'))POState.campaigns.filter(c=>c.status==='active').forEach(c=>loadCampaignOrders(c))" class="btn-secondary btn-sm">&#8635; Refresh All</button>
+          <button onclick="poRefreshAll()" class="btn-secondary btn-sm">&#8635; Refresh Orders</button>
           <button onclick="poOpenModal()" class="btn-primary">+ New Campaign</button>
         </div>
       </div>
