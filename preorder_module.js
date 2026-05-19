@@ -61,16 +61,30 @@ async function savePreOrderData() {
 
 async function loadPreOrderData() {
   try {
-    const url = 'https://gist.githubusercontent.com/fatpossumrecords/'
-      + CONFIG.GIST_ID + '/raw/' + PO_GIST_FILE + '?t=' + Date.now();
-    const res = await fetch(url, { cache: 'no-store' });
+    // Wait for CONFIG to be available (set by app.js)
+    const gistId    = window.CONFIG?.GIST_ID;
+    const token     = window.CONFIG?.GIST_TOKEN;
+    if (!gistId || !token) {
+      console.warn('Pre-order load: CONFIG not ready yet');
+      return;
+    }
+    const res = await fetch('https://api.github.com/gists/' + gistId, {
+      headers: { 'Authorization': 'token ' + token },
+      cache: 'no-store',
+    });
     if (res.ok) {
-      const data = await res.json();
-      if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
-        POState.campaigns = data.preOrderCampaigns;
-        try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
-        updatePOBadge();
-        console.log('Pre-order campaigns from Gist:', POState.campaigns.length);
+      const gist = await res.json();
+      const fileContent = gist.files && gist.files[PO_GIST_FILE] && gist.files[PO_GIST_FILE].content;
+      if (fileContent) {
+        const data = JSON.parse(fileContent);
+        if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
+          POState.campaigns = data.preOrderCampaigns;
+          try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
+          updatePOBadge();
+          console.log('Pre-order campaigns from Gist:', POState.campaigns.length);
+          const view = document.getElementById('view-preorders');
+          if (view && !view.classList.contains('hidden')) renderPreOrders();
+        }
       }
     }
   } catch(e) {
@@ -103,23 +117,12 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(async () => {
     if (window.CONFIG && CONFIG.GIST_ID) {
       try {
-        const url = 'https://gist.githubusercontent.com/fatpossumrecords/'
-          + CONFIG.GIST_ID + '/raw/' + PO_GIST_FILE + '?t=' + Date.now();
-        const res = await fetch(url, { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
-            POState.campaigns = data.preOrderCampaigns;
-            try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
-            updatePOBadge();
-            console.log('Pre-order campaigns refreshed from Gist:', POState.campaigns.length);
-          }
-        }
+        await loadPreOrderData();
       } catch(e) {
         console.warn('Pre-order Gist refresh failed:', e.message);
       }
     }
-  }, 4000);
+  }, 2000);
 });
 
 // Manual refresh — loads all active campaigns sequentially
