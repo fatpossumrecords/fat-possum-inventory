@@ -112,17 +112,20 @@ window.switchToPreOrders = function() {
   } catch(e) {}
 })();
 
-// Load on boot — fetch fresh from Gist after CONFIG is available
+// Load on boot — retry until CONFIG is ready (set by app.js)
 document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(async () => {
-    if (window.CONFIG && CONFIG.GIST_ID) {
-      try {
-        await loadPreOrderData();
-      } catch(e) {
-        console.warn('Pre-order Gist refresh failed:', e.message);
-      }
+  let attempts = 0;
+  function tryLoad() {
+    attempts++;
+    if (window.CONFIG && CONFIG.GIST_ID && CONFIG.GIST_TOKEN) {
+      loadPreOrderData();
+    } else if (attempts < 20) {
+      setTimeout(tryLoad, 500); // retry every 500ms, up to 10s
+    } else {
+      console.warn('Pre-order: CONFIG never became available after 10s');
     }
-  }, 2000);
+  }
+  setTimeout(tryLoad, 800); // first attempt after 800ms
 });
 
 // Manual refresh — loads all active campaigns sequentially
