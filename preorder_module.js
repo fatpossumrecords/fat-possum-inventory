@@ -6,7 +6,7 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 140612');
+console.log('preorder_module.js loaded — build 141956');
 const POState = {
   campaigns:       [],
   orders:          {},
@@ -104,6 +104,10 @@ window.switchToPreOrders = function() {
   switchView('preorders');
   renderPreOrders();
   checkReleaseDates();
+  // Auto-refresh if enabled in settings
+  if (window.FPSettings?.poAutoRefresh) {
+    setTimeout(() => poRefreshAll(), 500);
+  }
 };
 
 // ── IMMEDIATE INIT — restore from localStorage before anything renders ──
