@@ -211,6 +211,10 @@ window.saveSettingsFromForm = function() {
     card.style.display = (window._fpHiddenCards || []).some(h => text.includes(h)) ? 'none' : '';
   });
 
+  // Apply table density immediately
+  const invTable = document.getElementById('inventory-table');
+  if (invTable) invTable.classList.toggle('density-compact', s.tableDensity === 'compact');
+
   closeSettings();
   if (window.toast) toast('Settings saved.', 'success');
 };
