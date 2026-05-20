@@ -116,27 +116,27 @@ window.openSettings = function() {
   if (!modal) return;
 
   // Populate all fields
-  setCheck('s-dark-mode',         s.defaultDarkMode);
-  setCheck('s-needs-attention',   s.showNeedsAttention);
-  setCheck('s-card-total',        s.dashCards.totalProducts);
-  setCheck('s-card-global',       s.dashCards.globalStock);
-  setCheck('s-card-alerts',       s.dashCards.reorderAlerts);
-  setCheck('s-card-resolved',     s.dashCards.resolved);
-  setCheck('s-card-wh',           s.dashCards.walkReplenish);
-  setCheck('s-card-runs',         s.dashCards.productionRuns);
-  setCheck('s-card-mfg',          s.dashCards.mfgPredictions);
-  setCheck('s-card-clock',        s.dashCards.stockoutClock);
-  setVal('s-default-warehouse',   s.defaultWarehouse);
-  setVal('s-table-density',       s.tableDensity);
-  setCheck('s-badge-reorder',     s.alertBadges.reorder);
-  setCheck('s-badge-movements',   s.alertBadges.movements);
-  setCheck('s-badge-runs',        s.alertBadges.productionRuns);
-  setVal('s-replen-lookback',     s.replen.lookback);
-  setVal('s-replen-supply',       s.replen.daysSupply);
-  setVal('s-replen-outlier',      s.replen.outlier);
-  setVal('s-replen-max',          s.replen.maxUnits);
-  setVal('s-replen-min',          s.replen.minUnits);
-  setCheck('s-po-autorefresh',    s.poAutoRefresh);
+  _settingsSetCheck('s-dark-mode',         s.defaultDarkMode);
+  _settingsSetCheck('s-needs-attention',   s.showNeedsAttention);
+  _settingsSetCheck('s-card-total',        s.dashCards.totalProducts);
+  _settingsSetCheck('s-card-global',       s.dashCards.globalStock);
+  _settingsSetCheck('s-card-alerts',       s.dashCards.reorderAlerts);
+  _settingsSetCheck('s-card-resolved',     s.dashCards.resolved);
+  _settingsSetCheck('s-card-wh',           s.dashCards.walkReplenish);
+  _settingsSetCheck('s-card-runs',         s.dashCards.productionRuns);
+  _settingsSetCheck('s-card-mfg',          s.dashCards.mfgPredictions);
+  _settingsSetCheck('s-card-clock',        s.dashCards.stockoutClock);
+  _settingsSetVal('s-default-warehouse',   s.defaultWarehouse);
+  _settingsSetVal('s-table-density',       s.tableDensity);
+  _settingsSetCheck('s-badge-reorder',     s.alertBadges.reorder);
+  _settingsSetCheck('s-badge-movements',   s.alertBadges.movements);
+  _settingsSetCheck('s-badge-runs',        s.alertBadges.productionRuns);
+  _settingsSetVal('s-replen-lookback',     s.replen.lookback);
+  _settingsSetVal('s-replen-supply',       s.replen.daysSupply);
+  _settingsSetVal('s-replen-outlier',      s.replen.outlier);
+  _settingsSetVal('s-replen-max',          s.replen.maxUnits);
+  _settingsSetVal('s-replen-min',          s.replen.minUnits);
+  _settingsSetCheck('s-po-autorefresh',    s.poAutoRefresh);
 
   modal.style.display = 'flex';
 };
@@ -149,27 +149,27 @@ window.closeSettings = function() {
 window.saveSettingsFromForm = function() {
   const s = window._FPUserSettings;
 
-  s.defaultDarkMode        = getCheck('s-dark-mode');
-  s.showNeedsAttention     = getCheck('s-needs-attention');
-  s.dashCards.totalProducts  = getCheck('s-card-total');
-  s.dashCards.globalStock    = getCheck('s-card-global');
-  s.dashCards.reorderAlerts  = getCheck('s-card-alerts');
-  s.dashCards.resolved       = getCheck('s-card-resolved');
-  s.dashCards.walkReplenish  = getCheck('s-card-wh');
-  s.dashCards.productionRuns = getCheck('s-card-runs');
-  s.dashCards.mfgPredictions = getCheck('s-card-mfg');
-  s.dashCards.stockoutClock  = getCheck('s-card-clock');
-  s.defaultWarehouse         = getVal('s-default-warehouse');
-  s.tableDensity             = getVal('s-table-density');
-  s.alertBadges.reorder      = getCheck('s-badge-reorder');
-  s.alertBadges.movements    = getCheck('s-badge-movements');
-  s.alertBadges.productionRuns = getCheck('s-badge-runs');
-  s.replen.lookback          = parseInt(getVal('s-replen-lookback'))  || 30;
-  s.replen.daysSupply        = parseInt(getVal('s-replen-supply'))    || 7;
-  s.replen.outlier           = parseInt(getVal('s-replen-outlier'))   || 20;
-  s.replen.maxUnits          = parseInt(getVal('s-replen-max'))       || 50;
-  s.replen.minUnits          = parseInt(getVal('s-replen-min'))       || 5;
-  s.poAutoRefresh            = getCheck('s-po-autorefresh');
+  s.defaultDarkMode        = _settingsGetCheck('s-dark-mode');
+  s.showNeedsAttention     = _settingsGetCheck('s-needs-attention');
+  s.dashCards.totalProducts  = _settingsGetCheck('s-card-total');
+  s.dashCards.globalStock    = _settingsGetCheck('s-card-global');
+  s.dashCards.reorderAlerts  = _settingsGetCheck('s-card-alerts');
+  s.dashCards.resolved       = _settingsGetCheck('s-card-resolved');
+  s.dashCards.walkReplenish  = _settingsGetCheck('s-card-wh');
+  s.dashCards.productionRuns = _settingsGetCheck('s-card-runs');
+  s.dashCards.mfgPredictions = _settingsGetCheck('s-card-mfg');
+  s.dashCards.stockoutClock  = _settingsGetCheck('s-card-clock');
+  s.defaultWarehouse         = _settingsGetVal('s-default-warehouse');
+  s.tableDensity             = _settingsGetVal('s-table-density');
+  s.alertBadges.reorder      = _settingsGetCheck('s-badge-reorder');
+  s.alertBadges.movements    = _settingsGetCheck('s-badge-movements');
+  s.alertBadges.productionRuns = _settingsGetCheck('s-badge-runs');
+  s.replen.lookback          = parseInt(_settingsGetVal('s-replen-lookback'))  || 30;
+  s.replen.daysSupply        = parseInt(_settingsGetVal('s-replen-supply'))    || 7;
+  s.replen.outlier           = parseInt(_settingsGetVal('s-replen-outlier'))   || 20;
+  s.replen.maxUnits          = parseInt(_settingsGetVal('s-replen-max'))       || 50;
+  s.replen.minUnits          = parseInt(_settingsGetVal('s-replen-min'))       || 5;
+  s.poAutoRefresh            = _settingsGetCheck('s-po-autorefresh');
 
   window._FPUserSettings = s;
   saveSettings(s);
@@ -193,10 +193,10 @@ document.addEventListener('click', function(e) {
 });
 
 // ── HELPERS ───────────────────────────────────────────────────
-function setCheck(id, val) { const el = document.getElementById(id); if (el) el.checked = !!val; }
-function getCheck(id)      { const el = document.getElementById(id); return el ? el.checked : false; }
-function setVal(id, val)   { const el = document.getElementById(id); if (el) el.value = val; }
-function getVal(id)        { const el = document.getElementById(id); return el ? el.value : ''; }
+function _settingsSetCheck(id, val) { const el = document.getElementById(id); if (el) el.checked = !!val; }
+function _settingsGetCheck(id)      { const el = document.getElementById(id); return el ? el.checked : false; }
+function _settingsSetVal(id, val)   { const el = document.getElementById(id); if (el) el.value = val; }
+function _settingsGetVal(id)        { const el = document.getElementById(id); return el ? el.value : ''; }
 
 // ── BOOT — Step 1: no DOM changes on load, just modal functionality ──
 document.addEventListener('DOMContentLoaded', function() {
