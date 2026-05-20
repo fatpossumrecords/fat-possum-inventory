@@ -1049,6 +1049,74 @@ window.wtToggleEmpty = function() {
 // Does NOT touch or reorder existing cards --- avoids fragility.
 (function() {
 
+  const DASH_ORDER_KEY = 'fp_dash_card_order';
+
+  function saveDashOrder(grid) {
+    const order = [...grid.querySelectorAll('.dash-card[data-card-id]')]
+      .map(c => c.dataset.cardId);
+    try { localStorage.setItem(DASH_ORDER_KEY, JSON.stringify(order)); } catch(e) {}
+  }
+
+  function loadDashOrder() {
+    try { return JSON.parse(localStorage.getItem(DASH_ORDER_KEY) || 'null'); } catch(e) { return null; }
+  }
+
+  function makeDraggable(card, grid) {
+    card.setAttribute('draggable', 'true');
+    card.style.cursor = 'grab';
+
+    card.addEventListener('dragstart', function(e) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.cardId);
+      card.style.opacity = '0.5';
+      window._fpDragCard = card;
+    });
+    card.addEventListener('dragend', function() {
+      card.style.opacity = '';
+      window._fpDragCard = null;
+      grid.querySelectorAll('.dash-card').forEach(c => c.style.outline = '');
+    });
+    card.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (window._fpDragCard && window._fpDragCard !== card) {
+        card.style.outline = '2px dashed var(--accent)';
+      }
+    });
+    card.addEventListener('dragleave', function() {
+      card.style.outline = '';
+    });
+    card.addEventListener('drop', function(e) {
+      e.preventDefault();
+      card.style.outline = '';
+      const dragged = window._fpDragCard;
+      if (!dragged || dragged === card) return;
+      // Insert dragged before or after drop target based on position
+      const rect = card.getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (e.clientX < midX) {
+        grid.insertBefore(dragged, card);
+      } else {
+        grid.insertBefore(dragged, card.nextSibling);
+      }
+      saveDashOrder(grid);
+    });
+  }
+
+  function applyDashOrder(grid, statCards) {
+    const saved = loadDashOrder();
+    if (!saved || saved.length < 2) return;
+    // Reorder stat cards to match saved order
+    saved.forEach(id => {
+      const card = statCards.find(c => c.dataset.cardId === id);
+      if (card) grid.appendChild(card);
+    });
+    // Any cards not in saved order go at end
+    statCards.forEach(c => {
+      if (!saved.includes(c.dataset.cardId)) grid.appendChild(c);
+    });
+  }
+
   function buildWHCard() {
     const urgent  = WHState.allRows.filter(r => r.priority === 'urgent').length;
     const replen  = WHState.allRows.filter(r => r.priority === 'replenish').length;
@@ -1056,10 +1124,9 @@ window.wtToggleEmpty = function() {
     const hasData = WHState.allRows.length > 0;
     const card = document.createElement('div');
     card.id = 'wh-dash-card';
+    card.dataset.cardId = 'walk-replenish';
     card.className = 'dash-card wh-replenish-card';
     card.style.cursor = 'pointer';
-    // order:4 places it as 5th item in the 4-col grid = first of row 2
-    // existing cards get order:0 by default so they stay in rows 1 & 2
     card.style.order = '4';
     card.innerHTML =
       '<div class="dash-label">Walk Replenish</div>'
@@ -1081,63 +1148,56 @@ window.wtToggleEmpty = function() {
     const grid = body.querySelector('.dash-grid');
     if (!grid) return;
 
-    // Remove stale WH card
     document.getElementById('wh-dash-card')?.remove();
 
-    // Collect all current direct children (cards + section blocks)
     const allChildren = [...grid.children];
-
-    // Cards from renderDashboard arrive in this order:
-    //   0:Total Products  1:Global Stock  2:Reorder Alerts  3:Resolved
-    //   4:Mfg Predictions 5:Production Runs 6:Stockout Clock
-    //   then: full-width Inbound block, Warehouse+Movements row, Active Runs, Column Layout
-    // We want:
-    //   Row 1 (4-col): Total Products    Global Stock    Reorder Alerts    Resolved
-    //   Row 2 (4-col): Walk Replenish    Production Runs    Mfg Predictions    Stockout Clock
-    //   Row 3+: everything else full-width
-
-    // Identify the 7 stat cards (first 7 .dash-card children)
     const statCards = allChildren.filter(c => c.classList.contains('dash-card')).slice(0, 7);
     const rest = allChildren.filter(c => !statCards.includes(c));
 
-    if (statCards.length < 4) return; // not ready yet
+    if (statCards.length < 4) return;
 
     const [cTotal, cGlobal, cAlerts, cResolved, cMfg, cRuns, cClock] = statCards;
 
-    // Build WH card     no red/yellow coloring per request
     const wh = buildWHCard();
     wh.classList.remove('dash-card-red','dash-card-yellow');
-
-    // Also remove red/yellow from Mfg Predictions
     if (cMfg) cMfg.classList.remove('dash-card-red','dash-card-yellow');
 
-    // Reset all inline order/gridColumn styles from any prior run
-    [...statCards, ...rest, wh].forEach(c => {
+    // Assign stable IDs for drag ordering
+    if (cTotal)    cTotal.dataset.cardId    = 'total-products';
+    if (cGlobal)   cGlobal.dataset.cardId   = 'global-stock';
+    if (cAlerts)   cAlerts.dataset.cardId   = 'reorder-alerts';
+    if (cResolved) cResolved.dataset.cardId = 'resolved';
+    if (cMfg)      cMfg.dataset.cardId      = 'mfg-predictions';
+    if (cRuns)     cRuns.dataset.cardId     = 'production-runs';
+    if (cClock)    cClock.dataset.cardId    = 'stockout-clock';
+
+    [...statCards, wh].forEach(c => {
       if (c) { c.style.order = ''; c.style.gridColumn = ''; }
     });
 
-    // Rebuild grid children in desired DOM order
     grid.innerHTML = '';
 
-    // Row 1: 4 cards
-    [cTotal, cGlobal, cAlerts, cResolved].filter(Boolean).forEach(c => grid.appendChild(c));
+    // Default order
+    const defaultOrder = [cTotal, cGlobal, cAlerts, cResolved, wh, cRuns, cMfg, cClock].filter(Boolean);
+    defaultOrder.forEach(c => grid.appendChild(c));
 
-    // Row 2: WH card + 3 others
-    [wh, cRuns, cMfg, cClock].filter(Boolean).forEach(c => grid.appendChild(c));
+    // Apply saved order if exists
+    applyDashOrder(grid, defaultOrder);
 
-    // Row 3+: everything else     make full-width
+    // Make all stat cards draggable
+    defaultOrder.forEach(c => makeDraggable(c, grid));
+
+    // Rest full-width
     rest.forEach(c => {
       c.style.gridColumn = '1 / -1';
       grid.appendChild(c);
     });
 
-    // Ensure grid stays as CSS grid with 4 equal columns
     grid.style.display = 'grid';
     grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
     grid.style.gap = '16px';
-    grid.style.flexWrap = ''; // clear any leftover flex
+    grid.style.flexWrap = '';
 
-    // Mobile stat strip: Reorder Alerts    Mfg Predictions    Stockout
     document.getElementById('mob-stat-strip')?.remove();
     if (window.innerWidth <= 768) {
       const alertCount = cAlerts ? (cAlerts.querySelector('.dash-num')?.textContent||'0') : '0';
@@ -1152,7 +1212,6 @@ window.wtToggleEmpty = function() {
         '<div class="mob-stat"><div class="mob-stat-val" style="'+alertColor+'">'+alertCount+'</div><div class="mob-stat-lbl">Alerts</div></div>'
         +'<div class="mob-stat"><div class="mob-stat-val">'+mfgCount+'</div><div class="mob-stat-lbl">Mfg</div></div>'
         +'<div class="mob-stat"><div class="mob-stat-val" style="font-size:14px;">'+clockVal+'</div><div class="mob-stat-lbl">Stockout</div></div>';
-      // Insert after wh-dash-card in the grid
       const whCard = document.getElementById('wh-dash-card');
       if (whCard && whCard.nextSibling) grid.insertBefore(strip, whCard.nextSibling);
       else grid.appendChild(strip);
