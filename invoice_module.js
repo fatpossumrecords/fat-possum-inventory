@@ -586,7 +586,9 @@ window.invPrint = function() {
   if (!printArea) return;
 
   const win = window.open('', '_blank', 'width=850,height=1100');
-  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice</title><style>');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice</title>');
+  win.document.write('<base href="' + window.location.href.replace(/\/[^\/]*$/, '/') + '">');
+  win.document.write('<style>');
   win.document.write('* { box-sizing: border-box; margin: 0; padding: 0; }');
   win.document.write('body { font-family: Arial, sans-serif; font-size: 10px; color: #111; background: white; padding: 14mm; }');
   win.document.write('table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5px; margin-bottom: 14px; }');
@@ -817,9 +819,10 @@ function invRenderDetail(body) {
     // Header
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #b83228;">'
     + '<div>'
-    + '<div style="font-size:18px;font-weight:900;color:#b83228;letter-spacing:-0.5px;">FAT POSSUM RECORDS</div>'
-    + '<div style="font-size:12px;color:#666;margin-top:4px;">PO Box 1923 &nbsp;·&nbsp; Oxford, MS 38655</div>'
-    + '<div style="font-size:12px;color:#666;">orders@fatpossum.com &nbsp;·&nbsp; 662-234-2828</div>'
+    + '<img src="FP-Logo_Submark-Black.jpg" alt="Fat Possum Records" style="width:70px;height:70px;object-fit:contain;display:block;margin-bottom:6px;" />'
+    + '<div style="font-size:13px;font-weight:700;color:#111;letter-spacing:0.5px;">FAT POSSUM RECORDS</div>'
+    + '<div style="font-size:10px;color:#666;margin-top:3px;">PO Box 1923 &nbsp;·&nbsp; Oxford, MS 38655</div>'
+    + '<div style="font-size:10px;color:#666;">orders@fatpossum.com &nbsp;·&nbsp; 662-234-2828</div>'
     + '</div>'
     + '<div style="text-align:right;">'
     + '<div style="font-size:16px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:1px;">Invoice</div>'
