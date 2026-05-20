@@ -1645,7 +1645,7 @@ function pickerRenderComplete() {
       + '<td style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:700;color:' + (c.skipped ? 'var(--text-muted)' : 'var(--accent)') + ';padding:12px 16px;border-bottom:1px solid var(--border);white-space:nowrap;">' + whEsc(c.bulkLoc) + '</td>'
       + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);"><div style="font-weight:600;font-size:14px;">' + whEsc(c.row.name) + '</div><div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text-muted);">' + whEsc(c.row.sku) + '</div></td>'
       + '<td style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:700;text-align:center;padding:12px 16px;border-bottom:1px solid var(--border);color:' + (c.skipped ? 'var(--text-dim)' : 'var(--text)') + ';">' + (c.skipped ? '   ' : c.qty) + qtyExtra + '</td>'
-      + '<td style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--green);padding:12px 16px;border-bottom:1px solid var(--border);">' + whEsc(dest) + '</td>'
+      + '<td style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:800;color:var(--green);padding:12px 16px;border-bottom:1px solid var(--border);letter-spacing:1px;">' + whEsc(dest) + '</td>'
       + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);text-align:center;">' + (c.skipped ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;text-transform:uppercase;">Skipped</span>' : '<span style="color:var(--green);font-size:16px;">&#x2713;</span>') + '</td>'
       + '</tr>';
   }).join('');
@@ -1673,7 +1673,7 @@ function pickerRenderComplete() {
               <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Pull From</th>
               <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Product</th>
               <th style="padding:10px 16px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Qty</th>
-              <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Place Into</th>
+              <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--green);border-bottom:2px solid var(--border);">&#8594; Place Into Pick Bin</th>
               <th style="padding:10px 16px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);border-bottom:2px solid var(--border);">Status</th>
             </tr>
           </thead>
