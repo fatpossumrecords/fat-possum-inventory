@@ -730,7 +730,7 @@ async function invCreatePackiyoOrder(inv) {
   try {
     const shipTo = inv.shipSame ? inv.billTo : inv.shipTo;
 
-    // Step 1: Create the order (no items yet)
+    // Step 1: Create order with contact_information relationships for addresses
     const orderPayload = {
       data: {
         type: 'orders',
@@ -743,31 +743,48 @@ async function invCreatePackiyoOrder(inv) {
           shipping_method_code: inv.shipping.method     || '',
           shipping:             inv.shipping.cost        || 0,
           ordered_at:           inv.createdAt,
-          // Flat address fields — Packiyo uses these on the order directly
-          ship_first_name:    shipTo.name.split(' ')[0]  || shipTo.name || '',
-          ship_last_name:     shipTo.name.split(' ').slice(1).join(' ') || '',
-          ship_company:       shipTo.company  || '',
-          ship_address1:      shipTo.address  || '',
-          ship_address2:      shipTo.address2 || '',
-          ship_city:          shipTo.city     || '',
-          ship_state:         shipTo.state    || '',
-          ship_zip:           shipTo.zip      || '',
-          ship_country:       shipTo.country  || 'US',
-          ship_email:         shipTo.email    || '',
-          ship_phone:         shipTo.phone    || '',
-          bill_first_name:    inv.billTo.name.split(' ')[0]  || inv.billTo.name || '',
-          bill_last_name:     inv.billTo.name.split(' ').slice(1).join(' ') || '',
-          bill_company:       inv.billTo.company  || '',
-          bill_address1:      inv.billTo.address  || '',
-          bill_address2:      inv.billTo.address2 || '',
-          bill_city:          inv.billTo.city     || '',
-          bill_state:         inv.billTo.state    || '',
-          bill_zip:           inv.billTo.zip      || '',
-          bill_country:       inv.billTo.country  || 'US',
-          bill_email:         inv.billTo.email    || '',
-          bill_phone:         inv.billTo.phone    || '',
         },
-      }
+        relationships: {
+          shipping_contact_information: {
+            data: { type: 'contact-informations', id: 'ship-addr' }
+          },
+          billing_contact_information: {
+            data: { type: 'contact-informations', id: 'bill-addr' }
+          },
+        }
+      },
+      included: [
+        {
+          type: 'contact-informations', id: 'ship-addr',
+          attributes: {
+            name:         shipTo.name      || '',
+            company_name: shipTo.company   || '',
+            address:      shipTo.address   || '',
+            address2:     shipTo.address2  || '',
+            city:         shipTo.city      || '',
+            state:        shipTo.state     || '',
+            zip:          shipTo.zip       || '',
+            country:      shipTo.country   || 'US',
+            email:        shipTo.email     || '',
+            phone:        shipTo.phone     || '',
+          }
+        },
+        {
+          type: 'contact-informations', id: 'bill-addr',
+          attributes: {
+            name:         inv.billTo.name     || '',
+            company_name: inv.billTo.company  || '',
+            address:      inv.billTo.address  || '',
+            address2:     inv.billTo.address2 || '',
+            city:         inv.billTo.city     || '',
+            state:        inv.billTo.state    || '',
+            zip:          inv.billTo.zip      || '',
+            country:      inv.billTo.country  || 'US',
+            email:        inv.billTo.email    || '',
+            phone:        inv.billTo.phone    || '',
+          }
+        },
+      ]
     };
 
     const orderResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
@@ -776,7 +793,7 @@ async function invCreatePackiyoOrder(inv) {
 
     if (!orderId) throw new Error('No order ID returned from Packiyo');
 
-    // Step 2: Add each line item to the order
+    // Step 2: Add each line item
     let itemsFailed = 0;
     for (let i = 0; i < inv.items.length; i++) {
       const item = inv.items[i];
@@ -789,8 +806,8 @@ async function invCreatePackiyoOrder(inv) {
               attributes: {
                 sku:      item.sku,
                 name:     (item.artist ? item.artist + ' - ' : '') + item.title,
-                price:    item.price    || 0,
-                quantity: item.qty      || 1,
+                price:    item.price || 0,
+                quantity: item.qty   || 1,
               },
               relationships: {
                 order: { data: { type: 'orders', id: orderId } }
@@ -816,8 +833,8 @@ async function invCreatePackiyoOrder(inv) {
     await invSave();
 
     const msg = itemsFailed
-      ? 'Order #' + (orderNum||orderId) + ' created. ' + itemsFailed + ' item(s) failed to add — check Packiyo.'
-      : 'Order #' + (orderNum||orderId) + ' created in Packiyo with ' + inv.items.length + ' items.';
+      ? 'Order #' + (orderNum||orderId) + ' created. ' + itemsFailed + ' item(s) failed — check Packiyo.'
+      : 'Order #' + (orderNum||orderId) + ' created in Packiyo with ' + inv.items.length + ' items!';
     if (window.toast) toast(msg, itemsFailed ? '' : 'success');
     invRender();
 
