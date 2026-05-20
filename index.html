@@ -92,6 +92,14 @@
     }
   })();
   </script>
+  <!-- Print overrides - must override inline styles on inv-body -->
+  <style>
+    @media print {
+      #inv-body { height: auto !important; overflow: visible !important; max-height: none !important; }
+      #view-invoices { height: auto !important; overflow: visible !important; }
+      #main-content { height: auto !important; overflow: visible !important; }
+    }
+  </style>
 </head>
 <body>
 
