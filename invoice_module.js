@@ -259,6 +259,7 @@ window.invNewInvoice = function() {
     items: [],
     shipping: { method:'', methodName:'', cost:0 },
     poNumber: '',
+    paymentHold: false,
     notes: '',
     terms: 'Net 30',
     packiyoOrderId: null,
@@ -374,6 +375,10 @@ function invRenderEdit(body) {
     + '<div style="margin-bottom:10px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Payment Terms</label>'
     + '<input type="text" id="inv-terms" value="' + invEsc(inv.terms) + '" placeholder="Net 30" '
     + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" /></div>'
+    + '<div style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;background:' + (inv.paymentHold?'rgba(240,74,74,0.08)':'var(--surface2)') + ';border:1px solid ' + (inv.paymentHold?'var(--red)':'var(--border2)') + ';border-radius:4px;">'
+    + '<input type="checkbox" id="inv-payment-hold" ' + (inv.paymentHold?'checked':'') + ' onchange="invTogglePaymentHold(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'
+    + '<span><strong style="color:' + (inv.paymentHold?'var(--red)':'var(--text)') + ';">Payment Hold</strong> <span style="font-size:11px;color:var(--text-muted);">Order enters Packiyo on hold — not pickable until payment received</span></span>'
+    + '</label></div>'
     + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Notes</label>'
     + '<textarea id="inv-notes" rows="3" placeholder="Notes or message..." '
     + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);resize:vertical;">'
@@ -574,6 +579,19 @@ window.invSelectCustomer = function(idx) {
   invRenderEdit(document.getElementById('inv-body'));
 };
 
+window.invTogglePaymentHold = function(checked) {
+  if (!InvState.draft) return;
+  InvState.draft.paymentHold = checked;
+  // Update checkbox label color in place
+  const label = document.querySelector('label:has(#inv-payment-hold)');
+  if (label) {
+    label.style.background = checked ? 'rgba(240,74,74,0.08)' : 'var(--surface2)';
+    label.style.border = '1px solid ' + (checked ? 'var(--red)' : 'var(--border2)');
+    const strong = label.querySelector('strong');
+    if (strong) strong.style.color = checked ? 'var(--red)' : 'var(--text)';
+  }
+};
+
 window.invToggleBulkImport = function() {
   const el = document.getElementById('inv-bulk-area');
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
@@ -670,6 +688,7 @@ function invCollectForm() {
   const methodObj = method ? SHIPPING_METHODS.find(function(m) { return m.code === method; }) : null;
   inv.shipping = { method:method, methodName:methodObj ? methodObj.name : '', cost:parseFloat(g('inv-ship-cost'))||0 };
   inv.poNumber = g('inv-po-number');
+  inv.paymentHold = !!(document.getElementById('inv-payment-hold') && document.getElementById('inv-payment-hold').checked);
   inv.notes = g('inv-notes');
   inv.terms = g('inv-terms') || 'Net 30';
 
@@ -735,14 +754,14 @@ function invRenderDetail(body) {
 
   const lineRows = (inv.items||[]).map(function(item) {
     return '<tr style="border-bottom:1px solid #eee;">'
-      + '<td style="padding:10px 12px;font-size:12px;color:#444;">' + invEsc(item.artist) + '</td>'
-      + '<td style="padding:10px 12px;font-size:12px;font-weight:600;color:#111;">' + invEsc(item.title) + '</td>'
-      + '<td style="padding:10px 12px;font-size:11px;font-family:monospace;color:#555;">' + invEsc(item.catalog) + '</td>'
-      + '<td style="padding:10px 12px;font-size:11px;font-family:monospace;color:#777;">' + invEsc(item.upc) + '</td>'
-      + '<td style="padding:10px 12px;font-size:11px;text-align:center;color:#555;">' + invEsc(item.format||'') + '</td>'
-      + '<td style="padding:10px 12px;font-size:12px;text-align:center;color:#444;">' + (item.qty||1) + '</td>'
-      + '<td style="padding:10px 12px;font-size:12px;font-family:monospace;text-align:right;color:#444;">' + invFmt(item.price||0) + '</td>'
-      + '<td style="padding:10px 12px;font-size:12px;font-family:monospace;font-weight:700;text-align:right;color:#111;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;color:#444;">' + invEsc(item.artist) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;font-weight:600;color:#111;">' + invEsc(item.title) + '</td>'
+      + '<td style="padding:6px 8px;font-size:10px;font-family:monospace;color:#555;">' + invEsc(item.catalog) + '</td>'
+      + '<td style="padding:6px 8px;font-size:10px;font-family:monospace;color:#777;">' + invEsc(item.upc) + '</td>'
+      + '<td style="padding:6px 8px;font-size:10px;text-align:center;color:#555;">' + invEsc(item.format||'') + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;text-align:center;color:#444;">' + (item.qty||1) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;font-family:monospace;text-align:right;color:#444;">' + invFmt(item.price||0) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;font-family:monospace;font-weight:700;text-align:right;color:#111;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
       + '</tr>';
   }).join('');
 
@@ -758,22 +777,23 @@ function invRenderDetail(body) {
     + '</div></div>'
 
     // Print area
-    + '<div id="inv-print-area" style="background:white;color:#111;border:1px solid var(--border);border-radius:8px;padding:40px;font-family:Arial,sans-serif;">'
+    + '<div id="inv-print-area" style="background:white;color:#111;border:1px solid var(--border);border-radius:8px;padding:28px 32px;font-family:Arial,sans-serif;font-size:12px;">'
 
     // Header
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #b83228;">'
     + '<div>'
-    + '<div style="font-size:26px;font-weight:900;color:#b83228;letter-spacing:-0.5px;">FAT POSSUM RECORDS</div>'
+    + '<div style="font-size:20px;font-weight:900;color:#b83228;letter-spacing:-0.5px;">FAT POSSUM RECORDS</div>'
     + '<div style="font-size:12px;color:#666;margin-top:4px;">PO Box 1923 &nbsp;·&nbsp; Oxford, MS 38655</div>'
     + '<div style="font-size:12px;color:#666;">orders@fatpossum.com &nbsp;·&nbsp; 662-234-2828</div>'
     + '</div>'
     + '<div style="text-align:right;">'
-    + '<div style="font-size:22px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:2px;">Invoice</div>'
-    + '<div style="font-size:18px;font-family:monospace;font-weight:700;color:#b83228;margin-top:4px;">' + invEsc(INV_PREFIX + inv.number) + '</div>'
+    + '<div style="font-size:18px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:2px;">Invoice</div>'
+    + '<div style="font-size:14px;font-family:monospace;font-weight:700;color:#b83228;margin-top:4px;">' + invEsc(INV_PREFIX + inv.number) + '</div>'
     + '<div style="font-size:12px;color:#666;margin-top:6px;">Date: <strong>' + invDate(inv.createdAt) + '</strong></div>'
     + '<div style="font-size:12px;color:#666;">Terms: <strong>' + invEsc(inv.terms||'Net 30') + '</strong></div>'
     + (inv.poNumber ? '<div style="font-size:12px;color:#666;">PO#: <strong>' + invEsc(inv.poNumber) + '</strong></div>' : '')
     + (inv.paidAt ? '<div style="margin-top:8px;background:#16a34a;color:white;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;display:inline-block;">PAID ' + invDate(inv.paidAt) + '</div>' : '')
+    + (inv.paymentHold && !inv.paidAt ? '<div style="margin-top:8px;background:#ef4444;color:white;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;display:inline-block;">PAYMENT HOLD</div>' : '')
     + '</div></div>'
 
     // Addresses
@@ -838,13 +858,14 @@ async function invCreatePackiyoOrder(inv) {
       data: {
         type: 'orders',
         attributes: {
-          number:        INV_PREFIX + inv.number,
+          number:        inv.poNumber ? inv.poNumber : INV_PREFIX + inv.number,
           external_id:   INV_PREFIX + inv.number,
           ordered_at:    inv.createdAt,
           shipping:      inv.shipping.cost || 0,
           internal_note: inv.notes || '',
           packing_note:  inv.poNumber ? 'PO# ' + inv.poNumber : '',
           tags:          'B2B, Invoice',
+          payment_hold:  inv.paymentHold ? 1 : 0,
           is_wholesale:  true,
           shipping_method_name: inv.shipping.method || inv.shipping.methodName || '',
           order_item_data: inv.items.map(function(item) {
@@ -984,7 +1005,20 @@ window.invHandlePriceCSV = function(input) {
 // ── PRINT CSS ─────────────────────────────────────────────────
 (function() {
   const style = document.createElement('style');
-  style.textContent = '@media print { .no-print { display:none !important; } #sidebar, nav { display:none !important; } body { overflow:visible !important; } #main-content { overflow:visible !important; } #inv-detail-wrap { padding:0 !important; } }';
+  style.textContent = [
+    '@media print {',
+    '  .no-print { display:none !important; }',
+    '  #sidebar, nav, #main-content > *:not(#view-invoices) { display:none !important; }',
+    '  body, html { overflow:visible !important; background:white !important; }',
+    '  #main-content { overflow:visible !important; }',
+    '  #inv-detail-wrap { padding:0 !important; max-width:100% !important; }',
+    '  #inv-print-area { border:none !important; border-radius:0 !important; padding:12mm 14mm !important; box-shadow:none !important; font-size:11px !important; }',
+    '  #inv-print-area table { font-size:10px !important; }',
+    '  #inv-print-area th, #inv-print-area td { padding:5px 6px !important; }',
+    '  #inv-print-area h1, #inv-print-area .dash-num { font-size:16px !important; }',
+    '  @page { size: letter portrait; margin: 0; }',
+    '}'
+  ].join(' ');
   document.head.appendChild(style);
 })();
 
