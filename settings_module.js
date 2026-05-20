@@ -73,11 +73,11 @@ function deepMerge(defaults, overrides) {
 }
 
 // Global settings object
-window.FPSettings = loadSettings();
+window._FPUserSettings = loadSettings();
 
 // ── APPLY SETTINGS ON BOOT ────────────────────────────────────
 function applySettings(s) {
-  s = s || window.FPSettings;
+  s = s || window._FPUserSettings;
 
   // Dark mode
   if (s.defaultDarkMode && !document.body.classList.contains('dark-mode')) {
@@ -89,12 +89,6 @@ function applySettings(s) {
   // Needs attention banner
   const banner = document.getElementById('needs-attention-banner');
   if (banner && !s.showNeedsAttention) banner.style.display = 'none';
-
-  // Table density
-  const invTable = document.getElementById('inventory-table');
-  if (invTable) {
-    invTable.classList.toggle('density-compact', s.tableDensity === 'compact');
-  }
 
   // Apply replen defaults to the inputs
   applyReplenDefaults(s.replen);
@@ -117,7 +111,7 @@ function applyReplenDefaults(replen) {
 
 // ── SETTINGS PANEL ────────────────────────────────────────────
 window.openSettings = function() {
-  const s = window.FPSettings;
+  const s = window._FPUserSettings;
   const modal = document.getElementById('settings-modal');
   if (!modal) return;
 
@@ -153,7 +147,7 @@ window.closeSettings = function() {
 };
 
 window.saveSettingsFromForm = function() {
-  const s = window.FPSettings;
+  const s = window._FPUserSettings;
 
   s.defaultDarkMode        = getCheck('s-dark-mode');
   s.showNeedsAttention     = getCheck('s-needs-attention');
@@ -177,7 +171,7 @@ window.saveSettingsFromForm = function() {
   s.replen.minUnits          = parseInt(getVal('s-replen-min'))       || 5;
   s.poAutoRefresh            = getCheck('s-po-autorefresh');
 
-  window.FPSettings = s;
+  window._FPUserSettings = s;
   saveSettings(s);
   applySettings(s);
   closeSettings();
@@ -186,9 +180,9 @@ window.saveSettingsFromForm = function() {
 
 window.resetSettings = function() {
   if (!confirm('Reset all settings to defaults?')) return;
-  window.FPSettings = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
-  saveSettings(window.FPSettings);
-  applySettings(window.FPSettings);
+  window._FPUserSettings = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
+  saveSettings(window._FPUserSettings);
+  applySettings(window._FPUserSettings);
   openSettings(); // re-open with reset values
   if (window.toast) toast('Settings reset to defaults.', '');
 };
@@ -204,8 +198,7 @@ function getCheck(id)      { const el = document.getElementById(id); return el ?
 function setVal(id, val)   { const el = document.getElementById(id); if (el) el.value = val; }
 function getVal(id)        { const el = document.getElementById(id); return el ? el.value : ''; }
 
-// ── BOOT ─────────────────────────────────────────────────────
+// ── BOOT — Step 1: no DOM changes on load, just modal functionality ──
 document.addEventListener('DOMContentLoaded', function() {
-  // Apply settings after a short delay to let app.js render first
-  setTimeout(() => applySettings(window.FPSettings), 300);
+  // applySettings intentionally not called yet — testing modal only
 });
