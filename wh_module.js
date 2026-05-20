@@ -21,6 +21,16 @@ const WH_SETTINGS_KEY = 'fp_wh_replen_settings';
 const WH_CONCURRENCY  = 6;
 
 // ------ NAV TOGGLE ---------------------------------------------------------------------------------------------------------------------------------------------
+window.toggleInventoryNav = function(e) {
+  e.preventDefault();
+  const sub   = document.getElementById('inv-nav-sub');
+  const arrow = document.getElementById('inv-nav-arrow');
+  if (!sub) return;
+  const open = sub.style.display === 'block';
+  sub.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
+};
+
 window.toggleWHNav = function(e) {
   e.preventDefault();
   const sub   = document.getElementById('wh-nav-sub');
