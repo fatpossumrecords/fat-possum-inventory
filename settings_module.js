@@ -213,7 +213,7 @@ function _settingsGetCheck(id)      { const el = document.getElementById(id); re
 function _settingsSetVal(id, val)   { const el = document.getElementById(id); if (el) el.value = val; }
 function _settingsGetVal(id)        { const el = document.getElementById(id); return el ? el.value : ''; }
 
-// ── BOOT — Step 3: dark mode + needs attention banner ──
+// ── BOOT — Step 4: dark mode + banner + replen defaults ──
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     const s = window._FPUserSettings;
@@ -224,12 +224,14 @@ document.addEventListener('DOMContentLoaded', function() {
       const icon = document.getElementById('darkmode-icon');
       if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
     }
-    // Needs attention banner — use class so it survives app.js re-renders
+    // Needs attention banner
     if (!s.showNeedsAttention) {
       document.head.insertAdjacentHTML('beforeend', '<style id="fp-hide-banner">#needs-attention-banner{display:none!important}</style>');
     } else {
       const existing = document.getElementById('fp-hide-banner');
       if (existing) existing.remove();
     }
+    // Replen defaults
+    applyReplenDefaults(s.replen);
   }, 2000);
 });
