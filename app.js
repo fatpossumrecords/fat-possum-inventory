@@ -4970,12 +4970,12 @@ function updateGistStatus(sizeKB) {
   const dot = document.getElementById('gist-dot');
   const txt = document.getElementById('gist-status-text');
   const bar = document.getElementById('gist-bar');
-  const LIMIT_KB = 1024;
+  const LIMIT_KB = 10240; // 10MB real Gist limit
   const pct = Math.min(100, (sizeKB / LIMIT_KB) * 100);
-  const color = pct > 90 ? 'var(--red)' : pct > 70 ? 'var(--orange)' : 'var(--green)';
-  const state = pct > 90 ? 'error' : pct > 70 ? 'loading' : 'ok';
+  const color = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--orange)' : 'var(--green)';
+  const state = pct > 80 ? 'error' : pct > 50 ? 'loading' : 'ok';
   if (dot) dot.className = 'status-dot ' + state;
-  if (txt) txt.textContent = sizeKB.toFixed(0) + 'KB / 1MB';
+  if (txt) txt.textContent = sizeKB.toFixed(0) + 'KB / 10MB';
   if (bar) { bar.style.width = pct + '%'; bar.style.background = color; }
 }
 
