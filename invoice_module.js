@@ -10,11 +10,15 @@ const INV_LS_KEY      = 'fp_invoices_cache';
 const INV_START_NUM   = 1000;
 const INV_PREFIX      = 'FPINV-';
 const SHIPPING_METHODS = [
-  { code: 'usps_media',    name: 'USPS Media Mail'  },
-  { code: 'ups_ground',    name: 'UPS Ground'        },
-  { code: 'ups_2day',      name: 'UPS 2-Day'         },
-  { code: 'ups_overnight', name: 'UPS Overnight'     },
-  { code: 'fedex_ltl',     name: 'FedEx LTL'         },
+  { code: 'MediaMail',      name: 'USPS Media Mail'   },
+  { code: 'GroundAdvantage',name: 'USPS Ground Advantage' },
+  { code: 'First',          name: 'USPS First Class'  },
+  { code: 'Priority',       name: 'USPS Priority'     },
+  { code: 'Express',        name: 'USPS Express'      },
+  { code: 'UPSGround',      name: 'UPS Ground'        },
+  { code: 'UPS2Day',        name: 'UPS 2-Day'         },
+  { code: 'UPSOvernight',   name: 'UPS Overnight'     },
+  { code: 'FedExLTL',       name: 'FedEx LTL'         },
 ];
 
 // ── STATE ─────────────────────────────────────────────────────
@@ -730,20 +734,26 @@ async function invCreatePackiyoOrder(inv) {
   try {
     const shipTo = inv.shipSame ? inv.billTo : inv.shipTo;
 
-    // Build payload matching Packiyo docs exactly
+    // Build payload matching confirmed working structure
     const orderPayload = {
       data: {
         type: 'orders',
         attributes: {
-          external_id:          INV_PREFIX + inv.number,
-          order_channel_name:   'Manual Order',
-          is_wholesale:         true,
-          tags:                 'B2B, Invoice',
-          internal_note:        inv.notes || '',
-          shipping_method_name: inv.shipping.methodName || '',
-          shipping_method_code: inv.shipping.method     || '',
-          shipping:             inv.shipping.cost        || 0,
-          ordered_at:           inv.createdAt,
+          external_id:   INV_PREFIX + inv.number,
+          ordered_at:    inv.createdAt,
+          shipping:      inv.shipping.cost || 0,
+          internal_note: inv.notes || '',
+          tags:          'B2B, Invoice',
+          is_wholesale:  true,
+          shipping_method_name: inv.shipping.method || inv.shipping.methodName || '',
+          order_item_data: inv.items.map(function(item) {
+            return {
+              sku:         item.sku,
+              quantity:    item.qty   || 1,
+              price:       item.price || 0,
+              external_id: item.catalog || item.sku,
+            };
+          }),
           shipping_contact_information_data: {
             name:         shipTo.name     || '',
             company_name: shipTo.company  || '',
@@ -768,14 +778,9 @@ async function invCreatePackiyoOrder(inv) {
             email:        inv.billTo.email    || '',
             phone:        inv.billTo.phone    || '',
           },
-          order_item_data: inv.items.map(function(item) {
-            return {
-              sku:      item.sku,
-              quantity: item.qty   || 1,
-              price:    item.price || 0,
-              external_id: item.catalog || item.sku,
-            };
-          }),
+        },
+        relationships: {
+          customer: { data: { type: 'customers', id: '12' } }
         },
       }
     };
