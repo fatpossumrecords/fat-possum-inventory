@@ -301,7 +301,8 @@ function invRenderEdit(body) {
     + '<option value="">Select shipping method...</option>' + shipOpts + '</select></div>'
     + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Shipping Cost ($)</label>'
     + '<input type="number" id="inv-ship-cost" min="0" step="0.01" value="' + (inv.shipping.cost || '') + '" placeholder="0.00" '
-    + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" /></div></div>'
+    + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" '
+    + 'onchange="invUpdateShippingCost(parseFloat(this.value)||0)" /></div></div>'
     + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;">'
     + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Notes & Terms</div>'
     + '<div style="margin-bottom:10px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Payment Terms</label>'
@@ -438,6 +439,13 @@ window.invAddItemByIdx = function(idx) {
   window._invSearchResults = [];
   const tableEl = document.getElementById('inv-items-table');
   if (tableEl) tableEl.innerHTML = invRenderItemsTable(InvState.draft.items);
+  const totalsEl = document.getElementById('inv-totals-box');
+  if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
+};
+
+window.invUpdateShippingCost = function(val) {
+  if (!InvState.draft) return;
+  InvState.draft.shipping.cost = val;
   const totalsEl = document.getElementById('inv-totals-box');
   if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
 };
@@ -684,38 +692,62 @@ async function invCreatePackiyoOrder(inv) {
           shipping_method_code: inv.shipping.method     || '',
           shipping:             inv.shipping.cost        || 0,
           ordered_at:           inv.createdAt,
-          billing_address: {
-            name:     inv.billTo.name,    company:  inv.billTo.company,
-            address1: inv.billTo.address, address2: inv.billTo.address2,
-            city:     inv.billTo.city,    state:    inv.billTo.state,
-            zip:      inv.billTo.zip,     country:  inv.billTo.country || 'US',
-            email:    inv.billTo.email,   phone:    inv.billTo.phone,
-          },
-          shipping_address: {
-            name:     shipTo.name,    company:  shipTo.company,
-            address1: shipTo.address, address2: shipTo.address2,
-            city:     shipTo.city,    state:    shipTo.state,
-            zip:      shipTo.zip,     country:  shipTo.country || 'US',
-            email:    shipTo.email,   phone:    shipTo.phone,
-          },
         },
         relationships: {
           order_items: {
             data: inv.items.map(function(item, i) { return { type:'order-items', id:'item-'+i }; })
+          },
+          contact_information: {
+            data: { type:'contact-informations', id:'billing-contact' }
+          },
+          shipping_contact_information: {
+            data: { type:'contact-informations', id:'shipping-contact' }
           }
         }
       },
-      included: inv.items.map(function(item, i) {
-        return {
-          type: 'order-items', id: 'item-'+i,
+      included: [
+        ...inv.items.map(function(item, i) {
+          return {
+            type: 'order-items', id: 'item-'+i,
+            attributes: {
+              sku:      item.sku,
+              name:     (item.artist ? item.artist + ' - ' : '') + item.title,
+              price:    item.price || 0,
+              quantity: item.qty   || 1,
+            }
+          };
+        }),
+        {
+          type: 'contact-informations', id: 'billing-contact',
           attributes: {
-            sku:      item.sku,
-            name:     (item.artist ? item.artist + ' - ' : '') + item.title,
-            price:    item.price || 0,
-            quantity: item.qty   || 1,
+            name:         inv.billTo.name     || '',
+            company_name: inv.billTo.company  || '',
+            address:      inv.billTo.address  || '',
+            address2:     inv.billTo.address2 || '',
+            city:         inv.billTo.city     || '',
+            state:        inv.billTo.state    || '',
+            zip:          inv.billTo.zip      || '',
+            country:      inv.billTo.country  || 'US',
+            email:        inv.billTo.email    || '',
+            phone:        inv.billTo.phone    || '',
           }
-        };
-      }),
+        },
+        {
+          type: 'contact-informations', id: 'shipping-contact',
+          attributes: {
+            name:         shipTo.name     || '',
+            company_name: shipTo.company  || '',
+            address:      shipTo.address  || '',
+            address2:     shipTo.address2 || '',
+            city:         shipTo.city     || '',
+            state:        shipTo.state    || '',
+            zip:          shipTo.zip      || '',
+            country:      shipTo.country  || 'US',
+            email:        shipTo.email    || '',
+            phone:        shipTo.phone    || '',
+          }
+        },
+      ],
     };
 
     const result = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(payload) });
