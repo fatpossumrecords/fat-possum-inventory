@@ -171,8 +171,8 @@ window.switchToInvoices = function(mode) {
 
 // ── INVOICE LOG ───────────────────────────────────────────────
 function invIsPast(inv) {
-  // Past = paid AND shipped (Packiyo fulfilled)
-  return !!(inv.paidAt && (inv.shippedAt || inv.status === 'shipped'));
+  // Past = paid OR shipped (whichever comes last)
+  return !!(inv.paidAt || inv.shippedAt || inv.status === 'shipped');
 }
 
 function invIsPending(inv) {
@@ -216,6 +216,7 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;">' + invFmt(total) + '</td>'
           + '<td style="padding:10px 16px;">' + statusBadge(inv.status) + '</td>'
           + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId || '—') + '</td>'
+          + '<td style="padding:8px 12px;" onclick="event.stopPropagation()"><button class="inv-del-btn" data-inv-id="' + inv.id + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">&#128465;</button></td>'
           + '</tr>';
       }).join('')
     : '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">' + (filter==='past'?'No completed invoices yet.':filter==='pending'?'No pending invoices.':'No invoices yet.') + '</td></tr>';
@@ -243,6 +244,7 @@ function invRenderLog(body) {
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Total</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Status</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Packiyo Order</th>'
+    + '<th style="padding:10px 16px;width:40px;"></th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
@@ -806,6 +808,7 @@ function invRenderDetail(body) {
     + '<button onclick="invPrint()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
     + (isDraft ? '<button onclick="invPushToPackiyo()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#9654; Send &amp; Push to Packiyo</button>' : '')
     + (inv.status === 'sent' && !inv.paidAt ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
+    + '<button onclick="invDelete()" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;">&#128465; Delete</button>'
     + '</div></div>'
 
     // Print area
@@ -975,6 +978,28 @@ async function invCreatePackiyoOrder(inv) {
 }
 
 // ── MARK PAID ─────────────────────────────────────────────────
+window.invDelete = function() {
+  const inv = InvState.draft;
+  if (!inv) return;
+  if (!confirm('Delete ' + INV_PREFIX + inv.number + '? This cannot be undone.')) return;
+  InvState.invoices = InvState.invoices.filter(function(x) { return x.id !== inv.id; });
+  InvState.draft = null;
+  InvState.view  = 'log';
+  invSave();
+  invRender();
+  if (window.toast) toast('Invoice deleted.', '');
+};
+
+window.invDeleteById = function(id) {
+  const inv = InvState.invoices.find(function(x) { return x.id === id; });
+  if (!inv) return;
+  if (!confirm('Delete ' + INV_PREFIX + inv.number + '? This cannot be undone.')) return;
+  InvState.invoices = InvState.invoices.filter(function(x) { return x.id !== id; });
+  invSave();
+  invRender();
+  if (window.toast) toast('Invoice deleted.', '');
+};
+
 window.invMarkPaid = function() {
   const inv = InvState.draft;
   if (!inv) return;
@@ -1104,6 +1129,15 @@ window.invHandlePriceCSV = function(input) {
     if (view && _viewStyle !== null) view.setAttribute('style', _viewStyle);
   });
 })();
+
+// Event delegation for log delete buttons
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.inv-del-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  const id = btn.dataset.invId;
+  if (id) invDeleteById(id);
+});
 
 // ── BOOT ──────────────────────────────────────────────────────
 (function() {
