@@ -129,6 +129,7 @@ window.openSettings = function() {
   _settingsSetCheck('s-card-runs',         s.dashCards.productionRuns);
   _settingsSetCheck('s-card-mfg',          s.dashCards.mfgPredictions);
   _settingsSetCheck('s-card-clock',        s.dashCards.stockoutClock);
+  _settingsSetCheck('s-card-preorders',    s.dashCards.preOrders);
   _settingsSetVal('s-default-warehouse',   s.defaultWarehouse);
   _settingsSetVal('s-table-density',       s.tableDensity);
   _settingsSetCheck('s-badge-reorder',     s.alertBadges.reorder);
@@ -162,6 +163,7 @@ window.saveSettingsFromForm = function() {
   s.dashCards.productionRuns = _settingsGetCheck('s-card-runs');
   s.dashCards.mfgPredictions = _settingsGetCheck('s-card-mfg');
   s.dashCards.stockoutClock  = _settingsGetCheck('s-card-clock');
+  s.dashCards.preOrders      = _settingsGetCheck('s-card-preorders');
   s.defaultWarehouse         = _settingsGetVal('s-default-warehouse');
   s.tableDensity             = _settingsGetVal('s-table-density');
   s.alertBadges.reorder      = _settingsGetCheck('s-badge-reorder');
@@ -197,7 +199,7 @@ window.saveSettingsFromForm = function() {
     totalProducts:'total products', globalStock:'global stock',
     reorderAlerts:'reorder alerts', resolved:'resolved',
     walkReplenish:'walk replenish', productionRuns:'production runs',
-    mfgPredictions:'mfg predictions', stockoutClock:'stockout',
+    mfgPredictions:'mfg predictions', stockoutClock:'stockout', preOrders:'open pre-orders',
   };
   window._fpHiddenCards = Object.entries(cardMap)
     .filter(([key]) => s.dashCards && s.dashCards[key] === false)
@@ -271,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
       walkReplenish:  'walk replenish',
       productionRuns: 'production runs',
       mfgPredictions: 'mfg predictions',
-      stockoutClock:  'stockout',
+      stockoutClock:  'stockout clock',
     };
     // Build a style that hides cards by ID where possible, otherwise use MutationObserver
     // Since cards are dynamic, store hidden list and apply via observer
