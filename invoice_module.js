@@ -216,7 +216,7 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;">' + invFmt(total) + '</td>'
           + '<td style="padding:10px 16px;">' + statusBadge(inv.status) + '</td>'
           + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId || '—') + '</td>'
-          + '<td style="padding:8px 12px;" onclick="event.stopPropagation()"><button class="inv-del-btn" data-inv-id="' + inv.id + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">&#128465;</button></td>'
+          + '<td style="padding:8px 12px;"><button class="inv-del-btn" data-inv-id="' + inv.id + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">&#128465;</button></td>'
           + '</tr>';
       }).join('')
     : '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">' + (filter==='past'?'No completed invoices yet.':filter==='pending'?'No pending invoices.':'No invoices yet.') + '</td></tr>';
@@ -1134,8 +1134,10 @@ window.invHandlePriceCSV = function(input) {
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('.inv-del-btn');
   if (!btn) return;
+  e.preventDefault();
   e.stopPropagation();
   const id = btn.dataset.invId;
+  console.log('delete clicked, id:', id);
   if (id) invDeleteById(id);
 });
 
