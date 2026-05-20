@@ -1062,6 +1062,9 @@ window.wtToggleEmpty = function() {
   }
 
   function makeDraggable(card, grid) {
+    // Don't make doomsday card draggable - it has interactive buttons
+    if (card.id === 'doomsday-card') return;
+
     card.setAttribute('draggable', 'true');
     card.style.cursor = 'grab';
 
@@ -1251,6 +1254,25 @@ window.wtToggleEmpty = function() {
   }
 
   document.addEventListener('DOMContentLoaded', watchDashboard);
+
+  // Override doomsdayKeepIt to persist the index across dashboard re-renders
+  // app.js's renderDashboard wipes doomsday-display, then renderDoomsdayClock re-renders
+  // from _doomsdayIdx which gets reset. We persist it in sessionStorage.
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      const orig = window.doomsdayKeepIt;
+      if (!orig) return;
+      window.doomsdayKeepIt = function() {
+        orig();
+        try { sessionStorage.setItem('fp_doom_idx', String(window._doomsdayIdx || 0)); } catch(e) {}
+      };
+      // Restore index on load
+      try {
+        const saved = parseInt(sessionStorage.getItem('fp_doom_idx') || '0');
+        if (saved > 0 && window._doomsdayIdx !== undefined) window._doomsdayIdx = saved;
+      } catch(e) {}
+    }, 3000);
+  });
 })();
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
