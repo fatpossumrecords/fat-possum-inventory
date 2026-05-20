@@ -137,10 +137,15 @@
         <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 4l3 3 5-5"/></svg>
         Dashboard
       </a>
-      <a href="#" class="nav-item" data-view="inventory">
+      <div class="nav-item" data-view="inventory" style="cursor:pointer;" onclick="toggleInventoryNav(event)">
         <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg>
         Inventory
-      </a>
+        <span id="inv-nav-arrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▸</span>
+      </div>
+      <div id="inv-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('inventory')">Global Inventory</div>
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('suppressed')">Suppressed</div>
+      </div>
       <a href="#" class="nav-item" data-view="movements">
         <svg viewBox="0 0 24 24"><path d="M8 5l-1.5 1.5L10 11H3v2h7l-3.5 4.5L8 19l5-7-5-7zm8 2h-3v2h3v9h-3v2h3a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
         Stock Movements
@@ -182,10 +187,6 @@
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">Replenishment</div>
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('walkthrough')">Warehouse View</div>
       </div>
-      <a href="#" class="nav-item" data-view="suppressed" style="opacity:0.65;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-        Suppressed
-      </a>
     <div class="sidebar-footer">
 
       <!-- STATUS -->
