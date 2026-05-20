@@ -806,7 +806,7 @@ function invRenderDetail(body) {
 
     // Line items
     + '<table style="width:100%;border-collapse:collapse;margin-bottom:24px;">'
-    + '<thead><tr style="background:#111;color:white;">'
+    + '<thead style="display:table-header-group;"><tr style="background:#111;color:white;">'
     + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Artist</th>'
     + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Title</th>'
     + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Cat #</th>'
@@ -818,15 +818,15 @@ function invRenderDetail(body) {
     + '</tr></thead><tbody>' + lineRows + '</tbody></table>'
 
     // Totals
-    + '<div style="display:flex;justify-content:flex-end;margin-bottom:24px;">'
+    + '<div class="inv-totals-block" style="display:flex;justify-content:flex-end;margin-bottom:24px;">'
     + '<div style="min-width:240px;border:1px solid #eee;border-radius:6px;overflow:hidden;">'
     + '<div style="display:flex;justify-content:space-between;padding:10px 14px;font-size:13px;border-bottom:1px solid #eee;background:#fafafa;"><span style="color:#555;">Subtotal</span><span style="font-family:monospace;">' + invFmt(subtotal) + '</span></div>'
     + '<div style="display:flex;justify-content:space-between;padding:10px 14px;font-size:13px;border-bottom:1px solid #eee;background:#fafafa;"><span style="color:#555;">Shipping' + (inv.shipping.methodName ? ' (' + invEsc(inv.shipping.methodName) + ')' : '') + '</span><span style="font-family:monospace;">' + invFmt(shipping) + '</span></div>'
     + '<div style="display:flex;justify-content:space-between;padding:12px 14px;font-size:17px;font-weight:900;background:#111;color:white;"><span>Total</span><span style="font-family:monospace;">' + invFmt(total) + '</span></div>'
     + '</div></div>'
 
-    + (inv.notes ? '<div style="padding:16px;background:#f8f8f8;border-radius:6px;font-size:12px;color:#555;border-left:3px solid #b83228;margin-bottom:20px;"><strong>Notes:</strong> ' + invEsc(inv.notes) + '</div>' : '')
-    + '<div style="margin-top:24px;padding-top:16px;border-top:2px solid #eee;font-size:10px;color:#888;line-height:1.6;">'
+    + (inv.notes ? '<div style="padding:12px 14px;background:#f8f8f8;border-radius:6px;font-size:11px;color:#555;border-left:3px solid #b83228;margin-bottom:16px;"><strong>Notes:</strong> ' + invEsc(inv.notes) + '</div>' : '')
+    + '<div class="inv-footer-block" style="margin-top:20px;padding-top:14px;border-top:2px solid #eee;font-size:9px;color:#888;line-height:1.6;">'
     + '<strong style="font-size:11px;color:#555;">Payment / Wire Transfer Information</strong><br>'
     + 'Bank Name: Renasant Bank &nbsp;·&nbsp; 111 Jackson Avenue East, Oxford, MS 38655 &nbsp;·&nbsp; (877) 367-5371<br>'
     + 'Account Name: Fat Possum Records LLC &nbsp;·&nbsp; Account Number: 3100304905 &nbsp;·&nbsp; ABA: 084201294<br>'
@@ -1009,16 +1009,20 @@ window.invHandlePriceCSV = function(input) {
     '@media print {',
     '  .no-print { display:none !important; }',
     '  #sidebar { display:none !important; }',
+    '  #top-bar, #needs-attention-banner { display:none !important; }',
     '  #main-content { overflow:visible !important; display:block !important; }',
     '  .view { display:none !important; }',
     '  #view-invoices { display:block !important; }',
     '  #inv-body { overflow:visible !important; }',
     '  body, html { overflow:visible !important; background:white !important; }',
     '  #inv-detail-wrap { padding:0 !important; max-width:100% !important; }',
-    '  #inv-print-area { border:none !important; border-radius:0 !important; padding:12mm 14mm !important; box-shadow:none !important; font-size:11px !important; }',
-    '  #inv-print-area table { font-size:10px !important; }',
-    '  #inv-print-area th, #inv-print-area td { padding:5px 6px !important; }',
-    '  @page { size: letter portrait; margin: 0; }',
+    '  #inv-print-area { border:none !important; border-radius:0 !important; padding:10mm 12mm !important; box-shadow:none !important; font-size:11px !important; }',
+    '  #inv-print-area table { font-size:10px !important; border-collapse:collapse !important; width:100% !important; }',
+    '  #inv-print-area th, #inv-print-area td { padding:4px 6px !important; }',
+    '  #inv-print-area tbody tr { page-break-inside:avoid; }',
+    '  .inv-totals-block { page-break-inside:avoid; page-break-before:auto; }',
+    '  .inv-footer-block { page-break-inside:avoid; }',
+    '  @page { size: letter portrait; margin: 15mm 12mm; }',
     '}'
   ].join(' ');
   document.head.appendChild(style);
