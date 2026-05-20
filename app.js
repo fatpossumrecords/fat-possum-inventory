@@ -4984,6 +4984,12 @@ function setStatus(which, state, label) {
   const txt = document.getElementById(`${which}-status-text`);
   if (dot) dot.className = 'status-dot ' + state;
   if (txt) txt.textContent = label;
+  // Persist so status survives page refresh
+  try {
+    const saved = JSON.parse(localStorage.getItem('fp_status_cache') || '{}');
+    saved[which] = { state, label, ts: Date.now() };
+    localStorage.setItem('fp_status_cache', JSON.stringify(saved));
+  } catch(e) {}
 }
 function normalizeFormat(fmt) {
   if (!fmt) return '';
