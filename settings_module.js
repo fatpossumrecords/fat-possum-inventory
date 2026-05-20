@@ -286,6 +286,46 @@ function _settingsGetVal(id)        { const el = document.getElementById(id); re
     }
   });
 })();
+
+// ── GIST SIZE STATUS ─────────────────────────────────────────
+(function() {
+  const GIST_LIMIT_KB = 10240;
+
+  function updateGistStatus() {
+    let gistId, token;
+    try { gistId = CONFIG.GIST_ID; token = CONFIG.GIST_TOKEN; } catch(e) {}
+    if (!gistId) {
+      try {
+        const c = JSON.parse(localStorage.getItem('fp_config_cache') || '{}');
+        gistId = c.GIST_ID; token = c.GIST_TOKEN;
+      } catch(e) {}
+    }
+    if (!gistId || !token) return;
+
+    fetch('https://api.github.com/gists/' + gistId, {
+      headers: { 'Authorization': 'token ' + token },
+      cache: 'no-store'
+    }).then(function(r) { return r.json(); }).then(function(g) {
+      const files = Object.values(g.files || {});
+      const totalKb  = files.reduce(function(s, f) { return s + (f.size || 0); }, 0) / 1024;
+      const largestKb = Math.max.apply(null, files.map(function(f) { return (f.size || 0) / 1024; }));
+      const pct = Math.min(100, (largestKb / GIST_LIMIT_KB) * 100);
+
+      const dot  = document.getElementById('gist-dot');
+      const text = document.getElementById('gist-status-text');
+      const bar  = document.getElementById('gist-bar');
+
+      if (dot)  dot.className = 'status-dot ok';
+      if (text) text.textContent = totalKb.toFixed(0) + 'kb · largest ' + largestKb.toFixed(0) + 'kb';
+      if (bar)  { bar.style.width = pct + '%'; bar.style.background = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--yellow)' : 'var(--green)'; }
+    }).catch(function() {});
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(updateGistStatus, 3000);
+  });
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     const s = window._FPUserSettings;
