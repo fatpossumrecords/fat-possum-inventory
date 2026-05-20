@@ -730,7 +730,8 @@ async function invCreatePackiyoOrder(inv) {
   try {
     const shipTo = inv.shipSame ? inv.billTo : inv.shipTo;
 
-    // Step 1: Create order with contact_information relationships for addresses
+    // Step 1: Create order — Packiyo API doesn't support address creation,
+    // addresses must be added manually in Packiyo or via customer records
     const orderPayload = {
       data: {
         type: 'orders',
@@ -738,53 +739,17 @@ async function invCreatePackiyoOrder(inv) {
           external_id:          INV_PREFIX + inv.number,
           is_wholesale:         true,
           tags:                 'B2B, Invoice',
-          internal_note:        inv.notes || '',
+          internal_note:        [
+            inv.notes || '',
+            'BILL TO: ' + (inv.billTo.company||inv.billTo.name||'') + ' | ' + (inv.billTo.address||'') + ', ' + (inv.billTo.city||'') + ' ' + (inv.billTo.state||'') + ' ' + (inv.billTo.zip||''),
+            'SHIP TO: ' + (inv.shipSame ? 'Same as billing' : ((inv.shipTo.company||inv.shipTo.name||'') + ' | ' + (inv.shipTo.address||'') + ', ' + (inv.shipTo.city||'') + ' ' + (inv.shipTo.state||'') + ' ' + (inv.shipTo.zip||''))),
+          ].filter(Boolean).join('\n'),
           shipping_method_name: inv.shipping.methodName || '',
           shipping_method_code: inv.shipping.method     || '',
           shipping:             inv.shipping.cost        || 0,
           ordered_at:           inv.createdAt,
         },
-        relationships: {
-          shipping_contact_information: {
-            data: { type: 'contact-informations', id: 'ship-addr' }
-          },
-          billing_contact_information: {
-            data: { type: 'contact-informations', id: 'bill-addr' }
-          },
-        }
-      },
-      included: [
-        {
-          type: 'contact-informations', id: 'ship-addr',
-          attributes: {
-            name:         shipTo.name      || '',
-            company_name: shipTo.company   || '',
-            address:      shipTo.address   || '',
-            address2:     shipTo.address2  || '',
-            city:         shipTo.city      || '',
-            state:        shipTo.state     || '',
-            zip:          shipTo.zip       || '',
-            country:      shipTo.country   || 'US',
-            email:        shipTo.email     || '',
-            phone:        shipTo.phone     || '',
-          }
-        },
-        {
-          type: 'contact-informations', id: 'bill-addr',
-          attributes: {
-            name:         inv.billTo.name     || '',
-            company_name: inv.billTo.company  || '',
-            address:      inv.billTo.address  || '',
-            address2:     inv.billTo.address2 || '',
-            city:         inv.billTo.city     || '',
-            state:        inv.billTo.state    || '',
-            zip:          inv.billTo.zip      || '',
-            country:      inv.billTo.country  || 'US',
-            email:        inv.billTo.email    || '',
-            phone:        inv.billTo.phone    || '',
-          }
-        },
-      ]
+      }
     };
 
     const orderResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
