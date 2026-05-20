@@ -1162,6 +1162,26 @@ window.wtToggleEmpty = function() {
     wh.classList.remove('dash-card-red','dash-card-yellow');
     if (cMfg) cMfg.classList.remove('dash-card-red','dash-card-yellow');
 
+    // Build Pre-Orders card
+    const cPreOrders = (function() {
+      const campaigns = (typeof POState !== 'undefined' ? POState.campaigns : []) || [];
+      const active = campaigns.filter(c => c.status === 'active');
+      const totalOrders = active.reduce((sum, c) => {
+        const orders = (typeof POState !== 'undefined' ? POState.orders[c.id] : null) || [];
+        return sum + orders.length;
+      }, 0);
+      const card = document.createElement('div');
+      card.dataset.cardId = 'pre-orders';
+      card.className = 'dash-card';
+      card.style.cursor = 'pointer';
+      card.innerHTML =
+        '<div class="dash-label">Open Pre-Orders</div>'
+        + '<div class="dash-num" style="font-size:28px;color:var(--accent);">' + totalOrders + '</div>'
+        + '<div class="dash-sub">' + active.length + ' active campaign' + (active.length !== 1 ? 's' : '') + '</div>';
+      card.addEventListener('click', () => { if (window.switchToPreOrders) switchToPreOrders(); });
+      return card;
+    })();
+
     // Assign stable IDs for drag ordering
     if (cTotal)    cTotal.dataset.cardId    = 'total-products';
     if (cGlobal)   cGlobal.dataset.cardId   = 'global-stock';
@@ -1178,7 +1198,7 @@ window.wtToggleEmpty = function() {
     grid.innerHTML = '';
 
     // Default order
-    const defaultOrder = [cTotal, cGlobal, cAlerts, cResolved, wh, cRuns, cMfg, cClock].filter(Boolean);
+    const defaultOrder = [cTotal, cGlobal, cAlerts, cResolved, wh, cRuns, cMfg, cClock, cPreOrders].filter(Boolean);
     defaultOrder.forEach(c => grid.appendChild(c));
 
     // Apply saved order if exists
