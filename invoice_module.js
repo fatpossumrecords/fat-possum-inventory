@@ -258,6 +258,7 @@ window.invNewInvoice = function() {
     shipSame: true,
     items: [],
     shipping: { method:'', methodName:'', cost:0 },
+    poNumber: '',
     notes: '',
     terms: 'Net 30',
     packiyoOrderId: null,
@@ -335,7 +336,16 @@ function invRenderEdit(body) {
 
     // Line items
     + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;">'
-    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Line Items</div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;">Line Items</div>'
+    + '<button onclick="invToggleBulkImport()" class="btn-secondary btn-sm" style="font-size:11px;">&#9776; Bulk Paste</button>'
+    + '</div>'
+    + '<div id="inv-bulk-area" style="display:none;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:12px;">'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Paste from spreadsheet: <strong>UPC &nbsp;·&nbsp; Title &nbsp;·&nbsp; Artist &nbsp;·&nbsp; Qty</strong> (one row per line, tab or comma separated)</div>'
+    + '<textarea id="inv-bulk-text" rows="5" placeholder="767981186115&#9;Frisco Mabel Joy&#9;Mickey Newbury&#9;5&#10;..." style="width:100%;padding:8px;font-size:12px;font-family:monospace;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);resize:vertical;box-sizing:border-box;"></textarea>'
+    + '<div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px;">'
+    + '<button onclick="invBulkImport()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer;">Import Lines</button>'
+    + '</div></div>'
     + '<div style="position:relative;margin-bottom:12px;">'
     + '<input id="inv-item-search" type="text" placeholder="Search by artist, title, SKU or UPC..." '
     + 'style="width:100%;padding:10px 14px;font-size:13px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);" '
@@ -358,6 +368,9 @@ function invRenderEdit(body) {
     + 'onchange="invUpdateShippingCost(parseFloat(this.value)||0)" /></div></div>'
     + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;">'
     + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Notes & Terms</div>'
+    + '<div style="margin-bottom:10px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">PO Number</label>'
+    + '<input type="text" id="inv-po-number" value="' + invEsc(inv.poNumber||'') + '" placeholder="Customer PO#..." '
+    + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" /></div>'
     + '<div style="margin-bottom:10px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Payment Terms</label>'
     + '<input type="text" id="inv-terms" value="' + invEsc(inv.terms) + '" placeholder="Net 30" '
     + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" /></div>'
@@ -395,7 +408,7 @@ function invRenderItemsTable(items) {
       + '<input type="number" min="0" step="0.01" value="' + parseFloat(item.price || 0).toFixed(2) + '" '
       + 'style="width:80px;padding:4px 6px;font-size:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:var(--text);text-align:right;" '
       + 'onchange="invUpdateItem(' + idx + ',\'price\',parseFloat(this.value)||0)" /></td>'
-      + '<td style="padding:8px 10px;font-family:monospace;font-weight:600;font-size:12px;text-align:right;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
+      + '<td id="inv-line-total-' + idx + '" style="padding:8px 10px;font-family:monospace;font-weight:600;font-size:12px;text-align:right;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
       + '<td style="padding:8px 10px;text-align:center;">'
       + '<button onclick="invRemoveItem(' + idx + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&#x2715;</button></td>'
       + '</tr>';
@@ -506,6 +519,12 @@ window.invUpdateShippingCost = function(val) {
 window.invUpdateItem = function(idx, field, val) {
   if (!InvState.draft || !InvState.draft.items[idx]) return;
   InvState.draft.items[idx][field] = val;
+  // Update line total cell in place
+  const lineEl = document.getElementById('inv-line-total-' + idx);
+  if (lineEl) {
+    const item = InvState.draft.items[idx];
+    lineEl.textContent = invFmt((item.qty||1) * (item.price||0));
+  }
   const totalsEl = document.getElementById('inv-totals-box');
   if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
 };
@@ -555,6 +574,78 @@ window.invSelectCustomer = function(idx) {
   invRenderEdit(document.getElementById('inv-body'));
 };
 
+window.invToggleBulkImport = function() {
+  const el = document.getElementById('inv-bulk-area');
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+window.invBulkImport = function() {
+  const text = (document.getElementById('inv-bulk-text') || {}).value || '';
+  if (!text.trim() || !InvState.draft) return;
+
+  const catalog = (typeof State !== 'undefined' && State.merged) ? State.merged : [];
+  const upcMap  = {};
+  const skuMap  = {};
+  catalog.forEach(function(p) {
+    if (p.upc)     upcMap[p.upc.trim()]     = p;
+    if (p.catalog) skuMap[p.catalog.trim().toLowerCase()] = p;
+  });
+
+  let added = 0, notFound = [];
+  const lines = text.trim().split('\n');
+
+  lines.forEach(function(line) {
+    if (!line.trim()) return;
+    // Support tab or comma separated
+    const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+    const upc   = (cols[0] || '').trim().replace(/"/g,'');
+    const title = (cols[1] || '').trim().replace(/"/g,'');
+    const artist= (cols[2] || '').trim().replace(/"/g,'');
+    const qty   = parseInt((cols[3] || '1').trim()) || 1;
+
+    // Try to match by UPC first, then title+artist
+    let product = upcMap[upc];
+    if (!product && title) {
+      product = catalog.find(function(p) {
+        return (p.title||'').toLowerCase() === title.toLowerCase();
+      });
+    }
+
+    if (product) {
+      const price = parseFloat(InvState.priceCatalog[product.catalog] || InvState.priceCatalog[product.upc] || 0);
+      InvState.draft.items.push({
+        sku:     product.catalog || product.packiyo_sku || '',
+        artist:  product.artist  || artist  || '',
+        title:   product.title   || title   || '',
+        catalog: product.catalog || '',
+        upc:     product.upc     || upc     || '',
+        format:  product.format  || '',
+        qty:     qty,
+        price:   price,
+        onHand:  product.fp_available !== undefined ? product.fp_available : undefined,
+      });
+      added++;
+    } else if (upc || title) {
+      notFound.push(upc || title);
+    }
+  });
+
+  // Clear textarea and hide
+  const ta = document.getElementById('inv-bulk-text');
+  if (ta) ta.value = '';
+  document.getElementById('inv-bulk-area').style.display = 'none';
+
+  // Re-render items table
+  const tableEl = document.getElementById('inv-items-table');
+  if (tableEl) tableEl.innerHTML = invRenderItemsTable(InvState.draft.items);
+  const totalsEl = document.getElementById('inv-totals-box');
+  if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
+
+  let msg = added + ' item' + (added !== 1 ? 's' : '') + ' added.';
+  if (notFound.length) msg += ' Not found: ' + notFound.slice(0, 5).join(', ') + (notFound.length > 5 ? '...' : '');
+  if (window.toast) toast(msg, notFound.length ? '' : 'success');
+};
+
 window.invToggleShipSame = function(checked) {
   if (!InvState.draft) return;
   InvState.draft.shipSame = checked;
@@ -578,6 +669,7 @@ function invCollectForm() {
   const method = g('inv-ship-method');
   const methodObj = method ? SHIPPING_METHODS.find(function(m) { return m.code === method; }) : null;
   inv.shipping = { method:method, methodName:methodObj ? methodObj.name : '', cost:parseFloat(g('inv-ship-cost'))||0 };
+  inv.poNumber = g('inv-po-number');
   inv.notes = g('inv-notes');
   inv.terms = g('inv-terms') || 'Net 30';
 
@@ -657,7 +749,7 @@ function invRenderDetail(body) {
   body.innerHTML = '<div id="inv-detail-wrap" style="padding:24px;max-width:900px;">'
     // Action bar
     + '<div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
-    + '<button onclick="invBackToLog()" class="btn-secondary btn-sm">&#8592; Back to Invoices</button>'
+    + '<button onclick="invSaveDraft();invBackToLog()" class="btn-secondary btn-sm">&#8592; Save &amp; Back</button>'
     + '<div style="display:flex;gap:8px;">'
     + (isDraft ? '<button onclick="invEditDraft()" class="btn-secondary btn-sm">&#9998; Edit</button>' : '')
     + '<button onclick="window.print()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
@@ -680,6 +772,7 @@ function invRenderDetail(body) {
     + '<div style="font-size:18px;font-family:monospace;font-weight:700;color:#b83228;margin-top:4px;">' + invEsc(INV_PREFIX + inv.number) + '</div>'
     + '<div style="font-size:12px;color:#666;margin-top:6px;">Date: <strong>' + invDate(inv.createdAt) + '</strong></div>'
     + '<div style="font-size:12px;color:#666;">Terms: <strong>' + invEsc(inv.terms||'Net 30') + '</strong></div>'
+    + (inv.poNumber ? '<div style="font-size:12px;color:#666;">PO#: <strong>' + invEsc(inv.poNumber) + '</strong></div>' : '')
     + (inv.paidAt ? '<div style="margin-top:8px;background:#16a34a;color:white;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;display:inline-block;">PAID ' + invDate(inv.paidAt) + '</div>' : '')
     + '</div></div>'
 
@@ -712,7 +805,13 @@ function invRenderDetail(body) {
     + '<div style="display:flex;justify-content:space-between;padding:12px 14px;font-size:17px;font-weight:900;background:#111;color:white;"><span>Total</span><span style="font-family:monospace;">' + invFmt(total) + '</span></div>'
     + '</div></div>'
 
-    + (inv.notes ? '<div style="padding:16px;background:#f8f8f8;border-radius:6px;font-size:12px;color:#555;border-left:3px solid #b83228;"><strong>Notes:</strong> ' + invEsc(inv.notes) + '</div>' : '')
+    + (inv.notes ? '<div style="padding:16px;background:#f8f8f8;border-radius:6px;font-size:12px;color:#555;border-left:3px solid #b83228;margin-bottom:20px;"><strong>Notes:</strong> ' + invEsc(inv.notes) + '</div>' : '')
+    + '<div style="margin-top:24px;padding-top:16px;border-top:2px solid #eee;font-size:10px;color:#888;line-height:1.6;">'
+    + '<strong style="font-size:11px;color:#555;">Payment / Wire Transfer Information</strong><br>'
+    + 'Bank Name: Renasant Bank &nbsp;·&nbsp; 111 Jackson Avenue East, Oxford, MS 38655 &nbsp;·&nbsp; (877) 367-5371<br>'
+    + 'Account Name: Fat Possum Records LLC &nbsp;·&nbsp; Account Number: 3100304905 &nbsp;·&nbsp; ABA: 084201294<br>'
+    + 'Checks payable to: Fat Possum Records &nbsp;·&nbsp; Attn: Patrick Addison &nbsp;·&nbsp; 827 N Lamar Blvd, Oxford, MS 38655'
+    + '</div>'
     + '</div></div>';
 }
 
@@ -744,6 +843,7 @@ async function invCreatePackiyoOrder(inv) {
           ordered_at:    inv.createdAt,
           shipping:      inv.shipping.cost || 0,
           internal_note: inv.notes || '',
+          packing_note:  inv.poNumber ? 'PO# ' + inv.poNumber : '',
           tags:          'B2B, Invoice',
           is_wholesale:  true,
           shipping_method_name: inv.shipping.method || inv.shipping.methodName || '',
