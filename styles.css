@@ -146,7 +146,9 @@ nav { padding: 8px 0; flex: 1; }
   min-height: 0;
   height: 0; /* forces flex child to respect parent height */
 }
-/* mob-* classes used by app.js for inventory cells — must display on desktop */
+.dash-card[draggable="true"] { cursor: grab; user-select: none; }
+.dash-card[draggable="true"]:active { cursor: grabbing; }
+
 #inventory-table td.mob-artist,
 #inventory-table td.mob-title,
 #inventory-table td.mob-catalog,
