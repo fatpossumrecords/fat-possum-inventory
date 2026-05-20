@@ -754,14 +754,14 @@ function invRenderDetail(body) {
 
   const lineRows = (inv.items||[]).map(function(item) {
     return '<tr style="border-bottom:1px solid #eee;">'
-      + '<td style="padding:6px 8px;font-size:11px;color:#444;">' + invEsc(item.artist) + '</td>'
-      + '<td style="padding:6px 8px;font-size:11px;font-weight:600;color:#111;">' + invEsc(item.title) + '</td>'
-      + '<td style="padding:6px 8px;font-size:10px;font-family:monospace;color:#555;">' + invEsc(item.catalog) + '</td>'
-      + '<td style="padding:6px 8px;font-size:10px;font-family:monospace;color:#777;">' + invEsc(item.upc) + '</td>'
-      + '<td style="padding:6px 8px;font-size:10px;text-align:center;color:#555;">' + invEsc(item.format||'') + '</td>'
-      + '<td style="padding:6px 8px;font-size:11px;text-align:center;color:#444;">' + (item.qty||1) + '</td>'
-      + '<td style="padding:6px 8px;font-size:11px;font-family:monospace;text-align:right;color:#444;">' + invFmt(item.price||0) + '</td>'
-      + '<td style="padding:6px 8px;font-size:11px;font-family:monospace;font-weight:700;text-align:right;color:#111;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;color:#444;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + invEsc(item.artist) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-weight:600;color:#111;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + invEsc(item.title) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;color:#555;">' + invEsc(item.catalog) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;color:#777;">' + invEsc(item.upc) + '</td>'
+      + '<td style="padding:5px 4px;font-size:9px;text-align:center;color:#555;">' + invEsc(item.format||'') + '</td>'
+      + '<td style="padding:5px 4px;font-size:9px;text-align:center;font-weight:700;">' + (item.qty||1) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;text-align:right;">' + invFmt(item.price||0) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;font-weight:700;text-align:right;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
       + '</tr>';
   }).join('');
 
@@ -777,17 +777,17 @@ function invRenderDetail(body) {
     + '</div></div>'
 
     // Print area
-    + '<div id="inv-print-area" style="background:white;color:#111;border:1px solid var(--border);border-radius:8px;padding:28px 32px;font-family:Arial,sans-serif;font-size:12px;">'
+    + '<div id="inv-print-area" style="background:white;color:#111;border:1px solid var(--border);border-radius:8px;padding:24px 28px;font-family:Arial,sans-serif;font-size:12px;max-width:800px;">'
 
     // Header
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #b83228;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #b83228;">'
     + '<div>'
-    + '<div style="font-size:20px;font-weight:900;color:#b83228;letter-spacing:-0.5px;">FAT POSSUM RECORDS</div>'
+    + '<div style="font-size:18px;font-weight:900;color:#b83228;letter-spacing:-0.5px;">FAT POSSUM RECORDS</div>'
     + '<div style="font-size:12px;color:#666;margin-top:4px;">PO Box 1923 &nbsp;·&nbsp; Oxford, MS 38655</div>'
     + '<div style="font-size:12px;color:#666;">orders@fatpossum.com &nbsp;·&nbsp; 662-234-2828</div>'
     + '</div>'
     + '<div style="text-align:right;">'
-    + '<div style="font-size:18px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:2px;">Invoice</div>'
+    + '<div style="font-size:16px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:1px;">Invoice</div>'
     + '<div style="font-size:14px;font-family:monospace;font-weight:700;color:#b83228;margin-top:4px;">' + invEsc(INV_PREFIX + inv.number) + '</div>'
     + '<div style="font-size:12px;color:#666;margin-top:6px;">Date: <strong>' + invDate(inv.createdAt) + '</strong></div>'
     + '<div style="font-size:12px;color:#666;">Terms: <strong>' + invEsc(inv.terms||'Net 30') + '</strong></div>'
@@ -797,7 +797,7 @@ function invRenderDetail(body) {
     + '</div></div>'
 
     // Addresses
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:28px;padding:20px;background:#f8f8f8;border-radius:6px;">'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;padding:12px 14px;background:#f8f8f8;border-radius:4px;">'
     + addrBlock(inv.billTo, 'Bill To')
     + addrBlock(inv.shipSame ? inv.billTo : inv.shipTo, 'Ship To')
     + '</div>'
@@ -805,32 +805,42 @@ function invRenderDetail(body) {
     + (inv.shipping.methodName ? '<div style="margin-bottom:16px;font-size:12px;color:#555;"><strong>Shipping Method:</strong> ' + invEsc(inv.shipping.methodName) + '</div>' : '')
 
     // Line items
-    + '<table style="width:100%;border-collapse:collapse;margin-bottom:24px;">'
+    + '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;table-layout:fixed;">'
+    + '<colgroup>'
+    + '<col style="width:18%;">'  // Artist
+    + '<col style="width:22%;">'  // Title
+    + '<col style="width:10%;">'  // Cat #
+    + '<col style="width:13%;">'  // UPC
+    + '<col style="width:8%;">'   // Format
+    + '<col style="width:5%;">'   // Qty
+    + '<col style="width:12%;">'  // Unit Price
+    + '<col style="width:12%;">'  // Total
+    + '</colgroup>'
     + '<thead style="display:table-header-group;"><tr style="background:#111;color:white;">'
-    + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Artist</th>'
-    + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Title</th>'
-    + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Cat #</th>'
-    + '<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">UPC</th>'
-    + '<th style="padding:10px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Format</th>'
-    + '<th style="padding:10px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Qty</th>'
-    + '<th style="padding:10px 12px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Unit Price</th>'
-    + '<th style="padding:10px 12px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total</th>'
+    + '<th style="padding:6px 6px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;overflow:hidden;white-space:nowrap;">Artist</th>'
+    + '<th style="padding:6px 6px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;overflow:hidden;white-space:nowrap;">Title</th>'
+    + '<th style="padding:6px 6px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;overflow:hidden;white-space:nowrap;">Cat #</th>'
+    + '<th style="padding:6px 6px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;overflow:hidden;white-space:nowrap;">UPC</th>'
+    + '<th style="padding:6px 4px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;">Fmt</th>'
+    + '<th style="padding:6px 4px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;">Qty</th>'
+    + '<th style="padding:6px 6px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;">Price</th>'
+    + '<th style="padding:6px 6px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;">Total</th>'
     + '</tr></thead><tbody>' + lineRows + '</tbody></table>'
 
-    // Totals
-    + '<div class="inv-totals-block" style="display:flex;justify-content:flex-end;margin-bottom:24px;">'
-    + '<div style="min-width:240px;border:1px solid #eee;border-radius:6px;overflow:hidden;">'
-    + '<div style="display:flex;justify-content:space-between;padding:10px 14px;font-size:13px;border-bottom:1px solid #eee;background:#fafafa;"><span style="color:#555;">Subtotal</span><span style="font-family:monospace;">' + invFmt(subtotal) + '</span></div>'
-    + '<div style="display:flex;justify-content:space-between;padding:10px 14px;font-size:13px;border-bottom:1px solid #eee;background:#fafafa;"><span style="color:#555;">Shipping' + (inv.shipping.methodName ? ' (' + invEsc(inv.shipping.methodName) + ')' : '') + '</span><span style="font-family:monospace;">' + invFmt(shipping) + '</span></div>'
-    + '<div style="display:flex;justify-content:space-between;padding:12px 14px;font-size:17px;font-weight:900;background:#111;color:white;"><span>Total</span><span style="font-family:monospace;">' + invFmt(total) + '</span></div>'
-    + '</div></div>'
+    // Totals — full width table instead of flex-end div so it doesn't overflow
+    + '<div class="inv-totals-block" style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
+    + '<table style="width:220px;border-collapse:collapse;font-size:11px;">'
+    + '<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;color:#555;">Subtotal</td><td style="padding:5px 8px;text-align:right;font-family:monospace;">' + invFmt(subtotal) + '</td></tr>'
+    + '<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;color:#555;">Shipping' + (inv.shipping.methodName ? '<br><span style="font-size:9px;color:#aaa;">' + invEsc(inv.shipping.methodName) + '</span>' : '') + '</td><td style="padding:5px 8px;text-align:right;font-family:monospace;">' + invFmt(shipping) + '</td></tr>'
+    + '<tr style="background:#111;color:white;"><td style="padding:8px 8px;font-weight:900;font-size:13px;">Total</td><td style="padding:8px 8px;text-align:right;font-family:monospace;font-weight:900;font-size:13px;">' + invFmt(total) + '</td></tr>'
+    + '</table></div>'
 
-    + (inv.notes ? '<div style="padding:12px 14px;background:#f8f8f8;border-radius:6px;font-size:11px;color:#555;border-left:3px solid #b83228;margin-bottom:16px;"><strong>Notes:</strong> ' + invEsc(inv.notes) + '</div>' : '')
-    + '<div class="inv-footer-block" style="margin-top:20px;padding-top:14px;border-top:2px solid #eee;font-size:9px;color:#888;line-height:1.6;">'
-    + '<strong style="font-size:11px;color:#555;">Payment / Wire Transfer Information</strong><br>'
-    + 'Bank Name: Renasant Bank &nbsp;·&nbsp; 111 Jackson Avenue East, Oxford, MS 38655 &nbsp;·&nbsp; (877) 367-5371<br>'
-    + 'Account Name: Fat Possum Records LLC &nbsp;·&nbsp; Account Number: 3100304905 &nbsp;·&nbsp; ABA: 084201294<br>'
-    + 'Checks payable to: Fat Possum Records &nbsp;·&nbsp; Attn: Patrick Addison &nbsp;·&nbsp; 827 N Lamar Blvd, Oxford, MS 38655'
+    + (inv.notes ? '<div style="padding:8px 10px;background:#f8f8f8;border-radius:4px;font-size:10px;color:#555;border-left:3px solid #b83228;margin-bottom:12px;"><strong>Notes:</strong> ' + invEsc(inv.notes) + '</div>' : '')
+    + '<div class="inv-footer-block" style="margin-top:16px;padding-top:10px;border-top:1px solid #ddd;font-size:8.5px;color:#888;line-height:1.7;">'
+    + '<strong style="font-size:10px;color:#555;display:block;margin-bottom:3px;">Payment / Wire Transfer Information</strong>'
+    + 'Bank: Renasant Bank &nbsp;|&nbsp; 111 Jackson Avenue East, Oxford, MS 38655 &nbsp;|&nbsp; (877) 367-5371<br>'
+    + 'Account Name: Fat Possum Records LLC &nbsp;|&nbsp; Account #: 3100304905 &nbsp;|&nbsp; ABA: 084201294<br>'
+    + 'Checks: Fat Possum Records &nbsp;|&nbsp; Attn: Patrick Addison &nbsp;|&nbsp; 827 N Lamar Blvd, Oxford, MS 38655'
     + '</div>'
     + '</div></div>';
 }
@@ -1015,14 +1025,13 @@ window.invHandlePriceCSV = function(input) {
     '  #view-invoices { display:block !important; }',
     '  #inv-body { overflow:visible !important; }',
     '  body, html { overflow:visible !important; background:white !important; }',
-    '  #inv-detail-wrap { padding:0 !important; max-width:100% !important; }',
-    '  #inv-print-area { border:none !important; border-radius:0 !important; padding:10mm 12mm !important; box-shadow:none !important; font-size:11px !important; }',
-    '  #inv-print-area table { font-size:10px !important; border-collapse:collapse !important; width:100% !important; }',
-    '  #inv-print-area th, #inv-print-area td { padding:4px 6px !important; }',
-    '  #inv-print-area tbody tr { page-break-inside:avoid; }',
-    '  .inv-totals-block { page-break-inside:avoid; page-break-before:auto; }',
-    '  .inv-footer-block { page-break-inside:avoid; }',
-    '  @page { size: letter portrait; margin: 15mm 12mm; }',
+    '  #inv-detail-wrap { padding:0 !important; max-width:none !important; width:100% !important; }',
+    '  #inv-print-area { border:none !important; border-radius:0 !important; padding:0 !important; box-shadow:none !important; font-size:10px !important; width:100% !important; box-sizing:border-box !important; }',
+    '  #inv-print-area table { font-size:8.5px !important; table-layout:fixed !important; width:100% !important; border-collapse:collapse !important; }',
+    '  #inv-print-area th, #inv-print-area td { padding:3px 4px !important; overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; }',
+    '  #inv-print-area tbody tr { page-break-inside:avoid !important; }',
+    '  .inv-totals-block, .inv-footer-block { page-break-inside:avoid !important; }',
+    '  @page { size: letter portrait; margin: 12mm 14mm; }',
     '}'
   ].join(' ');
   document.head.appendChild(style);
