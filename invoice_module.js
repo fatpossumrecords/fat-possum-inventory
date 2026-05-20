@@ -1012,7 +1012,7 @@ window.invHandlePriceCSV = function(input) {
   reader.readAsText(file);
 };
 
-// ── PRINT CSS ─────────────────────────────────────────────────
+// ── PRINT HELPERS ─────────────────────────────────────────────
 (function() {
   const style = document.createElement('style');
   style.textContent = [
@@ -1024,7 +1024,6 @@ window.invHandlePriceCSV = function(input) {
     '  #main-content { overflow:visible !important; display:block !important; height:auto !important; min-height:0 !important; }',
     '  .view { display:none !important; }',
     '  #view-invoices { display:block !important; overflow:visible !important; height:auto !important; }',
-    '  #inv-body { overflow:visible !important; height:auto !important; max-height:none !important; }',
     '  #inv-detail-wrap { padding:0 !important; max-width:none !important; width:100% !important; height:auto !important; }',
     '  #inv-print-area { border:none !important; border-radius:0 !important; padding:0 !important; box-shadow:none !important; font-size:10px !important; width:100% !important; box-sizing:border-box !important; overflow:visible !important; height:auto !important; }',
     '  #inv-print-area table { font-size:8.5px !important; table-layout:fixed !important; width:100% !important; border-collapse:collapse !important; }',
@@ -1035,6 +1034,43 @@ window.invHandlePriceCSV = function(input) {
     '}'
   ].join(' ');
   document.head.appendChild(style);
+
+  // Override inline height/overflow on inv-body before printing
+  // (inline styles beat stylesheet !important in most browsers)
+  var _invBodyStyle = null;
+  var _mainStyle = null;
+  var _viewStyle = null;
+
+  window.addEventListener('beforeprint', function() {
+    var invBody = document.getElementById('inv-body');
+    if (invBody) {
+      _invBodyStyle = invBody.getAttribute('style');
+      invBody.style.height = 'auto';
+      invBody.style.overflow = 'visible';
+      invBody.style.maxHeight = 'none';
+    }
+    var main = document.getElementById('main-content');
+    if (main) {
+      _mainStyle = main.getAttribute('style');
+      main.style.overflow = 'visible';
+      main.style.height = 'auto';
+    }
+    var view = document.getElementById('view-invoices');
+    if (view) {
+      _viewStyle = view.getAttribute('style');
+      view.style.overflow = 'visible';
+      view.style.height = 'auto';
+    }
+  });
+
+  window.addEventListener('afterprint', function() {
+    var invBody = document.getElementById('inv-body');
+    if (invBody && _invBodyStyle !== null) invBody.setAttribute('style', _invBodyStyle);
+    var main = document.getElementById('main-content');
+    if (main && _mainStyle !== null) main.setAttribute('style', _mainStyle);
+    var view = document.getElementById('view-invoices');
+    if (view && _viewStyle !== null) view.setAttribute('style', _viewStyle);
+  });
 })();
 
 // ── BOOT ──────────────────────────────────────────────────────
