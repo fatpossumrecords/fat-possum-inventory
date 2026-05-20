@@ -739,6 +739,7 @@ async function invCreatePackiyoOrder(inv) {
       data: {
         type: 'orders',
         attributes: {
+          number:        INV_PREFIX + inv.number,
           external_id:   INV_PREFIX + inv.number,
           ordered_at:    inv.createdAt,
           shipping:      inv.shipping.cost || 0,
