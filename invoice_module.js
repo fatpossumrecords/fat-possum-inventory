@@ -729,7 +729,9 @@ async function invCreatePackiyoOrder(inv) {
   if (window.toast) toast('Creating order in Packiyo...', '');
   try {
     const shipTo = inv.shipSame ? inv.billTo : inv.shipTo;
-    const payload = {
+
+    // Step 1: Create the order (no items yet)
+    const orderPayload = {
       data: {
         type: 'orders',
         attributes: {
@@ -741,80 +743,84 @@ async function invCreatePackiyoOrder(inv) {
           shipping_method_code: inv.shipping.method     || '',
           shipping:             inv.shipping.cost        || 0,
           ordered_at:           inv.createdAt,
+          // Flat address fields — Packiyo uses these on the order directly
+          ship_first_name:    shipTo.name.split(' ')[0]  || shipTo.name || '',
+          ship_last_name:     shipTo.name.split(' ').slice(1).join(' ') || '',
+          ship_company:       shipTo.company  || '',
+          ship_address1:      shipTo.address  || '',
+          ship_address2:      shipTo.address2 || '',
+          ship_city:          shipTo.city     || '',
+          ship_state:         shipTo.state    || '',
+          ship_zip:           shipTo.zip      || '',
+          ship_country:       shipTo.country  || 'US',
+          ship_email:         shipTo.email    || '',
+          ship_phone:         shipTo.phone    || '',
+          bill_first_name:    inv.billTo.name.split(' ')[0]  || inv.billTo.name || '',
+          bill_last_name:     inv.billTo.name.split(' ').slice(1).join(' ') || '',
+          bill_company:       inv.billTo.company  || '',
+          bill_address1:      inv.billTo.address  || '',
+          bill_address2:      inv.billTo.address2 || '',
+          bill_city:          inv.billTo.city     || '',
+          bill_state:         inv.billTo.state    || '',
+          bill_zip:           inv.billTo.zip      || '',
+          bill_country:       inv.billTo.country  || 'US',
+          bill_email:         inv.billTo.email    || '',
+          bill_phone:         inv.billTo.phone    || '',
         },
-        relationships: {
-          order_items: {
-            data: inv.items.map(function(item, i) { return { type:'order-items', id:'item-'+i }; })
-          },
-          contact_information: {
-            data: { type:'contact-informations', id:'billing-contact' }
-          },
-          shipping_contact_information: {
-            data: { type:'contact-informations', id:'shipping-contact' }
-          }
-        }
-      },
-      included: [
-        ...inv.items.map(function(item, i) {
-          return {
-            type: 'order-items', id: 'item-'+i,
-            attributes: {
-              sku:      item.sku,
-              name:     (item.artist ? item.artist + ' - ' : '') + item.title,
-              price:    item.price || 0,
-              quantity: item.qty   || 1,
-            }
-          };
-        }),
-        {
-          type: 'contact-informations', id: 'billing-contact',
-          attributes: {
-            name:         inv.billTo.name     || '',
-            company_name: inv.billTo.company  || '',
-            address:      inv.billTo.address  || '',
-            address2:     inv.billTo.address2 || '',
-            city:         inv.billTo.city     || '',
-            state:        inv.billTo.state    || '',
-            zip:          inv.billTo.zip      || '',
-            country:      inv.billTo.country  || 'US',
-            email:        inv.billTo.email    || '',
-            phone:        inv.billTo.phone    || '',
-          }
-        },
-        {
-          type: 'contact-informations', id: 'shipping-contact',
-          attributes: {
-            name:         shipTo.name     || '',
-            company_name: shipTo.company  || '',
-            address:      shipTo.address  || '',
-            address2:     shipTo.address2 || '',
-            city:         shipTo.city     || '',
-            state:        shipTo.state    || '',
-            zip:          shipTo.zip      || '',
-            country:      shipTo.country  || 'US',
-            email:        shipTo.email    || '',
-            phone:        shipTo.phone    || '',
-          }
-        },
-      ],
+      }
     };
 
-    const result = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(payload) });
-    const orderId  = result.data && result.data.id;
-    const orderNum = result.data && result.data.attributes && result.data.attributes.number;
+    const orderResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
+    const orderId  = orderResult.data && orderResult.data.id;
+    const orderNum = orderResult.data && orderResult.data.attributes && orderResult.data.attributes.number;
+
+    if (!orderId) throw new Error('No order ID returned from Packiyo');
+
+    // Step 2: Add each line item to the order
+    let itemsFailed = 0;
+    for (let i = 0; i < inv.items.length; i++) {
+      const item = inv.items[i];
+      try {
+        await invPackiyoFetch('/order-items', {
+          method: 'POST',
+          body: JSON.stringify({
+            data: {
+              type: 'order-items',
+              attributes: {
+                sku:      item.sku,
+                name:     (item.artist ? item.artist + ' - ' : '') + item.title,
+                price:    item.price    || 0,
+                quantity: item.qty      || 1,
+              },
+              relationships: {
+                order: { data: { type: 'orders', id: orderId } }
+              }
+            }
+          })
+        });
+      } catch(itemErr) {
+        console.warn('Item ' + item.sku + ' failed:', itemErr.message);
+        itemsFailed++;
+      }
+    }
 
     inv.status          = 'sent';
-    inv.packiyoOrderId  = orderId  || null;
+    inv.packiyoOrderId  = orderId;
     inv.packiyoOrderNum = orderNum || null;
     inv.sentAt          = new Date().toISOString();
     InvState.nextNum++;
 
-    const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
-    if (i >= 0) InvState.invoices[i] = inv; else InvState.invoices.push(inv);
+    const idx = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
+    if (idx >= 0) InvState.invoices[idx] = inv; else InvState.invoices.push(inv);
 
     await invSave();
-    if (window.toast) toast('Order created in Packiyo! ' + (orderNum ? '#' + orderNum : ''), 'success');
+
+    const msg = itemsFailed
+      ? 'Order #' + (orderNum||orderId) + ' created. ' + itemsFailed + ' item(s) failed to add — check Packiyo.'
+      : 'Order #' + (orderNum||orderId) + ' created in Packiyo with ' + inv.items.length + ' items.';
+    if (window.toast) toast(msg, itemsFailed ? '' : 'success');
     invRender();
+
   } catch(e) {
     console.error('Packiyo order creation failed:', e);
     if (window.toast) toast('Packiyo error: ' + e.message, 'error');
