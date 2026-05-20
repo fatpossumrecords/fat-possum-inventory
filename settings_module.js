@@ -239,7 +239,53 @@ function _settingsGetCheck(id)      { const el = document.getElementById(id); re
 function _settingsSetVal(id, val)   { const el = document.getElementById(id); if (el) el.value = val; }
 function _settingsGetVal(id)        { const el = document.getElementById(id); return el ? el.value : ''; }
 
-// ── BOOT — Step 5: all settings ──
+// ── STATUS PERSISTENCE ───────────────────────────────────────
+// Save sync status to localStorage so it survives page refresh
+(function() {
+  const STATUS_KEY = 'fp_sync_status';
+
+  function saveStatus() {
+    try {
+      const statuses = {};
+      ['packiyo', 'orchard', 'shopify', 'gist', 'sheets'].forEach(function(id) {
+        const dot  = document.getElementById(id + '-dot');
+        const text = document.getElementById(id + '-status-text');
+        if (dot && text && text.textContent && text.textContent !== '—') {
+          statuses[id] = { cls: dot.className, text: text.textContent };
+        }
+      });
+      localStorage.setItem(STATUS_KEY, JSON.stringify(statuses));
+    } catch(e) {}
+  }
+
+  function restoreStatus() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STATUS_KEY) || '{}');
+      Object.entries(saved).forEach(function([id, val]) {
+        const dot  = document.getElementById(id + '-dot');
+        const text = document.getElementById(id + '-status-text');
+        if (dot && text) {
+          dot.className  = val.cls;
+          text.textContent = val.text;
+        }
+      });
+    } catch(e) {}
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Restore saved statuses immediately
+    setTimeout(restoreStatus, 500);
+
+    // Watch for status changes and save them
+    const sidebar = document.querySelector('.sidebar-footer');
+    if (sidebar) {
+      new MutationObserver(function() {
+        clearTimeout(window._fpStatusSaveTimer);
+        window._fpStatusSaveTimer = setTimeout(saveStatus, 300);
+      }).observe(sidebar, { childList: true, subtree: true, characterData: true });
+    }
+  });
+})();
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     const s = window._FPUserSettings;
