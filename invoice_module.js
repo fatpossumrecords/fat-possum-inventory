@@ -1008,14 +1008,16 @@ window.invHandlePriceCSV = function(input) {
   style.textContent = [
     '@media print {',
     '  .no-print { display:none !important; }',
-    '  #sidebar, nav, #main-content > *:not(#view-invoices) { display:none !important; }',
+    '  #sidebar { display:none !important; }',
+    '  #main-content { overflow:visible !important; display:block !important; }',
+    '  .view { display:none !important; }',
+    '  #view-invoices { display:block !important; }',
+    '  #inv-body { overflow:visible !important; }',
     '  body, html { overflow:visible !important; background:white !important; }',
-    '  #main-content { overflow:visible !important; }',
     '  #inv-detail-wrap { padding:0 !important; max-width:100% !important; }',
     '  #inv-print-area { border:none !important; border-radius:0 !important; padding:12mm 14mm !important; box-shadow:none !important; font-size:11px !important; }',
     '  #inv-print-area table { font-size:10px !important; }',
     '  #inv-print-area th, #inv-print-area td { padding:5px 6px !important; }',
-    '  #inv-print-area h1, #inv-print-area .dash-num { font-size:16px !important; }',
     '  @page { size: letter portrait; margin: 0; }',
     '}'
   ].join(' ');
