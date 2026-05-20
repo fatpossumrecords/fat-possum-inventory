@@ -192,6 +192,23 @@ window.saveSettingsFromForm = function() {
     if (existingStyle) existingStyle.remove();
   }
 
+  // Apply dashboard card visibility immediately on save
+  const cardMap = {
+    totalProducts:'total products', globalStock:'global stock',
+    reorderAlerts:'reorder alerts', resolved:'resolved',
+    walkReplenish:'walk replenish', productionRuns:'production runs',
+    mfgPredictions:'mfg predictions', stockoutClock:'stockout',
+  };
+  window._fpHiddenCards = Object.entries(cardMap)
+    .filter(([key]) => s.dashCards && s.dashCards[key] === false)
+    .map(([, label]) => label);
+  document.querySelectorAll('.dash-card').forEach(card => {
+    const lbl = card.querySelector('.dash-label');
+    if (!lbl) return;
+    const text = lbl.textContent.toLowerCase();
+    card.style.display = (window._fpHiddenCards || []).some(h => text.includes(h)) ? 'none' : '';
+  });
+
   closeSettings();
   if (window.toast) toast('Settings saved.', 'success');
 };
@@ -216,25 +233,91 @@ function _settingsGetCheck(id)      { const el = document.getElementById(id); re
 function _settingsSetVal(id, val)   { const el = document.getElementById(id); if (el) el.value = val; }
 function _settingsGetVal(id)        { const el = document.getElementById(id); return el ? el.value : ''; }
 
-// ── BOOT — Step 4: dark mode + banner + replen defaults ──
+// ── BOOT — Step 5: all settings ──
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     const s = window._FPUserSettings;
     if (!s) return;
+
     // Dark mode
     if (s.defaultDarkMode && !document.body.classList.contains('dark-mode')) {
       document.body.classList.add('dark-mode');
       const icon = document.getElementById('darkmode-icon');
       if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
     }
+
     // Needs attention banner
     if (!s.showNeedsAttention) {
-      document.head.insertAdjacentHTML('beforeend', '<style id="fp-hide-banner">#needs-attention-banner{display:none!important}</style>');
+      if (!document.getElementById('fp-hide-banner'))
+        document.head.insertAdjacentHTML('beforeend', '<style id="fp-hide-banner">#needs-attention-banner{display:none!important}</style>');
     } else {
       const existing = document.getElementById('fp-hide-banner');
       if (existing) existing.remove();
     }
+
     // Replen defaults
     applyReplenDefaults(s.replen);
+
+    // Table density
+    const invTable = document.getElementById('inventory-table');
+    if (invTable) invTable.classList.toggle('density-compact', s.tableDensity === 'compact');
+
+    // Dashboard cards — hide unchecked ones by finding cards by label text
+    const cardMap = {
+      totalProducts:  'total products',
+      globalStock:    'global stock',
+      reorderAlerts:  'reorder alerts',
+      resolved:       'resolved',
+      walkReplenish:  'walk replenish',
+      productionRuns: 'production runs',
+      mfgPredictions: 'mfg predictions',
+      stockoutClock:  'stockout',
+    };
+    // Build a style that hides cards by ID where possible, otherwise use MutationObserver
+    // Since cards are dynamic, store hidden list and apply via observer
+    window._fpHiddenCards = Object.entries(cardMap)
+      .filter(([key]) => s.dashCards && s.dashCards[key] === false)
+      .map(([, label]) => label);
+
+    function applyCardVisibility() {
+      document.querySelectorAll('.dash-card').forEach(card => {
+        const lbl = card.querySelector('.dash-label');
+        if (!lbl) return;
+        const text = lbl.textContent.toLowerCase();
+        const shouldHide = (window._fpHiddenCards || []).some(h => text.includes(h));
+        card.style.display = shouldHide ? 'none' : '';
+      });
+    }
+    applyCardVisibility();
+    // Re-apply whenever dashboard re-renders
+    // Re-apply whenever dashboard view becomes active
+    const _origSwitchView = window.switchView;
+    if (_origSwitchView && !window._fpSwitchViewPatched) {
+      window._fpSwitchViewPatched = true;
+      window.switchView = function(viewName) {
+        _origSwitchView(viewName);
+        if (viewName === 'dashboard') {
+          setTimeout(applyCardVisibility, 150);
+        }
+      };
+    }
+
+    if (!window._fpCardObserver) {
+      const dashBody = document.getElementById('dashboard-body');
+      if (dashBody) {
+        window._fpCardObserver = new MutationObserver(() => {
+          clearTimeout(window._fpCardTimer);
+          window._fpCardTimer = setTimeout(applyCardVisibility, 100);
+        });
+        window._fpCardObserver.observe(dashBody, { childList: true, subtree: true });
+      }
+    }
+
+    // Default warehouse filter
+    if (s.defaultWarehouse) {
+      const whFilter = document.getElementById('filter-warehouse');
+      if (whFilter && !whFilter.value) whFilter.value = s.defaultWarehouse;
+    }
+
   }, 2000);
 });
