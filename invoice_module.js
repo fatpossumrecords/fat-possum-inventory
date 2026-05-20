@@ -579,8 +579,40 @@ window.invSelectCustomer = function(idx) {
   invRenderEdit(document.getElementById('inv-body'));
 };
 
+window.invPrint = function() {
+  const printArea = document.getElementById('inv-print-area');
+  if (!printArea) return;
+
+  const win = window.open('', '_blank', 'width=850,height=1100');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice</title><style>');
+  win.document.write('* { box-sizing: border-box; margin: 0; padding: 0; }');
+  win.document.write('body { font-family: Arial, sans-serif; font-size: 10px; color: #111; background: white; padding: 14mm; }');
+  win.document.write('table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5px; margin-bottom: 14px; }');
+  win.document.write('thead { display: table-header-group; }');
+  win.document.write('tfoot { display: table-footer-group; }');
+  win.document.write('th { background: #111; color: white; padding: 5px 5px; text-align: left; font-size: 8px; text-transform: uppercase; letter-spacing: 0.3px; overflow: hidden; white-space: nowrap; }');
+  win.document.write('td { padding: 4px 5px; border-bottom: 1px solid #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }');
+  win.document.write('tr { page-break-inside: avoid; }');
+  win.document.write('.totals-wrap { display: flex; justify-content: flex-end; margin: 14px 0; page-break-inside: avoid; }');
+  win.document.write('.totals-table { width: 220px; border-collapse: collapse; font-size: 11px; }');
+  win.document.write('.totals-table td { padding: 5px 8px; border-bottom: 1px solid #eee; white-space: normal; }');
+  win.document.write('.totals-total { background: #111; color: white; font-weight: 900; font-size: 13px; }');
+  win.document.write('.footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 8.5px; color: #888; line-height: 1.7; page-break-inside: avoid; }');
+  win.document.write('.footer strong { font-size: 10px; color: #555; display: block; margin-bottom: 3px; }');
+  win.document.write('.notes { padding: 8px 10px; background: #f8f8f8; border-left: 3px solid #b83228; font-size: 10px; color: #555; margin-bottom: 12px; page-break-inside: avoid; }');
+  win.document.write('@page { size: letter portrait; margin: 0; }');
+  win.document.write('@media print { body { padding: 14mm; } }');
+  win.document.write('</style></head><body>');
+  win.document.write(printArea.innerHTML);
+  win.document.write('</body></html>');
+  win.document.close();
+
+  win.onload = function() {
+    win.focus();
+    win.print();
+  };
+};
 window.invTogglePaymentHold = function(checked) {
-  if (!InvState.draft) return;
   InvState.draft.paymentHold = checked;
   // Update checkbox label color in place
   const label = document.querySelector('label:has(#inv-payment-hold)');
@@ -771,7 +803,7 @@ function invRenderDetail(body) {
     + '<button onclick="invSaveDraft();invBackToLog()" class="btn-secondary btn-sm">&#8592; Save &amp; Back</button>'
     + '<div style="display:flex;gap:8px;">'
     + (isDraft ? '<button onclick="invEditDraft()" class="btn-secondary btn-sm">&#9998; Edit</button>' : '')
-    + '<button onclick="window.print()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
+    + '<button onclick="invPrint()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
     + (isDraft ? '<button onclick="invPushToPackiyo()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#9654; Send &amp; Push to Packiyo</button>' : '')
     + (inv.status === 'sent' && !inv.paidAt ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
     + '</div></div>'
