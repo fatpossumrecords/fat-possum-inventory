@@ -25,6 +25,7 @@ const InvState = {
   nextNum:      INV_START_NUM,
   draft:        null,
   view:         'log',
+  logFilter:    'all', // all | pending | past
 };
 
 // Store search results for index-based add (avoids JSON-in-onclick)
@@ -141,22 +142,68 @@ function invRender() {
   if (InvState.view === 'detail') return invRenderDetail(body);
 }
 
-window.switchToInvoices = function() {
+window.switchToInvoices = function(mode) {
   if (window.switchView) switchView('invoices');
-  invRender();
+  if (mode === 'new') {
+    InvState.view = 'log';
+    InvState.logFilter = 'new';
+    invRender();
+    // Auto-open new invoice form after render
+    setTimeout(invNewInvoice, 50);
+  } else if (mode === 'pending') {
+    InvState.view = 'log';
+    InvState.logFilter = 'pending';
+    invRender();
+  } else if (mode === 'past') {
+    InvState.view = 'log';
+    InvState.logFilter = 'past';
+    invRender();
+  } else {
+    InvState.view = 'log';
+    InvState.logFilter = 'all';
+    invRender();
+  }
 };
 
 // ── INVOICE LOG ───────────────────────────────────────────────
+function invIsPast(inv) {
+  // Past = paid AND shipped (Packiyo fulfilled)
+  return !!(inv.paidAt && (inv.shippedAt || inv.status === 'shipped'));
+}
+
+function invIsPending(inv) {
+  // Pending = sent to Packiyo but not yet past (awaiting payment or shipment)
+  return inv.status === 'sent' && !invIsPast(inv);
+}
+
 function invRenderLog(body) {
-  const invoices = InvState.invoices.slice().sort(function(a, b) { return b.number - a.number; });
+  const filter = InvState.logFilter || 'all';
+  const all = InvState.invoices.slice().sort(function(a, b) { return b.number - a.number; });
+
+  const filtered = all.filter(function(inv) {
+    if (filter === 'pending') return invIsPending(inv) || inv.status === 'draft';
+    if (filter === 'past')    return invIsPast(inv);
+    return true;
+  });
+
+  function tabBtn(label, f) {
+    const active = filter === f;
+    const count  = all.filter(function(inv) {
+      if (f === 'pending') return invIsPending(inv) || inv.status === 'draft';
+      if (f === 'past')    return invIsPast(inv);
+      return true;
+    }).length;
+    return '<button onclick="InvState.logFilter=\'' + f + '\';invRender()" style="padding:6px 14px;font-size:12px;font-weight:' + (active?'700':'500') + ';border:none;border-radius:4px;cursor:pointer;background:' + (active?'var(--accent)':'var(--surface2)') + ';color:' + (active?'#fff':'var(--text-muted)') + ';">'
+      + label + (count ? ' <span style="background:rgba(255,255,255,0.25);border-radius:8px;padding:1px 6px;font-size:10px;">' + count + '</span>' : '') + '</button>';
+  }
 
   function statusBadge(s) {
     const map = { draft:'#666', sent:'var(--accent)', paid:'var(--green)', shipped:'#7c3aed' };
     return '<span style="background:' + (map[s]||'#888') + ';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;">' + invEsc(s) + '</span>';
   }
 
-  const rows = invoices.length
-    ? invoices.map(function(inv) {
+  const rows = filtered.length
+    ? filtered.map(function(inv) {
         const total = invCalcTotal(inv);
         return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="invOpenDetail(\'' + inv.id + '\')">'
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--accent);font-size:13px;">' + invEsc(INV_PREFIX + inv.number) + '</td>'
@@ -167,20 +214,22 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId || '—') + '</td>'
           + '</tr>';
       }).join('')
-    : '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">No invoices yet. Create your first invoice.</td></tr>';
+    : '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">' + (filter==='past'?'No completed invoices yet.':filter==='pending'?'No pending invoices.':'No invoices yet.') + '</td></tr>';
 
   body.innerHTML = '<div style="padding:24px;">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
     + '<div><h2 style="margin:0;font-size:20px;">Invoices</h2>'
     + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">'
-    + invoices.length + ' invoice' + (invoices.length !== 1 ? 's' : '')
-    + ' &nbsp;·&nbsp; Next: ' + INV_PREFIX + InvState.nextNum
+    + 'Next: ' + INV_PREFIX + InvState.nextNum
     + ' &nbsp;·&nbsp; ' + Object.keys(InvState.priceCatalog).length + ' prices loaded'
     + '</div></div>'
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="invShowPriceImport()" class="btn-secondary btn-sm">&#8593; Import Prices</button>'
     + '<button onclick="invNewInvoice()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Invoice</button>'
     + '</div></div>'
+    + '<div style="display:flex;gap:6px;margin-bottom:16px;">'
+    + tabBtn('All', 'all') + tabBtn('Pending', 'pending') + tabBtn('Past', 'past')
+    + '</div>'
     + '<div style="background:var(--surface);border-radius:8px;border:1px solid var(--border);overflow:hidden;">'
     + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
     + '<thead><tr style="background:var(--surface2);">'
