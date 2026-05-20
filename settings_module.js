@@ -97,16 +97,19 @@ function applySettings(s) {
 function applyReplenDefaults(replen) {
   if (!replen) return;
   const fields = [
-    ['wh-lookback',   replen.lookback],
+    ['wh-lookback',    replen.lookback],
     ['wh-days-supply', replen.daysSupply],
-    ['wh-outlier',    replen.outlier],
-    ['wh-max-units',  replen.maxUnits],
-    ['wh-min-units',  replen.minUnits],
+    ['wh-outlier',     replen.outlier],
+    ['wh-max-units',   replen.maxUnits],
+    ['wh-min-units',   replen.minUnits],
   ];
+  const obj = {};
   fields.forEach(([id, val]) => {
     const el = document.getElementById(id);
-    if (el) el.value = val;
+    if (el) { el.value = val; obj[id] = String(val); }
   });
+  // Also update the WH settings cache so whLoadSettings doesn't overwrite us
+  try { localStorage.setItem('fp_wh_replen_settings', JSON.stringify(obj)); } catch(e) {}
 }
 
 // ── SETTINGS PANEL ────────────────────────────────────────────
