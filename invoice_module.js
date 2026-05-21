@@ -1005,14 +1005,16 @@ window.invEditDraft = function() { InvState.view = 'edit'; invRender(); };
 window.invPushToPackiyo = function() {
   const inv = InvState.draft;
   if (!inv) return;
+  if (inv._pushing) { if (window.toast) toast('Already pushing to Packiyo...', ''); return; }
   if (!inv.items.length) { if (window.toast) toast('Add at least one line item first.', 'error'); return; }
   if (!inv.billTo.name && !inv.billTo.company) { if (window.toast) toast('Add customer info first.', 'error'); return; }
   if (!confirm('Push ' + INV_PREFIX + inv.number + ' to Packiyo as a new order?\n\n' + inv.items.length + ' items · Total ' + invFmt(invCalcTotal(inv)))) return;
-  invCreatePackiyoOrder(inv);
+  inv._pushing = true; // lock to prevent double-push
+  invCreatePackiyoOrder(inv).finally(function() { inv._pushing = false; });
 };
 
 async function invCreatePackiyoOrder(inv) {
-  if (window.toast) toast('Creating order in Packiyo...', '');
+  if (window.toast) toast('Creating order in Packiyo... please wait', '');
   try {
     const shipTo = inv.shipSame ? inv.billTo : inv.shipTo;
 
