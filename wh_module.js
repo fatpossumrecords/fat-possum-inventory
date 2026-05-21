@@ -2107,7 +2107,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     routes.forEach(function(rk) {
       var shipments = routeMap[rk];
       var shipKeys = Object.keys(shipments);
-      var routeCollapsed = !!rc[rk];
+      var routeCollapsed = rc[rk] === true; // default expanded
       var isFPtoUS = rk === 'fp\u2192us';
       var totalItems = shipKeys.reduce(function(s,k) { return s+shipments[k].items.length; }, 0);
       var totalUnits = shipKeys.reduce(function(s,k) { return s+shipments[k].totalQty; }, 0);
@@ -2137,7 +2137,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
       sortedShipKeys.forEach(function(sid) {
         var grp = shipments[sid];
-        var grpCollapsed = !!gc[sid];
+        var grpCollapsed = gc[sid] !== false; // default collapsed — only expanded if explicitly set to false
         var pill = '<span style="' + (STATUS_COLORS[grp.status]||'background:#eee;color:#555;') + 'padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">' + (STATUS_LABELS[grp.status]||grp.status) + '</span>';
 
         html += '<div style="border:1px solid var(--border);border-radius:4px;margin-bottom:6px;overflow:hidden;">';
@@ -2149,7 +2149,19 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
           + (grp.date ? '<span style="font-size:11px;color:var(--text-muted);">' + fmtDate(grp.date) + '</span>' : '')
           + '<span style="font-size:11px;color:var(--text-muted);">' + grp.items.length + ' item' + (grp.items.length!==1?'s':'') + ' \u00b7 ' + grp.totalQty.toLocaleString() + ' units</span>'
           + (grp.poNumber ? '<span style="font-size:11px;color:var(--accent);font-weight:600;">' + grp.poNumber + '</span>' : '')
-          + (isFPtoUS && (grp.status==='shipped'||grp.status==='confirmed') ? '<button onclick="event.stopPropagation();movInvoice(\'' + encodeURIComponent(sid) + '\')" style="margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:2px 10px;font-size:10px;font-weight:700;cursor:pointer;">\u2192 Invoice</button>' : '<span style="margin-left:auto;"></span>')
+          + (function() {
+            var btns = '<span style="margin-left:auto;display:flex;gap:6px;align-items:center;">';
+            if (grp.status === 'draft') {
+              var confirmLabel = isFPtoUS ? 'Confirm &amp; Add PO#' : 'Confirm Shipment';
+              btns += '<button onclick="event.stopPropagation();movConfirmGroup(\'' + encodeURIComponent(sid) + '\')" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">' + confirmLabel + '</button>';
+            } else if (grp.status === 'confirmed' && !isFPtoUS) {
+              btns += '<button onclick="event.stopPropagation();movProcessGroup(\'' + encodeURIComponent(sid) + '\')" style="background:var(--green);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">Mark Processed</button>';
+            } else if (grp.status === 'shipped' && isFPtoUS) {
+              btns += '<button onclick="event.stopPropagation();movInvoice(\'' + encodeURIComponent(sid) + '\')" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">\u2192 Invoice</button>';
+            }
+            btns += '</span>';
+            return btns;
+          })()
           + '</div>';
 
         // Items
@@ -2190,13 +2202,13 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
   window.movToggleGroup = function(sidEnc) {
     var sid = decodeURIComponent(sidEnc);
     var gc = getGC();
-    var nowCollapsed = !gc[sid];
-    setGC(sid, nowCollapsed);
+    var nowCollapsed = gc[sid] !== false; // currently collapsed (default), so toggle to expanded
+    setGC(sid, !nowCollapsed); // false = expanded, true = collapsed
     var el = document.getElementById('movgrp-' + sidEnc);
-    if (el) el.style.display = nowCollapsed ? 'none' : '';
+    if (el) el.style.display = nowCollapsed ? '' : 'none';
     if (el) {
-      var arrow = el.previousElementSibling && el.previousElementSibling.querySelector('span');
-      if (arrow) arrow.textContent = nowCollapsed ? '\u25b8' : '\u25be';
+      var hdr = el.previousElementSibling;
+      if (hdr) { var arrow = hdr.querySelector('span'); if (arrow) arrow.textContent = nowCollapsed ? '\u25be' : '\u25b8'; }
     }
   };
 
@@ -2216,6 +2228,34 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     }
     try { localStorage.setItem(ROUTE_COLLAPSE_KEY, JSON.stringify(rc)); localStorage.setItem(GROUP_COLLAPSE_KEY, JSON.stringify(gc)); } catch(e) {}
     buildSummary();
+  };
+
+  window.movConfirmGroup = function(sidEnc) {
+    var sid = decodeURIComponent(sidEnc);
+    // Find the confirm button in the hidden app.js table and click it
+    var tbody = document.getElementById('movements-tbody');
+    if (!tbody) return;
+    var btns = tbody.querySelectorAll('.grp-confirm');
+    for (var i = 0; i < btns.length; i++) {
+      var btnSid = decodeURIComponent(btns[i].dataset.sid || '');
+      if (btnSid === sid) { btns[i].click(); return; }
+    }
+    // Fallback: call confirmGroup directly if available
+    if (typeof confirmGroup === 'function') confirmGroup(sid);
+    else alert('Could not find confirm button for this shipment.');
+  };
+
+  window.movProcessGroup = function(sidEnc) {
+    var sid = decodeURIComponent(sidEnc);
+    var tbody = document.getElementById('movements-tbody');
+    if (!tbody) return;
+    var btns = tbody.querySelectorAll('.grp-process');
+    for (var i = 0; i < btns.length; i++) {
+      var btnSid = decodeURIComponent(btns[i].dataset.sid || '');
+      if (btnSid === sid) { btns[i].click(); return; }
+    }
+    if (typeof processGroup === 'function') processGroup(sid);
+    else alert('Could not find process button for this shipment.');
   };
 
   window.movInvoice = function(sidEnc) {
@@ -2269,6 +2309,8 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     var check = setInterval(function() {
       if (!document.getElementById('movements-tbody')) return;
       clearInterval(check);
+      // Clear stale collapse state from previous versions
+      try { localStorage.removeItem('fp_mov_collapsed'); } catch(e) {}
       injectPanel();
       new MutationObserver(function() {
         if (_lock) return;
