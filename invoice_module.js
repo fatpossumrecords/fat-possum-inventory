@@ -104,6 +104,8 @@ async function invLoad() {
       InvState.customers    = data.customers    || [];
       InvState.priceCatalog = data.priceCatalog || {};
       InvState.nextNum      = data.nextNum      || INV_START_NUM;
+      InvState.credits      = data.credits      || [];
+      InvState.nextCrNum    = data.nextCrNum    || 1000;
       invSaveLocal();
       const view = document.getElementById('view-invoices');
       if (view && !view.classList.contains('hidden')) invRender();
@@ -160,6 +162,7 @@ async function invSave() {
     const payload = {
       invoices: merged, customers: allCustomers,
       priceCatalog: priceCatalog, nextNum: nextNum,
+      credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
       savedAt: new Date().toISOString(),
     };
     await fetch('https://api.github.com/gists/' + creds.gistId, {
@@ -175,6 +178,7 @@ function invSaveLocal() {
     localStorage.setItem(INV_LS_KEY, JSON.stringify({
       invoices: InvState.invoices, customers: InvState.customers,
       priceCatalog: InvState.priceCatalog, nextNum: InvState.nextNum,
+      credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
     }));
   } catch(e) {}
 }
@@ -1335,3 +1339,419 @@ document.addEventListener('click', function(e) {
   }
   tryLoad();
 })();
+
+// ── CREDIT MEMO / ADJUSTMENTS ─────────────────────────────────────────────
+const CR_PREFIX  = 'FPCR-';
+const CR_START   = 1000;
+
+const CrState = {
+  view:   'log', // log | edit | detail
+  draft:  null,
+  filter: 'all',
+};
+
+// Credit memos stored in InvState alongside invoices
+// InvState.credits = []
+// InvState.nextCrNum = CR_START
+
+function crGetCredits() { return InvState.credits || []; }
+function crGetNextNum() { return InvState.nextCrNum || CR_START; }
+
+function crEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function crFmt(n) { return '$' + parseFloat(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+function crDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+
+window.switchToAdjustments = function() {
+  if (window.switchView) switchView('invoices');
+  CrState.view = 'log';
+  CrState.draft = null;
+  crRender();
+};
+
+function crRender() {
+  const body = document.getElementById('inv-body');
+  if (!body) return;
+  if (CrState.view === 'log')    crRenderLog(body);
+  else if (CrState.view === 'edit')   crRenderEdit(body);
+  else if (CrState.view === 'detail') crRenderDetail(body);
+}
+
+// ── LOG ───────────────────────────────────────────────────────────────────
+function crRenderLog(body) {
+  const credits = crGetCredits().slice().sort(function(a,b) { return b.number - a.number; });
+
+  const rows = credits.length
+    ? credits.map(function(cr) {
+        const total = (cr.items||[]).reduce(function(s,i) { return s+(i.qty||0)*(i.price||0); }, 0);
+        return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="crOpenDetail(\'' + cr.id + '\')">'
+          + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--red);font-size:13px;">' + crEsc(CR_PREFIX + cr.number) + '</td>'
+          + '<td style="padding:10px 16px;font-size:13px;">' + crEsc(cr.customer || '') + '</td>'
+          + '<td style="padding:10px 16px;font-size:12px;color:var(--text-muted);">' + crDate(cr.claimDate || cr.createdAt) + '</td>'
+          + '<td style="padding:10px 16px;font-size:12px;color:var(--text-muted);">' + crEsc(cr.refInvoice || '—') + '</td>'
+          + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;color:var(--red);">' + crFmt(total) + '</td>'
+          + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + crEsc((cr.createdBy && cr.createdBy.name) || '') + '</td>'
+          + '<td style="padding:8px 12px;"><button class="cr-del-btn" data-cr-id="' + cr.id + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;">&#128465;</button></td>'
+          + '</tr>';
+      }).join('')
+    : '<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">No credit memos yet. Create your first adjustment.</td></tr>';
+
+  body.innerHTML = '<div style="padding:24px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+    + '<div><h2 style="margin:0;font-size:20px;">Adjustments</h2>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + credits.length + ' credit memo' + (credits.length!==1?'s':'') + ' &nbsp;·&nbsp; Next: ' + CR_PREFIX + crGetNextNum() + '</div></div>'
+    + '<button onclick="crNewMemo()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Credit Memo</button>'
+    + '</div>'
+    + '<div style="background:var(--surface);border-radius:8px;border:1px solid var(--border);overflow:hidden;">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    + '<thead><tr style="background:var(--surface2);">'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Credit #</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Customer</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Claim Date</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Ref Invoice</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Total Credit</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Created By</th>'
+    + '<th style="padding:10px 16px;width:40px;"></th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+}
+
+// ── NEW MEMO ───────────────────────────────────────────────────────────────
+window.crNewMemo = function() {
+  if (!InvState.credits) InvState.credits = [];
+  if (!InvState.nextCrNum) InvState.nextCrNum = CR_START;
+  CrState.draft = {
+    id:        'cr-' + Date.now(),
+    number:    InvState.nextCrNum,
+    createdAt: new Date().toISOString(),
+    claimDate: new Date().toISOString().slice(0,10),
+    customer:  '',
+    billTo:    {},
+    refInvoice:'',
+    items:     [],
+    notes:     '',
+    createdBy: (typeof State !== 'undefined' && State.user) ? { name:State.user.name, email:State.user.email, picture:State.user.picture } : null,
+  };
+  CrState.view = 'edit';
+  crRender();
+};
+
+// ── EDIT ──────────────────────────────────────────────────────────────────
+function crRenderEdit(body) {
+  const cr = CrState.draft;
+  if (!cr) { CrState.view = 'log'; return crRender(); }
+
+  // Build invoice reference dropdown
+  const invoices = InvState.invoices || [];
+  const invOpts = '<option value="">Select invoice to reference...</option>'
+    + invoices.map(function(inv) {
+        return '<option value="' + invEsc(INV_PREFIX + inv.number) + '"'
+          + (cr.refInvoice === INV_PREFIX + inv.number ? ' selected' : '') + '>'
+          + invEsc(INV_PREFIX + inv.number) + ' — ' + invEsc(inv.billTo.company || inv.billTo.name || '') + ' — ' + invDate(inv.createdAt)
+          + '</option>';
+      }).join('');
+
+  body.innerHTML = '<div style="padding:24px;max-width:900px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">'
+    + '<div><h2 style="margin:0;">New Credit Memo</h2>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + CR_PREFIX + cr.number + '</div></div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button onclick="crCancelEdit()" class="btn-secondary btn-sm">Cancel</button>'
+    + '<button onclick="crReview()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">Review &amp; Save &#8594;</button>'
+    + '</div></div>'
+
+    // Reference invoice + claim date
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Reference</div>'
+    + '<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">'
+    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Reference Invoice</label>'
+    + '<select id="cr-ref-invoice" onchange="crLoadFromInvoice(this.value)" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
+    + invOpts + '</select></div>'
+    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Claim Date</label>'
+    + '<input type="date" id="cr-claim-date" value="' + cr.claimDate + '" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" /></div>'
+    + '</div></div>'
+
+    // Customer info (auto-filled from invoice)
+    + '<div id="cr-customer-block" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">Customer</div>'
+    + '<div id="cr-customer-info" style="font-size:13px;color:var(--text-muted);">Select a reference invoice to auto-fill customer info.</div>'
+    + '</div>'
+
+    // Line items
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Line Items</div>'
+    + '<div id="cr-items-table">' + crRenderItemsTable(cr.items) + '</div>'
+    + '</div>'
+
+    // Notes + totals
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">'
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">Notes</div>'
+    + '<textarea id="cr-notes" rows="4" placeholder="Notes..." style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);resize:vertical;">' + crEsc(cr.notes) + '</textarea>'
+    + '</div>'
+    + '<div id="cr-totals-box" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;">'
+    + crRenderTotals(cr)
+    + '</div></div>'
+
+    + '<div style="display:flex;justify-content:flex-end;">'
+    + '<button onclick="crReview()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;">Review &amp; Save &#8594;</button>'
+    + '</div></div>';
+
+  // If ref invoice already selected, populate
+  if (cr.refInvoice) crLoadFromInvoice(cr.refInvoice, true);
+}
+
+window.crLoadFromInvoice = function(invNum, silent) {
+  const cr = CrState.draft;
+  if (!cr) return;
+  if (!invNum) return;
+  cr.refInvoice = invNum;
+
+  const inv = (InvState.invoices||[]).find(function(i) { return INV_PREFIX + i.number === invNum; });
+  if (!inv) return;
+
+  // Copy customer info
+  cr.customer = inv.billTo.company || inv.billTo.name || '';
+  cr.billTo   = Object.assign({}, inv.billTo);
+
+  // Show customer info
+  const infoEl = document.getElementById('cr-customer-info');
+  if (infoEl && inv.billTo) {
+    infoEl.innerHTML = '<strong>' + crEsc(inv.billTo.company||inv.billTo.name||'') + '</strong>'
+      + (inv.billTo.name && inv.billTo.company ? ' &nbsp;·&nbsp; ' + crEsc(inv.billTo.name) : '')
+      + (inv.billTo.address ? '<br><span style="color:var(--text-muted);font-size:12px;">' + crEsc(inv.billTo.address) + ', ' + crEsc(inv.billTo.city) + ', ' + crEsc(inv.billTo.state) + ' ' + crEsc(inv.billTo.zip) + '</span>' : '')
+      + (inv.billTo.email ? '<br><span style="font-size:12px;color:var(--text-muted);">' + crEsc(inv.billTo.email) + '</span>' : '');
+  }
+
+  // Pre-populate items from invoice (all items, qty editable)
+  if (!silent || !cr.items.length) {
+    cr.items = (inv.items||[]).map(function(item) {
+      return { upc:item.upc||'', title:item.title||'', artist:item.artist||'', catalog:item.catalog||'', format:item.format||'', qty:item.qty||1, price:item.price||0 };
+    });
+    const tableEl = document.getElementById('cr-items-table');
+    if (tableEl) tableEl.innerHTML = crRenderItemsTable(cr.items);
+    const totalsEl = document.getElementById('cr-totals-box');
+    if (totalsEl) totalsEl.innerHTML = crRenderTotals(cr);
+  }
+};
+
+function crRenderItemsTable(items) {
+  if (!items || !items.length) return '<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Select a reference invoice above to load items.</div>';
+  const th = 'padding:7px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);';
+  const rows = items.map(function(item, idx) {
+    return '<tr style="border-bottom:1px solid var(--border);">'
+      + '<td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text-muted);">' + crEsc(item.upc) + '</td>'
+      + '<td style="padding:8px 10px;font-size:12px;font-weight:600;">' + crEsc(item.artist ? item.artist + ' — ' + item.title : item.title) + '</td>'
+      + '<td style="padding:8px 10px;font-size:11px;">' + crEsc(item.format||'') + '</td>'
+      + '<td style="padding:8px 10px;">'
+      + '<input type="number" min="0" value="' + (item.qty||0) + '" '
+      + 'style="width:60px;padding:4px 6px;font-size:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:var(--text);text-align:center;" '
+      + 'onchange="crUpdateItem(' + idx + ',\'qty\',parseInt(this.value)||0)" /></td>'
+      + '<td style="padding:8px 10px;font-size:12px;font-family:monospace;text-align:right;">' + crFmt(item.price||0) + '</td>'
+      + '<td id="cr-line-total-' + idx + '" style="padding:8px 10px;font-family:monospace;font-weight:600;font-size:12px;text-align:right;">' + crFmt((item.qty||0)*(item.price||0)) + '</td>'
+      + '<td style="padding:8px 10px;text-align:center;"><button onclick="crRemoveItem(' + idx + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&#x2715;</button></td>'
+      + '</tr>';
+  }).join('');
+  return '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+    + '<thead><tr style="background:var(--surface2);">'
+    + '<th style="' + th + '">UPC</th>'
+    + '<th style="' + th + '">Title</th>'
+    + '<th style="' + th + '">Format</th>'
+    + '<th style="' + th + '">Qty</th>'
+    + '<th style="' + th + 'text-align:right;">Unit Cost</th>'
+    + '<th style="' + th + 'text-align:right;">Total Cost</th>'
+    + '<th style="' + th + '"></th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function crRenderTotals(cr) {
+  const totalQty   = (cr.items||[]).reduce(function(s,i) { return s+(i.qty||0); }, 0);
+  const totalCredit= (cr.items||[]).reduce(function(s,i) { return s+(i.qty||0)*(i.price||0); }, 0);
+  return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Credit Summary</div>'
+    + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span>Total Qty</span><span style="font-family:monospace;font-weight:700;">' + totalQty + '</span></div>'
+    + '<div style="display:flex;justify-content:space-between;padding-top:10px;border-top:2px solid var(--border);font-size:16px;font-weight:800;">'
+    + '<span>Total Credit</span><span style="font-family:monospace;color:var(--red);">' + crFmt(totalCredit) + '</span></div>';
+}
+
+window.crUpdateItem = function(idx, field, val) {
+  const cr = CrState.draft;
+  if (!cr || !cr.items[idx]) return;
+  cr.items[idx][field] = val;
+  const lineEl = document.getElementById('cr-line-total-' + idx);
+  if (lineEl) lineEl.textContent = crFmt((cr.items[idx].qty||0) * (cr.items[idx].price||0));
+  const totalsEl = document.getElementById('cr-totals-box');
+  if (totalsEl) totalsEl.innerHTML = crRenderTotals(cr);
+};
+
+window.crRemoveItem = function(idx) {
+  const cr = CrState.draft;
+  if (!cr) return;
+  cr.items.splice(idx, 1);
+  const tableEl = document.getElementById('cr-items-table');
+  if (tableEl) tableEl.innerHTML = crRenderItemsTable(cr.items);
+  const totalsEl = document.getElementById('cr-totals-box');
+  if (totalsEl) totalsEl.innerHTML = crRenderTotals(cr);
+};
+
+window.crCancelEdit = function() { CrState.draft = null; CrState.view = 'log'; crRender(); };
+
+window.crReview = function() {
+  const cr = CrState.draft;
+  if (!cr) return;
+  // Collect form values
+  const claimEl = document.getElementById('cr-claim-date');
+  if (claimEl) cr.claimDate = claimEl.value;
+  const notesEl = document.getElementById('cr-notes');
+  if (notesEl) cr.notes = notesEl.value.trim();
+  CrState.view = 'detail';
+  crRender();
+};
+
+window.crOpenDetail = function(id) {
+  const cr = (InvState.credits||[]).find(function(c) { return c.id === id; });
+  if (!cr) return;
+  CrState.draft = JSON.parse(JSON.stringify(cr));
+  CrState.view = 'detail';
+  crRender();
+};
+
+// ── DETAIL / PRINT ────────────────────────────────────────────────────────
+function crRenderDetail(body) {
+  const cr = CrState.draft;
+  if (!cr) { CrState.view = 'log'; return crRender(); }
+
+  const totalQty    = (cr.items||[]).reduce(function(s,i) { return s+(i.qty||0); }, 0);
+  const totalCredit = (cr.items||[]).reduce(function(s,i) { return s+(i.qty||0)*(i.price||0); }, 0);
+  const isNew = !(InvState.credits||[]).find(function(c) { return c.id === cr.id; });
+
+  const lineRows = (cr.items||[]).map(function(item) {
+    return '<tr style="border-bottom:1px solid #eee;">'
+      + '<td style="padding:8px 10px;font-size:11px;font-family:monospace;color:#777;">' + crEsc(item.upc) + '</td>'
+      + '<td style="padding:8px 10px;font-size:12px;font-weight:600;color:#111;">' + crEsc(item.artist ? item.artist + ' — ' + item.title : item.title) + '</td>'
+      + '<td style="padding:8px 10px;font-size:11px;text-align:center;color:#555;">' + crEsc(item.format||'') + '</td>'
+      + '<td style="padding:8px 10px;font-size:12px;text-align:center;font-weight:700;">' + (item.qty||0) + '</td>'
+      + '<td style="padding:8px 10px;font-size:12px;font-family:monospace;text-align:right;">' + crFmt(item.price||0) + '</td>'
+      + '<td style="padding:8px 10px;font-size:12px;font-family:monospace;font-weight:700;text-align:right;">' + crFmt((item.qty||0)*(item.price||0)) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const addrBlock = cr.billTo && cr.billTo.name
+    ? '<strong>' + crEsc(cr.billTo.company||cr.billTo.name) + '</strong><br>'
+      + (cr.billTo.company ? crEsc(cr.billTo.name) + '<br>' : '')
+      + crEsc(cr.billTo.address||'') + (cr.billTo.address2 ? '<br>' + crEsc(cr.billTo.address2) : '') + '<br>'
+      + crEsc(cr.billTo.city||'') + ', ' + crEsc(cr.billTo.state||'') + ' ' + crEsc(cr.billTo.zip||'') + '<br>'
+      + (cr.billTo.email ? crEsc(cr.billTo.email) : '')
+    : crEsc(cr.customer||'');
+
+  body.innerHTML = '<div id="cr-detail-wrap" style="padding:24px;max-width:900px;">'
+    // Action bar
+    + '<div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+    + '<button onclick="crBackToLog()" class="btn-secondary btn-sm">&#8592; Back</button>'
+    + '<div style="display:flex;gap:8px;">'
+    + (isNew ? '<button onclick="crEditDraft()" class="btn-secondary btn-sm">&#9998; Edit</button>' : '')
+    + '<button onclick="crPrint()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
+    + (isNew ? '<button onclick="crSaveMemo()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Save Credit Memo</button>' : '')
+    + '</div></div>'
+
+    // Print area
+    + '<div id="cr-print-area" style="background:white;color:#111;border:1px solid var(--border);border-radius:8px;padding:28px 32px;font-family:Arial,sans-serif;font-size:12px;">'
+
+    // Header
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #b83228;">'
+    + '<div>'
+    + '<img src="FP-Logo_Submark-Black.jpg" alt="Fat Possum Records" style="width:60px;height:60px;object-fit:contain;display:block;margin-bottom:6px;" />'
+    + '<div style="font-size:16px;font-weight:900;color:#111;">FAT POSSUM RECORDS</div>'
+    + '<div style="font-size:10px;color:#666;margin-top:3px;">PO Box 1923 &nbsp;·&nbsp; Oxford, MS 38655</div>'
+    + '<div style="font-size:10px;color:#666;">orders@fatpossum.com &nbsp;·&nbsp; 662-234-2828</div>'
+    + '</div>'
+    + '<div style="text-align:right;">'
+    + '<div style="font-size:18px;font-weight:900;color:#b83228;text-transform:uppercase;letter-spacing:1px;">Credit Memo</div>'
+    + '<div style="font-size:14px;font-family:monospace;font-weight:700;color:#b83228;margin-top:4px;">' + crEsc(CR_PREFIX + cr.number) + '</div>'
+    + '<div style="font-size:11px;color:#666;margin-top:6px;">Claim Date: <strong>' + crDate(cr.claimDate) + '</strong></div>'
+    + '<div style="font-size:11px;color:#666;">Created: <strong>' + crDate(cr.createdAt) + '</strong></div>'
+    + (cr.refInvoice ? '<div style="font-size:11px;color:#666;">Ref Invoice: <strong>' + crEsc(cr.refInvoice) + '</strong></div>' : '')
+    + (cr.createdBy ? '<div style="font-size:11px;color:#666;">Created by: <strong>' + crEsc(cr.createdBy.name||'') + '</strong></div>' : '')
+    + '</div></div>'
+
+    // Customer
+    + '<div style="margin-bottom:20px;padding:14px;background:#f8f8f8;border-radius:6px;">'
+    + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px;">Customer</div>'
+    + '<div style="font-size:12px;line-height:1.7;color:#222;">' + addrBlock + '</div>'
+    + '</div>'
+
+    // Table
+    + '<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">'
+    + '<thead><tr style="background:#111;color:white;">'
+    + '<th style="padding:8px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;">UPC</th>'
+    + '<th style="padding:8px 10px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;">Title</th>'
+    + '<th style="padding:8px 10px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;">Format</th>'
+    + '<th style="padding:8px 10px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;">Qty</th>'
+    + '<th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;">Unit Cost</th>'
+    + '<th style="padding:8px 10px;text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;">Total Cost</th>'
+    + '</tr></thead><tbody>' + lineRows + '</tbody></table>'
+
+    // Totals
+    + '<div style="display:flex;justify-content:flex-end;margin-bottom:20px;">'
+    + '<div style="min-width:240px;border:1px solid #eee;border-radius:6px;overflow:hidden;">'
+    + '<div style="display:flex;justify-content:space-between;padding:8px 14px;font-size:13px;border-bottom:1px solid #eee;background:#fafafa;"><span style="color:#555;">Total Qty</span><span style="font-family:monospace;font-weight:700;">' + totalQty + '</span></div>'
+    + '<div style="display:flex;justify-content:space-between;padding:10px 14px;font-size:16px;font-weight:900;background:#b83228;color:white;"><span>Total Credit</span><span style="font-family:monospace;">' + crFmt(totalCredit) + '</span></div>'
+    + '</div></div>'
+
+    + (cr.notes ? '<div style="padding:10px 14px;background:#f8f8f8;border-radius:4px;font-size:11px;color:#555;border-left:3px solid #b83228;margin-bottom:16px;"><strong>Notes:</strong> ' + crEsc(cr.notes) + '</div>' : '')
+
+    // Banking footer
+    + '<div style="margin-top:16px;padding-top:10px;border-top:1px solid #ddd;font-size:8.5px;color:#888;line-height:1.7;">'
+    + '<strong style="font-size:10px;color:#555;display:block;margin-bottom:3px;">Payment / Wire Transfer Information</strong>'
+    + 'Bank: Renasant Bank &nbsp;|&nbsp; 111 Jackson Avenue East, Oxford, MS 38655 &nbsp;|&nbsp; (877) 367-5371<br>'
+    + 'Account Name: Fat Possum Records LLC &nbsp;|&nbsp; Account #: 3100304905 &nbsp;|&nbsp; ABA: 084201294<br>'
+    + 'Checks: Fat Possum Records &nbsp;|&nbsp; Attn: Patrick Addison &nbsp;|&nbsp; 827 N Lamar Blvd, Oxford, MS 38655'
+    + '</div>'
+    + '</div></div>';
+}
+
+window.crSaveMemo = function() {
+  const cr = CrState.draft;
+  if (!cr) return;
+  if (!InvState.credits) InvState.credits = [];
+  if (!InvState.nextCrNum) InvState.nextCrNum = CR_START;
+
+  const existing = InvState.credits.findIndex(function(c) { return c.id === cr.id; });
+  if (existing >= 0) InvState.credits[existing] = cr;
+  else { InvState.credits.push(cr); InvState.nextCrNum++; }
+
+  invSave();
+  CrState.view = 'log';
+  crRender();
+  if (window.toast) toast('Credit memo ' + CR_PREFIX + cr.number + ' saved.', 'success');
+};
+
+window.crBackToLog  = function() { CrState.draft = null; CrState.view = 'log'; crRender(); };
+window.crEditDraft  = function() { CrState.view = 'edit'; crRender(); };
+
+window.crPrint = function() {
+  const printArea = document.getElementById('cr-print-area');
+  if (!printArea) return;
+  const win = window.open('', '_blank', 'width=850,height=1100');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Credit Memo</title>');
+  win.document.write('<base href="' + window.location.href.replace(/\/[^\/]*$/, '/') + '">');
+  win.document.write('<style>* { box-sizing:border-box; margin:0; padding:0; } body { font-family:Arial,sans-serif; font-size:11px; padding:14mm; } table { width:100%; border-collapse:collapse; } th,td { padding:5px 6px; } @page { size:letter portrait; margin:0; }</style>');
+  win.document.write('</head><body>');
+  win.document.write(printArea.innerHTML);
+  win.document.write('</body></html>');
+  win.document.close();
+  win.onload = function() { win.focus(); win.print(); };
+};
+
+// Delete credit memo
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.cr-del-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  const id = btn.dataset.crId;
+  const cr = (InvState.credits||[]).find(function(c) { return c.id === id; });
+  if (!cr || !confirm('Delete ' + CR_PREFIX + cr.number + '? This cannot be undone.')) return;
+  InvState.credits = InvState.credits.filter(function(c) { return c.id !== id; });
+  invSave();
+  crRender();
+  if (window.toast) toast('Credit memo deleted.', '');
+});
+
+// ── END CREDIT MEMO ───────────────────────────────────────────────────────
