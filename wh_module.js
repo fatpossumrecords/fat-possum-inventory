@@ -2058,7 +2058,12 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       var isHeader = colspan >= 4;
 
       if (isHeader) {
-        currentKey = firstCell.textContent.trim().slice(0, 80);
+        // Build stable key from text content, stripping injected button/date text
+        var rawText = '';
+        firstCell.childNodes.forEach(function(n) {
+          if (n.nodeType === 3) rawText += n.textContent; // text nodes only
+        });
+        currentKey = rawText.trim().slice(0, 80);
 
         // Collapse toggle
         if (!row.querySelector('.mov-collapse-btn')) {
@@ -2155,6 +2160,8 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
   var _movLock = false;
   document.addEventListener('DOMContentLoaded', function() {
+    // Clear any stale collapse state from previous broken versions
+    try { localStorage.removeItem('fp_mov_collapsed'); } catch(e) {}
     var check = setInterval(function() {
       var tbody = document.getElementById('movements-tbody');
       if (!tbody) return;
