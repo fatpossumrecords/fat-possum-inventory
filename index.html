@@ -452,16 +452,19 @@
           <div class="form-row">
             <div class="form-group">
               <label>From Warehouse</label>
-              <select id="mov-from">
+              <select id="mov-from" onchange="validateRoute()">
                 <option value="fp">Fat Possum Warehouse</option>
                 <option value="us">Orchard US</option>
+                <option value="ca">Orchard Canada</option>
                 <option value="uk">Orchard UK</option>
+                <option value="eu">Orchard EU</option>
               </select>
             </div>
             <div class="arrow-sep">→</div>
             <div class="form-group">
               <label>To Warehouse</label>
-              <select id="mov-to">
+              <select id="mov-to" onchange="validateRoute()">
+                <option value="fp">Fat Possum Warehouse</option>
                 <option value="us">Orchard US</option>
                 <option value="ca">Orchard Canada</option>
                 <option value="uk">Orchard UK</option>
