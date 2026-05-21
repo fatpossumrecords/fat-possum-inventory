@@ -148,6 +148,12 @@ function invRender() {
 
 window.switchToInvoices = function(mode) {
   if (window.switchView) switchView('invoices');
+  setTimeout(function() {
+    const pending = InvState.invoices.filter(function(inv) {
+      return (inv.status === 'pending_shipment' || inv.status === 'paid' || inv.status === 'shipped') && inv.packiyoOrderId && !inv.shippedAt;
+    });
+    pending.forEach(function(inv) { invSyncById(inv.id); });
+  }, 1000);
   if (mode === 'new') {
     InvState.view = 'log';
     InvState.logFilter = 'new';
@@ -222,6 +228,7 @@ function invRenderLog(body) {
   const rows = filtered.length
     ? filtered.map(function(inv) {
         const total = invCalcTotal(inv);
+        const canMarkPaid = inv.status === 'pending_payment';
         return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="invOpenDetail(\'' + inv.id + '\')">'
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--accent);font-size:13px;">' + invEsc(INV_PREFIX + inv.number) + '</td>'
           + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '') + '</td>'
@@ -230,6 +237,9 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;">' + statusBadge(inv.status) + '</td>'
           + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId || '—') + '</td>'
           + '<td style="padding:10px 16px;font-size:11px;font-family:monospace;color:var(--text-muted);">' + (inv.trackingNumber ? '<a href="' + invEsc(inv.trackingUrl||'#') + '" target="_blank" style="color:var(--accent);">' + invEsc(inv.trackingNumber) + '</a>' : '—') + '</td>'
+          + '<td style="padding:6px 10px;" onclick="event.stopPropagation()">'
+          + (canMarkPaid ? '<button onclick="event.stopPropagation();invMarkPaidById(\'' + inv.id + '\')" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">&#10004; Paid</button>' : '')
+          + '</td>'
           + '<td style="padding:8px 12px;"><button class="inv-del-btn" data-inv-id="' + inv.id + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">&#128465;</button></td>'
           + '</tr>';
       }).join('')
@@ -1020,6 +1030,26 @@ window.invDeleteById = function(id) {
   if (window.toast) toast('Invoice deleted.', '');
 };
 
+async function invSyncById(id) {
+  const inv = InvState.invoices.find(function(x) { return x.id === id; });
+  if (!inv || !inv.packiyoOrderId) return;
+  try {
+    const res = await invPackiyoFetch('/orders/' + inv.packiyoOrderId + '?include=shipments,shipments.shipment_trackings');
+    const shipments = (res.included || []).filter(function(i) { return i.type === 'shipments' && i.attributes.status_text !== 'Voided'; });
+    const trackings = (res.included || []).filter(function(i) { return i.type === 'shipment-trackings'; });
+    if (shipments.length) {
+      inv.shippedAt = shipments[0].attributes.created_at || new Date().toISOString();
+      inv.status = inv.paidAt ? 'complete' : 'shipped';
+      if (trackings.length) { inv.trackingNumber = trackings[0].attributes.tracking_number || ''; inv.trackingUrl = trackings[0].attributes.tracking_url || ''; }
+      const idx = InvState.invoices.findIndex(function(x) { return x.id === id; });
+      if (idx >= 0) InvState.invoices[idx] = inv;
+      invSaveLocal();
+      if (InvState.view === 'log') invRender();
+      if (InvState.draft && InvState.draft.id === id && InvState.view === 'detail') { InvState.draft = JSON.parse(JSON.stringify(inv)); invRender(); }
+    }
+  } catch(e) {}
+}
+
 window.invSyncShipment = async function() {
   const inv = InvState.draft;
   if (!inv || !inv.packiyoOrderId) return;
@@ -1047,6 +1077,18 @@ window.invSyncShipment = async function() {
   } catch(e) {
     if (window.toast) toast('Sync error: ' + e.message, 'error');
   }
+};
+
+window.invMarkPaidById = function(id) {
+  const inv = InvState.invoices.find(function(x) { return x.id === id; });
+  if (!inv || !confirm('Mark ' + INV_PREFIX + inv.number + ' as paid?')) return;
+  inv.status = 'pending_shipment';
+  inv.paidAt = new Date().toISOString();
+  const idx = InvState.invoices.findIndex(function(x) { return x.id === id; });
+  if (idx >= 0) InvState.invoices[idx] = inv;
+  invSave();
+  invRender();
+  if (window.toast) toast('Marked as paid.', 'success');
 };
 
 window.invMarkPaid = function() {
