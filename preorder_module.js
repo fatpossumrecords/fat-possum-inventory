@@ -41,31 +41,55 @@ const PO_LS_KEY   = 'fp_preorder_campaigns';
 const PO_GIST_FILE = 'fp_preorders.json';
 
 async function savePreOrderData() {
-  // 1. Always save to localStorage immediately
-  try { localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns)); } catch(e) {}
-
-  // 2. Save to a dedicated Gist file (separate from fp_config.json)
+  // 1. Save to localStorage immediately
   try {
-    const body = JSON.stringify({
-      files: { [PO_GIST_FILE]: { content: JSON.stringify({
-          preOrderCampaigns: POState.campaigns,
-          ordersCache: Object.fromEntries(
-            Object.entries(POState.orders).map(([k,v]) => [k, Array.isArray(v) ? v : []])
-          ),
-          ordersRefreshedAt: POState.ordersRefreshedAt || {},
-          ordersCacheTs: Date.now(),
-        }) } }
-    });
-    let _gistId, _token;
-    try { _gistId = CONFIG.GIST_ID; _token = CONFIG.GIST_TOKEN; } catch(e) {}
-    if (!_gistId) { try { const c=JSON.parse(localStorage.getItem('fp_config_cache')||'{}'); _gistId=c.GIST_ID; _token=c.GIST_TOKEN; } catch(e) {} }
+    localStorage.setItem(PO_LS_KEY, JSON.stringify(POState.campaigns));
+    localStorage.setItem(PO_LS_KEY + '_orders', JSON.stringify({
+      orders: Object.fromEntries(Object.entries(POState.orders).map(([k,v]) => [k, Array.isArray(v) ? v : []])),
+      refreshedAt: POState.ordersRefreshedAt || {}, ts: Date.now()
+    }));
+  } catch(e) {}
+
+  // 2. Fetch current Gist, merge, then save — prevents overwriting concurrent changes
+  let _gistId, _token;
+  try { _gistId = CONFIG.GIST_ID; _token = CONFIG.GIST_TOKEN; } catch(e) {}
+  if (!_gistId) { try { const c=JSON.parse(localStorage.getItem('fp_config_cache')||'{}'); _gistId=c.GIST_ID; _token=c.GIST_TOKEN; } catch(e) {} }
+  if (!_gistId) return;
+
+  try {
+    // Fetch current state
+    let base = { preOrderCampaigns: [], ordersCache: {}, ordersRefreshedAt: {} };
+    try {
+      const current = await fetch('https://api.github.com/gists/' + _gistId, {
+        headers: { 'Authorization': 'token ' + _token }, cache: 'no-store'
+      });
+      if (current.ok) {
+        const gist = await current.json();
+        const file = gist.files && gist.files[PO_GIST_FILE];
+        if (file && file.content) base = JSON.parse(file.content);
+      }
+    } catch(e) {}
+
+    // Merge campaigns — our version wins for campaigns we own by ID
+    const ourIds = new Set(POState.campaigns.map(function(c) { return c.id; }));
+    const theirCampaigns = (base.preOrderCampaigns || []).filter(function(c) { return !ourIds.has(c.id); });
+    const mergedCampaigns = theirCampaigns.concat(POState.campaigns);
+
+    const payload = {
+      preOrderCampaigns: mergedCampaigns,
+      ordersCache: Object.fromEntries(
+        Object.entries(POState.orders).map(([k,v]) => [k, Array.isArray(v) ? v : []])
+      ),
+      ordersRefreshedAt: POState.ordersRefreshedAt || {},
+      ordersCacheTs: Date.now(),
+    };
+
     const res = await fetch('https://api.github.com/gists/' + _gistId, {
       method: 'PATCH',
       headers: { 'Authorization': 'token ' + _token, 'Content-Type': 'application/json' },
-      body,
+      body: JSON.stringify({ files: { [PO_GIST_FILE]: { content: JSON.stringify(payload) } } }),
     });
     if (!res.ok) console.warn('Pre-order Gist save failed:', res.status);
-    else console.log('Pre-order campaigns saved to Gist');
   } catch(e) {
     console.warn('Pre-order Gist save error:', e.message);
   }
