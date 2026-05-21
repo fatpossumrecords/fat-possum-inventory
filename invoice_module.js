@@ -276,6 +276,9 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--accent);font-size:13px;">' + invEsc(INV_PREFIX + inv.number) + '</td>'
           + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '') + '</td>'
           + '<td style="padding:10px 16px;font-size:12px;color:var(--text-muted);">' + invDate(inv.createdAt) + '</td>'
+          + '<td style="padding:8px 16px;">'
+          + (inv.createdBy ? (inv.createdBy.picture ? '<img src="' + invEsc(inv.createdBy.picture) + '" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px;" title="' + invEsc(inv.createdBy.name) + '">' : '') + '<span style="font-size:11px;color:var(--text-muted);">' + invEsc(inv.createdBy.name || inv.createdBy.email || '') + '</span>' : '<span style="font-size:11px;color:var(--text-dim);">—</span>')
+          + '</td>'
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;">' + invFmt(total) + '</td>'
           + '<td style="padding:10px 16px;">' + statusBadge(inv.status) + '</td>'
           + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId || '—') + '</td>'
@@ -308,6 +311,7 @@ function invRenderLog(body) {
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Invoice #</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Customer</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Date</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Created By</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Total</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Status</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Packiyo Order</th>'
@@ -323,6 +327,7 @@ window.invNewInvoice = function() {
     number: InvState.nextNum,
     status: 'draft',
     createdAt: new Date().toISOString(),
+    createdBy: (typeof State !== 'undefined' && State.user) ? { name: State.user.name, email: State.user.email, picture: State.user.picture } : null,
     billTo: { name:'', company:'', address:'', address2:'', city:'', state:'', zip:'', country:'US', email:'', phone:'' },
     shipTo: { name:'', company:'', address:'', address2:'', city:'', state:'', zip:'', country:'US', email:'', phone:'' },
     shipSame: true,
@@ -898,6 +903,7 @@ function invRenderDetail(body) {
     + '<div style="font-size:16px;font-weight:900;color:#111;text-transform:uppercase;letter-spacing:1px;">Invoice</div>'
     + '<div style="font-size:14px;font-family:monospace;font-weight:700;color:#b83228;margin-top:4px;">' + invEsc(INV_PREFIX + inv.number) + '</div>'
     + '<div style="font-size:12px;color:#666;margin-top:6px;">Date: <strong>' + invDate(inv.createdAt) + '</strong></div>'
+    + (inv.createdBy ? '<div style="font-size:12px;color:#666;">Created by: <strong>' + invEsc(inv.createdBy.name || inv.createdBy.email || '') + '</strong></div>' : '')
     + '<div style="font-size:12px;color:#666;">Terms: <strong>' + invEsc(inv.terms||'Net 30') + '</strong></div>'
     + (inv.poNumber ? '<div style="font-size:12px;color:#666;">PO#: <strong>' + invEsc(inv.poNumber) + '</strong></div>' : '')
     + (inv.paidAt ? '<div style="margin-top:8px;background:#16a34a;color:white;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;display:inline-block;">PAID ' + invDate(inv.paidAt) + '</div>' : '')
