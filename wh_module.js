@@ -1282,7 +1282,7 @@ window.wtToggleEmpty = function() {
   // Override doomsdayKeepIt with a clean implementation
   function reverseMovementGroups() {
     const tbody = document.getElementById('movements-tbody');
-    if (!tbody || tbody.dataset.reversed === '1') return;
+    if (!tbody) return;
     // Collect rows into groups
     const rows = [...tbody.querySelectorAll('tr')];
     const groups = [];
@@ -1290,7 +1290,7 @@ window.wtToggleEmpty = function() {
     rows.forEach(function(row) {
       const firstCell = row.querySelector('td,th');
       const colspanVal = firstCell ? parseInt(firstCell.getAttribute('colspan')||'1') : 1;
-      if (colspanVal >= 4 && current.length) { groups.push(current); current = []; }
+      if (colspanVal >= 3 && current.length) { groups.push(current); current = []; }
       current.push(row);
     });
     if (current.length) groups.push(current);
@@ -1298,7 +1298,7 @@ window.wtToggleEmpty = function() {
     groups.reverse().forEach(function(grp) {
       grp.forEach(function(row) { tbody.appendChild(row); });
     });
-    tbody.dataset.reversed = '1';
+
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -2186,7 +2186,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
   function reverseMovementGroups() {
     const tbody = document.getElementById('movements-tbody');
-    if (!tbody || tbody.dataset.reversed === '1') return;
+    if (!tbody) return;
     // Collect rows into groups
     const rows = [...tbody.querySelectorAll('tr')];
     const groups = [];
@@ -2194,7 +2194,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     rows.forEach(function(row) {
       const firstCell = row.querySelector('td,th');
       const colspanVal = firstCell ? parseInt(firstCell.getAttribute('colspan')||'1') : 1;
-      if (colspanVal >= 4 && current.length) { groups.push(current); current = []; }
+      if (colspanVal >= 3 && current.length) { groups.push(current); current = []; }
       current.push(row);
     });
     if (current.length) groups.push(current);
@@ -2202,7 +2202,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     groups.reverse().forEach(function(grp) {
       grp.forEach(function(row) { tbody.appendChild(row); });
     });
-    tbody.dataset.reversed = '1';
+
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -2212,8 +2212,15 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       clearInterval(check);
       enhanceMovements();
       reverseMovementGroups();
+      var _movLock = false;
       new MutationObserver(function() {
-        setTimeout(function() { enhanceMovements(); reverseMovementGroups(); }, 80);
+        if (_movLock) return;
+        _movLock = true;
+        setTimeout(function() {
+          enhanceMovements();
+          reverseMovementGroups();
+          setTimeout(function() { _movLock = false; }, 200);
+        }, 80);
       }).observe(tbody, { childList: true, subtree: true });
     }, 500);
   });
