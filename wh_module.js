@@ -2026,59 +2026,45 @@ window.whPrintPickList = function() {
 function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── MOVEMENTS ENHANCER ──────────────────────────────────────────────────────
-// Adds dates, collapse toggles, and "→ Invoice" button to movements table
 (function() {
   const COLLAPSED_KEY = 'fp_mov_collapsed';
-
-  function getCollapsed() {
-    try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}'); } catch(e) { return {}; }
-  }
-  function setCollapsed(key, val) {
-    const c = getCollapsed(); c[key] = val;
-    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(c)); } catch(e) {}
-  }
-  function fmtDate(iso) {
-    if (!iso) return '';
-    return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-  }
+  function getCollapsed() { try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY)||'{}'); } catch(e) { return {}; } }
+  function setCollapsed(k,v) { var c=getCollapsed(); c[k]=v; try { localStorage.setItem(COLLAPSED_KEY,JSON.stringify(c)); } catch(e) {} }
+  function fmtDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
 
   function enhanceMovements() {
-    const tbody = document.getElementById('movements-tbody');
+    var tbody = document.getElementById('movements-tbody');
     if (!tbody) return;
-    const collapsed = getCollapsed();
-    const rows = [...tbody.querySelectorAll('tr')];
-    let currentGroupKey = null;
-    let currentGroupStatus = '';
+    var collapsed = getCollapsed();
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    var currentKey = null;
 
     rows.forEach(function(row) {
       if (row.dataset.movEnhanced) return;
       row.dataset.movEnhanced = '1';
-      const cells = [...row.querySelectorAll('td,th')];
+      var cells = Array.prototype.slice.call(row.querySelectorAll('td,th'));
       if (!cells.length) return;
-
-      const firstCell = cells[0];
-      const colspanVal = parseInt(firstCell.getAttribute('colspan') || '1');
-      const isHeader = colspanVal >= 4;
+      var firstCell = cells[0];
+      var colspan = parseInt(firstCell.getAttribute('colspan')||'1');
+      var isHeader = colspan >= 4;
 
       if (isHeader) {
-        // Group header row
-        currentGroupKey = row.dataset.shipmentId || (firstCell.textContent.trim().slice(0, 60));
-        currentGroupStatus = row.dataset.status || '';
+        currentKey = firstCell.textContent.trim().slice(0,80);
 
         // Add collapse toggle
         if (!row.querySelector('.mov-collapse-btn')) {
-          const isCollapsed = collapsed[currentGroupKey] !== false; // default collapsed
-          const btn = document.createElement('button');
+          var isCollapsed = !!collapsed[currentKey];
+          var btn = document.createElement('button');
           btn.className = 'mov-collapse-btn';
-          btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);vertical-align:middle;';
-          btn.textContent = isCollapsed ? '▸' : '▾';
-          const key = currentGroupKey;
+          btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);';
+          btn.textContent = isCollapsed ? '\u25b8' : '\u25be';
+          var key = currentKey;
           btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            const cur = getCollapsed()[key]; const nowCollapsed = cur === false ? true : false; // toggle from default-collapsed
+            var nowCollapsed = !getCollapsed()[key];
             setCollapsed(key, nowCollapsed);
-            btn.textContent = nowCollapsed ? '▸' : '▾';
-            let sib = row.nextElementSibling;
+            btn.textContent = nowCollapsed ? '\u25b8' : '\u25be';
+            var sib = row.nextElementSibling;
             while (sib && !sib.querySelector('.mov-collapse-btn')) {
               sib.style.display = nowCollapsed ? 'none' : '';
               sib = sib.nextElementSibling;
@@ -2088,118 +2074,86 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
         }
 
         // Apply saved collapsed state
-        if (collapsed[currentGroupKey] !== false) { // default collapsed
-          let sib = row.nextElementSibling;
+        if (collapsed[currentKey]) {
+          var sib = row.nextElementSibling;
           while (sib && !sib.querySelector('.mov-collapse-btn')) {
             sib.style.display = 'none';
             sib = sib.nextElementSibling;
           }
         }
 
-        // Add date to header from first matching movement
+        // Add date to header
         if (!row.querySelector('.mov-hdr-date') && typeof State !== 'undefined' && State.movements) {
-          const grpKey = currentGroupKey;
-          const mov = State.movements.find(function(m) {
-            return grpKey.includes(m.shipmentId) || grpKey.includes(m.from + '\u2192' + m.to);
-          });
+          var grpKey = currentKey;
+          var mov = null;
+          for (var i=0; i<State.movements.length; i++) {
+            if (grpKey.indexOf(State.movements[i].from+'\u2192'+State.movements[i].to) > -1 ||
+                grpKey.indexOf(State.movements[i].shipmentId) > -1) {
+              mov = State.movements[i]; break;
+            }
+          }
           if (mov) {
-            const ts = mov.confirmedAt || mov.shippedAt || mov.timestamp;
-            const dateSpan = document.createElement('span');
+            var dateSpan = document.createElement('span');
             dateSpan.className = 'mov-hdr-date';
             dateSpan.style.cssText = 'font-size:10px;color:var(--text-muted);font-weight:400;margin-left:10px;';
-            dateSpan.textContent = fmtDate(ts);
+            dateSpan.textContent = fmtDate(mov.confirmedAt || mov.shippedAt || mov.timestamp);
             firstCell.appendChild(dateSpan);
           }
         }
 
-        // Add → Invoice button for confirmed/shipped groups
+        // Add → Invoice button
         if (!row.querySelector('.mov-invoice-btn')) {
-          const key = currentGroupKey;
-          const lastCell = cells[cells.length - 1];
+          var lastCell = cells[cells.length-1];
           if (lastCell) {
-            const btn = document.createElement('button');
-            btn.className = 'mov-invoice-btn';
-            btn.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;';
-            btn.textContent = '\u2192 Invoice';
-            btn.title = 'Create invoice from this shipment';
-            btn.addEventListener('click', function(e) {
-              e.stopPropagation();
-              movCreateInvoice(key);
-            });
-            lastCell.appendChild(btn);
+            var invBtn = document.createElement('button');
+            invBtn.className = 'mov-invoice-btn';
+            invBtn.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;';
+            invBtn.textContent = '\u2192 Invoice';
+            var k = currentKey;
+            invBtn.addEventListener('click', function(e) { e.stopPropagation(); movCreateInvoice(k); });
+            lastCell.appendChild(invBtn);
           }
         }
-
       }
     });
   }
 
   function movCreateInvoice(groupKey) {
     if (typeof window.switchToInvoices !== 'function') { alert('Invoice module not loaded.'); return; }
-    const movs = (typeof State !== 'undefined' && State.movements)
-      ? State.movements.filter(function(m) {
-          return groupKey.includes(m.shipmentId) || groupKey.includes((m.from||'') + '\u2192' + (m.to||''));
-        })
-      : [];
+    var movs = [];
+    if (typeof State !== 'undefined' && State.movements) {
+      movs = State.movements.filter(function(m) {
+        return groupKey.indexOf((m.from||'')+'\u2192'+(m.to||'')) > -1 || groupKey.indexOf(m.shipmentId||'') > -1;
+      });
+    }
     if (!movs.length) { alert('Could not match movements for this group.'); return; }
-
     switchToInvoices('new');
-
     setTimeout(function() {
       if (!window.InvState || !InvState.draft) return;
-      const inv = InvState.draft;
+      var inv = InvState.draft;
       inv.poNumber = movs[0].poNumber || '';
-      inv.notes    = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
-
+      inv.notes = 'Stock movement: '+(movs[0].from||'')+' \u2192 '+(movs[0].to||'');
       movs.forEach(function(m) {
-        const catalog = (typeof State !== 'undefined' && State.merged)
-          ? State.merged.find(function(p) { return p.catalog === m.catalog || p.upc === m.upc; })
-          : null;
-        const price = parseFloat((window.InvState && InvState.priceCatalog[m.catalog]) || (window.InvState && InvState.priceCatalog[m.upc]) || 0);
-        inv.items.push({ sku:m.catalog||'', artist:m.artist||'', title:m.title||'', catalog:m.catalog||'', upc:m.upc||'', format:m.format||'', qty:m.qty||1, price:price, onHand:catalog ? catalog.fp_available : undefined });
+        var price = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog]||InvState.priceCatalog[m.upc]))||0);
+        inv.items.push({sku:m.catalog||'',artist:m.artist||'',title:m.title||'',catalog:m.catalog||'',upc:m.upc||'',format:m.format||'',qty:m.qty||1,price:price});
       });
-
       if (typeof invRender === 'function') invRender();
-      if (window.toast) toast(movs.length + ' items added to invoice draft.', 'success');
+      if (window.toast) toast(movs.length+' items added to invoice draft.','success');
     }, 300);
   }
 
-  function reverseMovementGroups() {
-    const tbody = document.getElementById('movements-tbody');
-    if (!tbody) return;
-    // Collect rows into groups
-    const rows = [...tbody.querySelectorAll('tr')];
-    const groups = [];
-    let current = [];
-    rows.forEach(function(row) {
-      const firstCell = row.querySelector('td,th');
-      const colspanVal = firstCell ? parseInt(firstCell.getAttribute('colspan')||'1') : 1;
-      if (colspanVal >= 3 && current.length) { groups.push(current); current = []; }
-      current.push(row);
-    });
-    if (current.length) groups.push(current);
-    // Reverse and re-append
-    groups.reverse().forEach(function(grp) {
-      grp.forEach(function(row) { tbody.appendChild(row); });
-    });
-
-  }
-
+  var _movLock = false;
   document.addEventListener('DOMContentLoaded', function() {
-    const check = setInterval(function() {
-      const tbody = document.getElementById('movements-tbody');
+    var check = setInterval(function() {
+      var tbody = document.getElementById('movements-tbody');
       if (!tbody) return;
       clearInterval(check);
       enhanceMovements();
-      var _movLock = false;
       new MutationObserver(function() {
         if (_movLock) return;
         _movLock = true;
-        setTimeout(function() {
-          enhanceMovements();
-              setTimeout(function() { _movLock = false; }, 200);
-        }, 80);
-      }).observe(tbody, { childList: true, subtree: true });
+        setTimeout(function() { enhanceMovements(); _movLock = false; }, 100);
+      }).observe(tbody, { childList: true });
     }, 500);
   });
 })();
