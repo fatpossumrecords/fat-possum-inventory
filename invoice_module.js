@@ -114,12 +114,53 @@ async function invSave() {
   invSaveLocal();
   const creds = invGetCreds();
   if (!creds) return;
-  const payload = {
-    invoices: InvState.invoices, customers: InvState.customers,
-    priceCatalog: InvState.priceCatalog, nextNum: InvState.nextNum,
-    savedAt: new Date().toISOString(),
-  };
   try {
+    // Fetch current Gist state and merge before writing
+    // Prevents overwriting another user's concurrent changes
+    let base = { invoices: [], customers: [], priceCatalog: {}, nextNum: INV_START_NUM };
+    try {
+      const current = await fetch('https://api.github.com/gists/' + creds.gistId, {
+        headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
+      });
+      if (current.ok) {
+        const gist = await current.json();
+        const file = gist.files && gist.files[INV_GIST_FILE];
+        if (file && file.content) base = JSON.parse(file.content);
+      }
+    } catch(e) {}
+
+    // Merge: our invoices win for IDs we own, keep others' invoices we don't have
+    const ourIds = new Set(InvState.invoices.map(function(i) { return i.id; }));
+    const theirInvoices = (base.invoices || []).filter(function(i) { return !ourIds.has(i.id); });
+    const merged = theirInvoices.concat(InvState.invoices);
+
+    // Take highest nextNum to avoid duplicate invoice numbers
+    const nextNum = Math.max(InvState.nextNum, base.nextNum || INV_START_NUM);
+
+    // Merge customers — union by company+name
+    const allCustomers = InvState.customers.slice();
+    (base.customers || []).forEach(function(c) {
+      const key = (c.company || c.name || '').toLowerCase();
+      if (!allCustomers.some(function(x) { return (x.company||x.name||'').toLowerCase() === key; })) {
+        allCustomers.push(c);
+      }
+    });
+
+    // Price catalog — ours wins
+    const priceCatalog = Object.assign({}, base.priceCatalog || {}, InvState.priceCatalog);
+
+    // Update local state with merged data
+    InvState.invoices     = merged;
+    InvState.nextNum      = nextNum;
+    InvState.customers    = allCustomers;
+    InvState.priceCatalog = priceCatalog;
+    invSaveLocal();
+
+    const payload = {
+      invoices: merged, customers: allCustomers,
+      priceCatalog: priceCatalog, nextNum: nextNum,
+      savedAt: new Date().toISOString(),
+    };
     await fetch('https://api.github.com/gists/' + creds.gistId, {
       method: 'PATCH',
       headers: { 'Authorization': 'token ' + creds.token, 'Content-Type': 'application/json' },
