@@ -2025,124 +2025,206 @@ window.whPrintPickList = function() {
 function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── MOVEMENTS ENHANCER ──────────────────────────────────────────────────────
-// Adds collapse toggles, header dates, and → Invoice button to movements table
+// Builds a two-level route→status summary view above the raw movements table
 (function() {
-  const COLLAPSED_KEY = 'fp_mov_collapsed';
+  const ROUTE_LABELS = {
+    'fp→us':   'FP Oxford → Orchard US',
+    'fp→uk':   'FP Oxford → Orchard UK',
+    'fp→eu':   'FP Oxford → Orchard EU',
+    'fp→ca':   'FP Oxford → Orchard Canada',
+    'us→uk':   'Orchard US → Orchard UK',
+    'us→eu':   'Orchard US → Orchard EU',
+    'us→ca':   'Orchard US → Orchard Canada',
+    'uk→eu':   'Orchard UK → Orchard EU',
+    'us→fp':   'Orchard US → FP Oxford',
+    'uk→fp':   'Orchard UK → FP Oxford',
+    'eu→fp':   'Orchard EU → FP Oxford',
+  };
+  const STATUS_ORDER = ['draft','confirmed','shipped','processed'];
+  const STATUS_LABELS = { draft:'Draft', confirmed:'Confirmed', shipped:'Shipped', processed:'Processed' };
+  const STATUS_COLORS = {
+    draft:     'background:#eee;color:#555;',
+    confirmed: 'background:#3b82f6;color:#fff;',
+    shipped:   'background:var(--yellow);color:#111;',
+    processed: 'background:var(--green);color:#000;',
+  };
+  const ROUTE_COLLAPSE_KEY = 'fp_mov_routes_collapsed';
+  const GROUP_COLLAPSE_KEY = 'fp_mov_groups_collapsed';
 
-  function getCollapsed() {
-    try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}'); } catch(e) { return {}; }
-  }
-  function setCollapsed(key, val) {
-    var c = getCollapsed(); c[key] = val;
-    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(c)); } catch(e) {}
-  }
+  function getRC() { try { return JSON.parse(localStorage.getItem(ROUTE_COLLAPSE_KEY)||'{}'); } catch(e) { return {}; } }
+  function setRC(k,v) { var c=getRC(); c[k]=v; try { localStorage.setItem(ROUTE_COLLAPSE_KEY,JSON.stringify(c)); } catch(e) {} }
+  function getGC() { try { return JSON.parse(localStorage.getItem(GROUP_COLLAPSE_KEY)||'{}'); } catch(e) { return {}; } }
+  function setGC(k,v) { var c=getGC(); c[k]=v; try { localStorage.setItem(GROUP_COLLAPSE_KEY,JSON.stringify(c)); } catch(e) {} }
+
   function fmtDate(iso) {
     if (!iso) return '';
-    return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   }
 
-  function enhanceMovements() {
-    var tbody = document.getElementById('movements-tbody');
-    if (!tbody) return;
-    var collapsed = getCollapsed();
-    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-    var currentKey = null;
+  function buildSummary() {
+    if (typeof State === 'undefined' || !State.movements || !State.movements.length) return;
 
-    rows.forEach(function(row) {
-      if (row.dataset.movEnhanced) return;
-      row.dataset.movEnhanced = '1';
-      var cells = Array.prototype.slice.call(row.querySelectorAll('td,th'));
-      if (!cells.length) return;
-      var firstCell = cells[0];
-      var colspan = parseInt(firstCell.getAttribute('colspan') || '1');
-      var isHeader = colspan >= 4;
-
-      if (isHeader) {
-        // Build stable key from text content, stripping injected button/date text
-        var rawText = '';
-        firstCell.childNodes.forEach(function(n) {
-          if (n.nodeType === 3) rawText += n.textContent; // text nodes only
-        });
-        currentKey = rawText.trim().slice(0, 80);
-
-        // Collapse toggle
-        if (!row.querySelector('.mov-collapse-btn')) {
-          var isCollapsed = !!collapsed[currentKey];
-          var btn = document.createElement('button');
-          btn.className = 'mov-collapse-btn';
-          btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);';
-          btn.textContent = isCollapsed ? '\u25b8' : '\u25be';
-          var key = currentKey;
-          btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var nowCollapsed = !getCollapsed()[key];
-            setCollapsed(key, nowCollapsed);
-            btn.textContent = nowCollapsed ? '\u25b8' : '\u25be';
-            var sib = row.nextElementSibling;
-            while (sib && !sib.querySelector('.mov-collapse-btn')) {
-              sib.style.display = nowCollapsed ? 'none' : '';
-              sib = sib.nextElementSibling;
-            }
-          });
-          firstCell.insertBefore(btn, firstCell.firstChild);
-        }
-
-        // Apply saved collapsed state
-        if (collapsed[currentKey]) {
-          var sib = row.nextElementSibling;
-          while (sib && !sib.querySelector('.mov-collapse-btn')) {
-            sib.style.display = 'none';
-            sib = sib.nextElementSibling;
-          }
-        }
-
-        // Date on header only
-        if (!row.querySelector('.mov-hdr-date') && typeof State !== 'undefined' && State.movements) {
-          var grpKey = currentKey;
-          var mov = null;
-          for (var i = 0; i < State.movements.length; i++) {
-            var m = State.movements[i];
-            if (grpKey.indexOf((m.from||'') + '\u2192' + (m.to||'')) > -1 ||
-                (m.shipmentId && grpKey.indexOf(m.shipmentId) > -1)) {
-              mov = m; break;
-            }
-          }
-          if (mov) {
-            var dateSpan = document.createElement('span');
-            dateSpan.className = 'mov-hdr-date';
-            dateSpan.style.cssText = 'font-size:10px;color:var(--text-muted);font-weight:400;margin-left:10px;';
-            dateSpan.textContent = fmtDate(mov.confirmedAt || mov.shippedAt || mov.timestamp);
-            firstCell.appendChild(dateSpan);
-          }
-        }
-
-        // → Invoice button
-        if (!row.querySelector('.mov-invoice-btn')) {
-          var lastCell = cells[cells.length - 1];
-          if (lastCell) {
-            var invBtn = document.createElement('button');
-            invBtn.className = 'mov-invoice-btn';
-            invBtn.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;';
-            invBtn.textContent = '\u2192 Invoice';
-            var k = currentKey;
-            invBtn.addEventListener('click', function(e) { e.stopPropagation(); movCreateInvoice(k); });
-            lastCell.appendChild(invBtn);
-          }
-        }
-      }
+    // Group movements by route then by shipmentId
+    var routeMap = {};
+    State.movements.forEach(function(m) {
+      var rk = (m.from||'') + '\u2192' + (m.to||'');
+      if (!routeMap[rk]) routeMap[rk] = {};
+      var sid = m.shipmentId || (rk + '-legacy');
+      if (!routeMap[rk][sid]) routeMap[rk][sid] = { shipmentId:sid, route:rk, items:[], status:'draft' };
+      routeMap[rk][sid].items.push(m);
     });
+
+    // Determine status per shipment group
+    Object.keys(routeMap).forEach(function(rk) {
+      Object.keys(routeMap[rk]).forEach(function(sid) {
+        var grp = routeMap[rk][sid];
+        var statuses = grp.items.map(function(m) { return m.status||'draft'; });
+        grp.status = statuses.includes('draft') ? 'draft'
+          : statuses.includes('confirmed') ? 'confirmed'
+          : statuses.includes('shipped') ? 'shipped' : 'processed';
+        grp.date = grp.items[0].confirmedAt || grp.items[0].shippedAt || grp.items[0].timestamp;
+        grp.poNumber = grp.items[0].poNumber || '';
+        grp.totalQty = grp.items.reduce(function(s,m) { return s+(m.qty||0); }, 0);
+      });
+    });
+
+    // Sort routes
+    var ROUTE_ORDER = ['fp\u2192us','fp\u2192uk','fp\u2192eu','fp\u2192ca','us\u2192uk','us\u2192eu','us\u2192ca','uk\u2192eu','us\u2192fp','uk\u2192fp','eu\u2192fp'];
+    var routes = Object.keys(routeMap).sort(function(a,b) {
+      var ai = ROUTE_ORDER.indexOf(a), bi = ROUTE_ORDER.indexOf(b);
+      if (ai === -1) ai = 99; if (bi === -1) bi = 99;
+      return ai - bi;
+    });
+
+    var rc = getRC(), gc = getGC();
+    var html = '<div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Movement Summary</div>'
+      + '<div style="display:flex;gap:6px;">'
+      + '<button onclick="movExpandAll()" class="btn-secondary btn-sm" style="font-size:10px;">Expand All</button>'
+      + '<button onclick="movCollapseAll()" class="btn-secondary btn-sm" style="font-size:10px;">Collapse All</button>'
+      + '</div></div>';
+
+    routes.forEach(function(rk) {
+      var shipments = routeMap[rk];
+      var shipKeys = Object.keys(shipments);
+      var routeCollapsed = !!rc[rk];
+      var isFPtoUS = rk === 'fp\u2192us';
+      var totalItems = shipKeys.reduce(function(s,k) { return s+shipments[k].items.length; }, 0);
+      var totalUnits = shipKeys.reduce(function(s,k) { return s+shipments[k].totalQty; }, 0);
+      var hasUrgent = shipKeys.some(function(k) { return shipments[k].status === 'draft' || shipments[k].status === 'confirmed'; });
+      var routeLabel = ROUTE_LABELS[rk] || rk;
+
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;overflow:hidden;">';
+
+      // Route header
+      html += '<div onclick="movToggleRoute(\'' + encodeURIComponent(rk) + '\')" style="padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--surface2);user-select:none;">'
+        + '<span style="font-size:12px;color:var(--text-muted);">' + (routeCollapsed ? '\u25b8' : '\u25be') + '</span>'
+        + '<span style="font-size:13px;font-weight:700;color:var(--text);">' + routeLabel + '</span>'
+        + '<span style="font-size:11px;color:var(--text-muted);margin-left:4px;">' + shipKeys.length + ' shipment' + (shipKeys.length!==1?'s':'') + ' \u00b7 ' + totalItems + ' items \u00b7 ' + totalUnits.toLocaleString() + ' units</span>'
+        + '</div>';
+
+      // Route body
+      html += '<div id="movroute-' + encodeURIComponent(rk) + '" style="' + (routeCollapsed ? 'display:none;' : '') + 'padding:8px;">';
+
+      // Sort shipments: draft first, then newest to oldest within each status
+      var sortedShipKeys = shipKeys.slice().sort(function(a,b) {
+        var sa = STATUS_ORDER.indexOf(shipments[a].status), sb = STATUS_ORDER.indexOf(shipments[b].status);
+        if (sa !== sb) return sa - sb;
+        // Within same status, newest first
+        var da = new Date(shipments[a].date||0), db = new Date(shipments[b].date||0);
+        return db - da;
+      });
+
+      sortedShipKeys.forEach(function(sid) {
+        var grp = shipments[sid];
+        var grpCollapsed = !!gc[sid];
+        var pill = '<span style="' + (STATUS_COLORS[grp.status]||'background:#eee;color:#555;') + 'padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">' + (STATUS_LABELS[grp.status]||grp.status) + '</span>';
+
+        html += '<div style="border:1px solid var(--border);border-radius:4px;margin-bottom:6px;overflow:hidden;">';
+
+        // Shipment header
+        html += '<div onclick="movToggleGroup(\'' + encodeURIComponent(sid) + '\')" style="padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--surface);user-select:none;">'
+          + '<span style="font-size:11px;color:var(--text-muted);">' + (grpCollapsed ? '\u25b8' : '\u25be') + '</span>'
+          + pill
+          + (grp.date ? '<span style="font-size:11px;color:var(--text-muted);">' + fmtDate(grp.date) + '</span>' : '')
+          + '<span style="font-size:11px;color:var(--text-muted);">' + grp.items.length + ' item' + (grp.items.length!==1?'s':'') + ' \u00b7 ' + grp.totalQty.toLocaleString() + ' units</span>'
+          + (grp.poNumber ? '<span style="font-size:11px;color:var(--accent);font-weight:600;">' + grp.poNumber + '</span>' : '')
+          + (isFPtoUS && (grp.status==='shipped'||grp.status==='confirmed') ? '<button onclick="event.stopPropagation();movInvoice(\'' + encodeURIComponent(sid) + '\')" style="margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:2px 10px;font-size:10px;font-weight:700;cursor:pointer;">\u2192 Invoice</button>' : '<span style="margin-left:auto;"></span>')
+          + '</div>';
+
+        // Items
+        html += '<div id="movgrp-' + encodeURIComponent(sid) + '" style="' + (grpCollapsed ? 'display:none;' : '') + 'padding:6px 12px 8px;">';
+        grp.items.forEach(function(m) {
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">'
+            + '<span style="flex:2;font-weight:600;color:var(--text);">' + (m.artist||'') + ' \u2014 ' + (m.title||'') + '</span>'
+            + '<span style="font-family:monospace;font-size:11px;color:var(--text-muted);flex:1;">' + (m.catalog||'') + '</span>'
+            + '<span style="font-size:11px;color:var(--text-muted);">' + (m.format||'') + '</span>'
+            + '<span style="font-family:monospace;font-weight:700;color:var(--accent);min-width:40px;text-align:right;">' + (m.qty||0) + '</span>'
+            + '</div>';
+        });
+        html += '</div></div>';
+      });
+
+      html += '</div></div>';
+    });
+
+    var panel = document.getElementById('mov-summary-panel');
+    if (panel) panel.innerHTML = html;
   }
 
-  function movCreateInvoice(groupKey) {
-    if (typeof window.switchToInvoices !== 'function') { alert('Invoice module not loaded.'); return; }
-    var movs = [];
+  // Toggle functions exposed to window
+  window.movToggleRoute = function(rkEnc) {
+    var rk = decodeURIComponent(rkEnc);
+    var rc = getRC();
+    var nowCollapsed = !rc[rk];
+    setRC(rk, nowCollapsed);
+    var el = document.getElementById('movroute-' + rkEnc);
+    if (el) el.style.display = nowCollapsed ? 'none' : '';
+    // Update arrow
+    if (el) {
+      var arrow = el.previousElementSibling && el.previousElementSibling.querySelector('span');
+      if (arrow) arrow.textContent = nowCollapsed ? '\u25b8' : '\u25be';
+    }
+  };
+
+  window.movToggleGroup = function(sidEnc) {
+    var sid = decodeURIComponent(sidEnc);
+    var gc = getGC();
+    var nowCollapsed = !gc[sid];
+    setGC(sid, nowCollapsed);
+    var el = document.getElementById('movgrp-' + sidEnc);
+    if (el) el.style.display = nowCollapsed ? 'none' : '';
+    if (el) {
+      var arrow = el.previousElementSibling && el.previousElementSibling.querySelector('span');
+      if (arrow) arrow.textContent = nowCollapsed ? '\u25b8' : '\u25be';
+    }
+  };
+
+  window.movExpandAll = function() {
+    try { localStorage.removeItem(ROUTE_COLLAPSE_KEY); localStorage.removeItem(GROUP_COLLAPSE_KEY); } catch(e) {}
+    buildSummary();
+  };
+
+  window.movCollapseAll = function() {
+    var rc = {}, gc = {};
     if (typeof State !== 'undefined' && State.movements) {
-      movs = State.movements.filter(function(m) {
-        return groupKey.indexOf((m.from||'') + '\u2192' + (m.to||'')) > -1 ||
-               (m.shipmentId && groupKey.indexOf(m.shipmentId) > -1);
+      State.movements.forEach(function(m) {
+        var rk = (m.from||'') + '\u2192' + (m.to||'');
+        rc[rk] = true;
+        gc[m.shipmentId || (rk+'-legacy')] = true;
       });
     }
-    if (!movs.length) { alert('Could not match movements for this group.'); return; }
+    try { localStorage.setItem(ROUTE_COLLAPSE_KEY, JSON.stringify(rc)); localStorage.setItem(GROUP_COLLAPSE_KEY, JSON.stringify(gc)); } catch(e) {}
+    buildSummary();
+  };
+
+  window.movInvoice = function(sidEnc) {
+    var sid = decodeURIComponent(sidEnc);
+    if (typeof window.switchToInvoices !== 'function') { alert('Invoice module not loaded.'); return; }
+    var movs = (typeof State !== 'undefined' && State.movements)
+      ? State.movements.filter(function(m) { return (m.shipmentId || ((m.from||'')+'\u2192'+(m.to||'')+'-legacy')) === sid; })
+      : [];
+    if (!movs.length) { alert('Could not match movements.'); return; }
     switchToInvoices('new');
     setTimeout(function() {
       if (!window.InvState || !InvState.draft) return;
@@ -2150,29 +2232,49 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       inv.poNumber = movs[0].poNumber || '';
       inv.notes = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
       movs.forEach(function(m) {
-        var price = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog] || InvState.priceCatalog[m.upc])) || 0);
+        var price = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog]||InvState.priceCatalog[m.upc]))||0);
         inv.items.push({ sku:m.catalog||'', artist:m.artist||'', title:m.title||'', catalog:m.catalog||'', upc:m.upc||'', format:m.format||'', qty:m.qty||1, price:price });
       });
       if (typeof invRender === 'function') invRender();
       if (window.toast) toast(movs.length + ' items added to invoice draft.', 'success');
     }, 300);
+  };
+
+  // Inject summary panel above the movements table and hide raw table
+  function injectPanel() {
+    var tableWrap = document.getElementById('movements-tbody');
+    if (!tableWrap) return;
+    var table = tableWrap.closest('table') || tableWrap.parentElement;
+    if (!table) return;
+
+    // Don't inject twice
+    if (document.getElementById('mov-summary-panel')) {
+      buildSummary();
+      return;
+    }
+
+    var panel = document.createElement('div');
+    panel.id = 'mov-summary-panel';
+    panel.style.cssText = 'padding:12px;';
+    table.parentElement.insertBefore(panel, table);
+
+    // Hide raw table - app.js still renders into it, we just don't show it
+    table.style.display = 'none';
+
+    buildSummary();
   }
 
-  var _movLock = false;
+  var _lock = false;
   document.addEventListener('DOMContentLoaded', function() {
-    // Clear any stale collapse state from previous broken versions
-    try { localStorage.removeItem('fp_mov_collapsed'); } catch(e) {}
     var check = setInterval(function() {
-      var tbody = document.getElementById('movements-tbody');
-      if (!tbody) return;
+      if (!document.getElementById('movements-tbody')) return;
       clearInterval(check);
-      enhanceMovements();
-      // childList only — no subtree — prevents infinite loop from row manipulation
+      injectPanel();
       new MutationObserver(function() {
-        if (_movLock) return;
-        _movLock = true;
-        setTimeout(function() { enhanceMovements(); _movLock = false; }, 100);
-      }).observe(tbody, { childList: true });
+        if (_lock) return;
+        _lock = true;
+        setTimeout(function() { buildSummary(); _lock = false; }, 100);
+      }).observe(document.getElementById('movements-tbody'), { childList: true });
     }, 500);
   });
 })();
