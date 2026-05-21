@@ -1241,6 +1241,10 @@ window.wtToggleEmpty = function() {
     grid.style.gap = '16px';
     grid.style.flexWrap = '';
 
+    // Apply card visibility from settings — runs after every grid rebuild
+    // so hidden cards stay hidden even when app.js re-renders the dashboard
+    if (window._fpApplyCardVisibility) window._fpApplyCardVisibility();
+
     document.getElementById('mob-stat-strip')?.remove();
     if (window.innerWidth <= 768) {
       const alertCount = cAlerts ? (cAlerts.querySelector('.dash-num')?.textContent||'0') : '0';
