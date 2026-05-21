@@ -1023,6 +1023,7 @@ async function invCreatePackiyoOrder(inv) {
         attributes: {
           number:        inv.poNumber ? inv.poNumber : INV_PREFIX + inv.number,
           external_id:   INV_PREFIX + inv.number,
+          order_channel_name: 'FP-WH-INV',
           ordered_at:    inv.createdAt,
           shipping:      inv.shipping.cost || 0,
           internal_note: inv.notes || '',
