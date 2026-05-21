@@ -2154,10 +2154,14 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
             if (grp.status === 'draft') {
               var confirmLabel = isFPtoUS ? 'Confirm &amp; Add PO#' : 'Confirm Shipment';
               btns += '<button onclick="event.stopPropagation();movConfirmGroup(\'' + encodeURIComponent(sid) + '\')" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">' + confirmLabel + '</button>';
+            } else if (grp.status === 'confirmed' && isFPtoUS) {
+              btns += '<button onclick="event.stopPropagation();movInvoice(\'' + encodeURIComponent(sid) + '\')" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">→ Invoice</button>';
             } else if (grp.status === 'confirmed' && !isFPtoUS) {
               btns += '<button onclick="event.stopPropagation();movProcessGroup(\'' + encodeURIComponent(sid) + '\')" style="background:var(--green);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">Mark Processed</button>';
-            } else if (grp.status === 'shipped' && isFPtoUS) {
-              btns += '<button onclick="event.stopPropagation();movInvoice(\'' + encodeURIComponent(sid) + '\')" style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;">\u2192 Invoice</button>';
+            } else if (grp.status === 'shipped') {
+              btns += '<span style="font-size:10px;color:var(--text-muted);">Auto-clears in 7d</span>';
+            } else if (grp.status === 'processed') {
+              btns += '<span style="font-size:10px;color:var(--text-muted);">Clears in 30d</span>';
             }
             btns += '</span>';
             return btns;
