@@ -109,7 +109,7 @@ async function invLoad() {
       InvState._deletedIds  = data.deletedIds   || [];
       invSaveLocal();
       const view = document.getElementById('view-invoices');
-      if (view && !view.classList.contains('hidden')) invRender();
+      if (view && !view.classList.contains('hidden') && InvState.view !== 'edit') invRender();
     }
   } catch(e) { console.warn('Invoice load error:', e.message); }
 }
@@ -838,8 +838,10 @@ window.invSaveDraft = function() {
   const inv = InvState.draft;
   if (!inv) return;
   const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
-  if (i >= 0) InvState.invoices[i] = inv; else InvState.invoices.push(inv);
-  invSave();
+  if (i >= 0) InvState.invoices[i] = JSON.parse(JSON.stringify(inv));
+  else InvState.invoices.push(JSON.parse(JSON.stringify(inv)));
+  invSaveLocal(); // sync save immediately
+  invSave();      // async Gist write in background
   if (window.toast) toast('Draft saved.', '');
 };
 
