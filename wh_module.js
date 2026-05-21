@@ -1280,7 +1280,6 @@ window.wtToggleEmpty = function() {
   document.addEventListener('DOMContentLoaded', watchDashboard);
 
   // Override doomsdayKeepIt with a clean implementation
-
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
       window.doomsdayKeepIt = function() {
@@ -2026,45 +2025,59 @@ window.whPrintPickList = function() {
 function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── MOVEMENTS ENHANCER ──────────────────────────────────────────────────────
+// Adds dates, collapse toggles, and "→ Invoice" button to movements table
 (function() {
   const COLLAPSED_KEY = 'fp_mov_collapsed';
-  function getCollapsed() { try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY)||'{}'); } catch(e) { return {}; } }
-  function setCollapsed(k,v) { var c=getCollapsed(); c[k]=v; try { localStorage.setItem(COLLAPSED_KEY,JSON.stringify(c)); } catch(e) {} }
-  function fmtDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+
+  function getCollapsed() {
+    try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function setCollapsed(key, val) {
+    const c = getCollapsed(); c[key] = val;
+    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(c)); } catch(e) {}
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
 
   function enhanceMovements() {
-    var tbody = document.getElementById('movements-tbody');
+    const tbody = document.getElementById('movements-tbody');
     if (!tbody) return;
-    var collapsed = getCollapsed();
-    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-    var currentKey = null;
+    const collapsed = getCollapsed();
+    const rows = [...tbody.querySelectorAll('tr')];
+    let currentGroupKey = null;
+    let currentGroupStatus = '';
 
     rows.forEach(function(row) {
       if (row.dataset.movEnhanced) return;
       row.dataset.movEnhanced = '1';
-      var cells = Array.prototype.slice.call(row.querySelectorAll('td,th'));
+      const cells = [...row.querySelectorAll('td,th')];
       if (!cells.length) return;
-      var firstCell = cells[0];
-      var colspan = parseInt(firstCell.getAttribute('colspan')||'1');
-      var isHeader = colspan >= 4;
+
+      const firstCell = cells[0];
+      const colspanVal = parseInt(firstCell.getAttribute('colspan') || '1');
+      const isHeader = colspanVal >= 4;
 
       if (isHeader) {
-        currentKey = firstCell.textContent.trim().slice(0,80);
+        // Group header row
+        currentGroupKey = row.dataset.shipmentId || (firstCell.textContent.trim().slice(0, 60));
+        currentGroupStatus = row.dataset.status || '';
 
         // Add collapse toggle
         if (!row.querySelector('.mov-collapse-btn')) {
-          var isCollapsed = !!collapsed[currentKey];
-          var btn = document.createElement('button');
+          const isCollapsed = !!collapsed[currentGroupKey];
+          const btn = document.createElement('button');
           btn.className = 'mov-collapse-btn';
-          btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);';
-          btn.textContent = isCollapsed ? '\u25b8' : '\u25be';
-          var key = currentKey;
+          btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);vertical-align:middle;';
+          btn.textContent = isCollapsed ? '▸' : '▾';
+          const key = currentGroupKey;
           btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            var nowCollapsed = !getCollapsed()[key];
+            const nowCollapsed = !getCollapsed()[key];
             setCollapsed(key, nowCollapsed);
-            btn.textContent = nowCollapsed ? '\u25b8' : '\u25be';
-            var sib = row.nextElementSibling;
+            btn.textContent = nowCollapsed ? '▸' : '▾';
+            let sib = row.nextElementSibling;
             while (sib && !sib.querySelector('.mov-collapse-btn')) {
               sib.style.display = nowCollapsed ? 'none' : '';
               sib = sib.nextElementSibling;
@@ -2074,44 +2087,59 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
         }
 
         // Apply saved collapsed state
-        if (collapsed[currentKey]) {
-          var sib = row.nextElementSibling;
+        if (collapsed[currentGroupKey]) {
+          let sib = row.nextElementSibling;
           while (sib && !sib.querySelector('.mov-collapse-btn')) {
             sib.style.display = 'none';
             sib = sib.nextElementSibling;
           }
         }
 
-        // Add date to header
+        // Add date to header from first matching movement
         if (!row.querySelector('.mov-hdr-date') && typeof State !== 'undefined' && State.movements) {
-          var grpKey = currentKey;
-          var mov = null;
-          for (var i=0; i<State.movements.length; i++) {
-            if (grpKey.indexOf(State.movements[i].from+'\u2192'+State.movements[i].to) > -1 ||
-                grpKey.indexOf(State.movements[i].shipmentId) > -1) {
-              mov = State.movements[i]; break;
-            }
-          }
+          const grpKey = currentGroupKey;
+          const mov = State.movements.find(function(m) {
+            return grpKey.includes(m.shipmentId) || grpKey.includes(m.from + '\u2192' + m.to);
+          });
           if (mov) {
-            var dateSpan = document.createElement('span');
+            const ts = mov.confirmedAt || mov.shippedAt || mov.timestamp;
+            const dateSpan = document.createElement('span');
             dateSpan.className = 'mov-hdr-date';
             dateSpan.style.cssText = 'font-size:10px;color:var(--text-muted);font-weight:400;margin-left:10px;';
-            dateSpan.textContent = fmtDate(mov.confirmedAt || mov.shippedAt || mov.timestamp);
+            dateSpan.textContent = fmtDate(ts);
             firstCell.appendChild(dateSpan);
           }
         }
 
-        // Add → Invoice button
+        // Add → Invoice button for confirmed/shipped groups
         if (!row.querySelector('.mov-invoice-btn')) {
-          var lastCell = cells[cells.length-1];
+          const key = currentGroupKey;
+          const lastCell = cells[cells.length - 1];
           if (lastCell) {
-            var invBtn = document.createElement('button');
-            invBtn.className = 'mov-invoice-btn';
-            invBtn.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;';
-            invBtn.textContent = '\u2192 Invoice';
-            var k = currentKey;
-            invBtn.addEventListener('click', function(e) { e.stopPropagation(); movCreateInvoice(k); });
-            lastCell.appendChild(invBtn);
+            const btn = document.createElement('button');
+            btn.className = 'mov-invoice-btn';
+            btn.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;';
+            btn.textContent = '\u2192 Invoice';
+            btn.title = 'Create invoice from this shipment';
+            btn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              movCreateInvoice(key);
+            });
+            lastCell.appendChild(btn);
+          }
+        }
+
+      } else if (currentGroupKey) {
+        // Item row — add date cell if not already there
+        if (!row.querySelector('.mov-date') && typeof State !== 'undefined' && State.movements) {
+          const catalog = cells[1] ? cells[1].textContent.trim() : '';
+          const mov = State.movements.find(function(m) { return m.catalog === catalog; });
+          if (mov) {
+            const td = document.createElement('td');
+            td.className = 'mov-date';
+            td.style.cssText = 'font-size:10px;color:var(--text-muted);white-space:nowrap;padding:4px 8px;';
+            td.textContent = fmtDate(mov.confirmedAt || mov.timestamp);
+            row.appendChild(td);
           }
         }
       }
@@ -2120,40 +2148,43 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
   function movCreateInvoice(groupKey) {
     if (typeof window.switchToInvoices !== 'function') { alert('Invoice module not loaded.'); return; }
-    var movs = [];
-    if (typeof State !== 'undefined' && State.movements) {
-      movs = State.movements.filter(function(m) {
-        return groupKey.indexOf((m.from||'')+'\u2192'+(m.to||'')) > -1 || groupKey.indexOf(m.shipmentId||'') > -1;
-      });
-    }
+    const movs = (typeof State !== 'undefined' && State.movements)
+      ? State.movements.filter(function(m) {
+          return groupKey.includes(m.shipmentId) || groupKey.includes((m.from||'') + '\u2192' + (m.to||''));
+        })
+      : [];
     if (!movs.length) { alert('Could not match movements for this group.'); return; }
+
     switchToInvoices('new');
+
     setTimeout(function() {
       if (!window.InvState || !InvState.draft) return;
-      var inv = InvState.draft;
+      const inv = InvState.draft;
       inv.poNumber = movs[0].poNumber || '';
-      inv.notes = 'Stock movement: '+(movs[0].from||'')+' \u2192 '+(movs[0].to||'');
+      inv.notes    = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
+
       movs.forEach(function(m) {
-        var price = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog]||InvState.priceCatalog[m.upc]))||0);
-        inv.items.push({sku:m.catalog||'',artist:m.artist||'',title:m.title||'',catalog:m.catalog||'',upc:m.upc||'',format:m.format||'',qty:m.qty||1,price:price});
+        const catalog = (typeof State !== 'undefined' && State.merged)
+          ? State.merged.find(function(p) { return p.catalog === m.catalog || p.upc === m.upc; })
+          : null;
+        const price = parseFloat((window.InvState && InvState.priceCatalog[m.catalog]) || (window.InvState && InvState.priceCatalog[m.upc]) || 0);
+        inv.items.push({ sku:m.catalog||'', artist:m.artist||'', title:m.title||'', catalog:m.catalog||'', upc:m.upc||'', format:m.format||'', qty:m.qty||1, price:price, onHand:catalog ? catalog.fp_available : undefined });
       });
+
       if (typeof invRender === 'function') invRender();
-      if (window.toast) toast(movs.length+' items added to invoice draft.','success');
+      if (window.toast) toast(movs.length + ' items added to invoice draft.', 'success');
     }, 300);
   }
 
-  var _movLock = false;
   document.addEventListener('DOMContentLoaded', function() {
-    var check = setInterval(function() {
-      var tbody = document.getElementById('movements-tbody');
+    const check = setInterval(function() {
+      const tbody = document.getElementById('movements-tbody');
       if (!tbody) return;
       clearInterval(check);
       enhanceMovements();
       new MutationObserver(function() {
-        if (_movLock) return;
-        _movLock = true;
-        setTimeout(function() { enhanceMovements(); _movLock = false; }, 100);
-      }).observe(tbody, { childList: true });
+        setTimeout(enhanceMovements, 80);
+      }).observe(tbody, { childList: true, subtree: true });
     }, 500);
   });
 })();
