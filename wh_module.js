@@ -1280,6 +1280,27 @@ window.wtToggleEmpty = function() {
   document.addEventListener('DOMContentLoaded', watchDashboard);
 
   // Override doomsdayKeepIt with a clean implementation
+  function reverseMovementGroups() {
+    const tbody = document.getElementById('movements-tbody');
+    if (!tbody || tbody.dataset.reversed === '1') return;
+    // Collect rows into groups
+    const rows = [...tbody.querySelectorAll('tr')];
+    const groups = [];
+    let current = [];
+    rows.forEach(function(row) {
+      const firstCell = row.querySelector('td,th');
+      const colspanVal = firstCell ? parseInt(firstCell.getAttribute('colspan')||'1') : 1;
+      if (colspanVal >= 4 && current.length) { groups.push(current); current = []; }
+      current.push(row);
+    });
+    if (current.length) groups.push(current);
+    // Reverse and re-append
+    groups.reverse().forEach(function(grp) {
+      grp.forEach(function(row) { tbody.appendChild(row); });
+    });
+    tbody.dataset.reversed = '1';
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
       window.doomsdayKeepIt = function() {
@@ -2066,7 +2087,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
         // Add collapse toggle
         if (!row.querySelector('.mov-collapse-btn')) {
-          const isCollapsed = !!collapsed[currentGroupKey];
+          const isCollapsed = collapsed[currentGroupKey] !== false; // default collapsed
           const btn = document.createElement('button');
           btn.className = 'mov-collapse-btn';
           btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);vertical-align:middle;';
@@ -2074,7 +2095,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
           const key = currentGroupKey;
           btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            const nowCollapsed = !getCollapsed()[key];
+            const cur = getCollapsed()[key]; const nowCollapsed = cur === false ? true : false; // toggle from default-collapsed
             setCollapsed(key, nowCollapsed);
             btn.textContent = nowCollapsed ? '▸' : '▾';
             let sib = row.nextElementSibling;
@@ -2087,7 +2108,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
         }
 
         // Apply saved collapsed state
-        if (collapsed[currentGroupKey]) {
+        if (collapsed[currentGroupKey] !== false) { // default collapsed
           let sib = row.nextElementSibling;
           while (sib && !sib.querySelector('.mov-collapse-btn')) {
             sib.style.display = 'none';
@@ -2129,19 +2150,6 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
           }
         }
 
-      } else if (currentGroupKey) {
-        // Item row — add date cell if not already there
-        if (!row.querySelector('.mov-date') && typeof State !== 'undefined' && State.movements) {
-          const catalog = cells[1] ? cells[1].textContent.trim() : '';
-          const mov = State.movements.find(function(m) { return m.catalog === catalog; });
-          if (mov) {
-            const td = document.createElement('td');
-            td.className = 'mov-date';
-            td.style.cssText = 'font-size:10px;color:var(--text-muted);white-space:nowrap;padding:4px 8px;';
-            td.textContent = fmtDate(mov.confirmedAt || mov.timestamp);
-            row.appendChild(td);
-          }
-        }
       }
     });
   }
@@ -2176,14 +2184,36 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     }, 300);
   }
 
+  function reverseMovementGroups() {
+    const tbody = document.getElementById('movements-tbody');
+    if (!tbody || tbody.dataset.reversed === '1') return;
+    // Collect rows into groups
+    const rows = [...tbody.querySelectorAll('tr')];
+    const groups = [];
+    let current = [];
+    rows.forEach(function(row) {
+      const firstCell = row.querySelector('td,th');
+      const colspanVal = firstCell ? parseInt(firstCell.getAttribute('colspan')||'1') : 1;
+      if (colspanVal >= 4 && current.length) { groups.push(current); current = []; }
+      current.push(row);
+    });
+    if (current.length) groups.push(current);
+    // Reverse and re-append
+    groups.reverse().forEach(function(grp) {
+      grp.forEach(function(row) { tbody.appendChild(row); });
+    });
+    tbody.dataset.reversed = '1';
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     const check = setInterval(function() {
       const tbody = document.getElementById('movements-tbody');
       if (!tbody) return;
       clearInterval(check);
       enhanceMovements();
+      reverseMovementGroups();
       new MutationObserver(function() {
-        setTimeout(enhanceMovements, 80);
+        setTimeout(function() { enhanceMovements(); reverseMovementGroups(); }, 80);
       }).observe(tbody, { childList: true, subtree: true });
     }, 500);
   });
