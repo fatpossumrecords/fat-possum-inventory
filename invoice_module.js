@@ -852,7 +852,7 @@ window.invCancelEdit = function() {
 };
 
 window.invReview = function() {
-  invCollectForm();
+  if (InvState.view === 'edit') invCollectForm();
   InvState.view = 'detail';
   invRender();
 };
@@ -904,7 +904,7 @@ function invRenderDetail(body) {
   body.innerHTML = '<div id="inv-detail-wrap" style="padding:24px;max-width:900px;">'
     // Action bar
     + '<div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
-    + '<button onclick="invSaveDraft();invBackToLog()" class="btn-secondary btn-sm">&#8592; Save &amp; Back</button>'
+    + '<button onclick="invSaveAndBack()" class="btn-secondary btn-sm">&#8592; Save &amp; Back</button>'
     + '<div style="display:flex;gap:8px;">'
     + (isDraft ? '<button onclick="invEditDraft()" class="btn-secondary btn-sm">&#9998; Edit</button>' : '')
     + '<button onclick="invPrint()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
@@ -1008,6 +1008,22 @@ window.invLogSearch = function(val) {
   if (!tbody) invRender();
 };
 
+window.invSaveAndBack = function() {
+  // Only collect if we're in edit view where form fields exist
+  if (InvState.view === 'edit') invCollectForm();
+  const inv = InvState.draft;
+  if (!inv) { InvState.view = 'log'; invRender(); return; }
+  const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
+  if (i >= 0) InvState.invoices[i] = JSON.parse(JSON.stringify(inv));
+  else InvState.invoices.push(JSON.parse(JSON.stringify(inv)));
+  invSaveLocal();
+  invSave();
+  InvState.draft = null;
+  InvState.view  = 'log';
+  invRender();
+  if (window.toast) toast('Draft saved.', '');
+};
+
 window.invBackToLog = function() { InvState.draft = null; InvState.view = 'log'; invRender(); };
 window.invEditDraft = function() { InvState.view = 'edit'; invRender(); };
 
@@ -1019,7 +1035,12 @@ window.invPushToPackiyo = function() {
   if (!inv.items.length) { if (window.toast) toast('Add at least one line item first.', 'error'); return; }
   if (!inv.billTo.name && !inv.billTo.company) { if (window.toast) toast('Add customer info first.', 'error'); return; }
   if (!confirm('Push ' + INV_PREFIX + inv.number + ' to Packiyo as a new order?\n\n' + inv.items.length + ' items · Total ' + invFmt(invCalcTotal(inv)))) return;
-  inv._pushing = true; // lock to prevent double-push
+  // Save draft first to ensure all data is persisted before push
+  const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
+  if (i >= 0) InvState.invoices[i] = JSON.parse(JSON.stringify(inv));
+  else InvState.invoices.push(JSON.parse(JSON.stringify(inv)));
+  invSaveLocal();
+  inv._pushing = true;
   invCreatePackiyoOrder(inv).finally(function() { inv._pushing = false; });
 };
 
