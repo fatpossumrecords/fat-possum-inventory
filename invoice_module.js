@@ -171,13 +171,11 @@ window.switchToInvoices = function(mode) {
 
 // ── INVOICE LOG ───────────────────────────────────────────────
 function invIsPast(inv) {
-  // Past = paid OR shipped (whichever comes last)
-  return !!(inv.paidAt || inv.shippedAt || inv.status === 'shipped');
+  return inv.status === 'shipped' || inv.status === 'complete' || !!(inv.shippedAt && inv.paidAt);
 }
 
 function invIsPending(inv) {
-  // Pending = sent to Packiyo but not yet past (awaiting payment or shipment)
-  return inv.status === 'sent' && !invIsPast(inv);
+  return inv.status === 'pending_payment' || inv.status === 'pending_shipment' || inv.status === 'paid';
 }
 
 function invRenderLog(body) {
@@ -202,8 +200,23 @@ function invRenderLog(body) {
   }
 
   function statusBadge(s) {
-    const map = { draft:'#666', sent:'var(--accent)', paid:'var(--green)', shipped:'#7c3aed' };
-    return '<span style="background:' + (map[s]||'#888') + ';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;">' + invEsc(s) + '</span>';
+    const map = {
+      draft:            '#888',
+      pending_payment:  '#e67e22',
+      pending_shipment: 'var(--accent)',
+      paid:             '#2980b9',
+      shipped:          '#7c3aed',
+      complete:         'var(--green)',
+    };
+    const labels = {
+      draft:            'Draft',
+      pending_payment:  'Pending Payment',
+      pending_shipment: 'Pending Shipment',
+      paid:             'Paid',
+      shipped:          'Shipped',
+      complete:         'Complete',
+    };
+    return '<span style="background:' + (map[s]||'#888') + ';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">' + invEsc(labels[s] || s) + '</span>';
   }
 
   const rows = filtered.length
@@ -216,6 +229,7 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;">' + invFmt(total) + '</td>'
           + '<td style="padding:10px 16px;">' + statusBadge(inv.status) + '</td>'
           + '<td style="padding:10px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId || '—') + '</td>'
+          + '<td style="padding:10px 16px;font-size:11px;font-family:monospace;color:var(--text-muted);">' + (inv.trackingNumber ? '<a href="' + invEsc(inv.trackingUrl||'#') + '" target="_blank" style="color:var(--accent);">' + invEsc(inv.trackingNumber) + '</a>' : '—') + '</td>'
           + '<td style="padding:8px 12px;"><button class="inv-del-btn" data-inv-id="' + inv.id + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">&#128465;</button></td>'
           + '</tr>';
       }).join('')
@@ -244,6 +258,7 @@ function invRenderLog(body) {
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Total</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Status</th>'
     + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Packiyo Order</th>'
+    + '<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tracking</th>'
     + '<th style="padding:10px 16px;width:40px;"></th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
@@ -809,7 +824,9 @@ function invRenderDetail(body) {
     + (isDraft ? '<button onclick="invEditDraft()" class="btn-secondary btn-sm">&#9998; Edit</button>' : '')
     + '<button onclick="invPrint()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
     + (isDraft ? '<button onclick="invPushToPackiyo()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#9654; Send &amp; Push to Packiyo</button>' : '')
-    + (inv.status === 'sent' && !inv.paidAt ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
+    + (inv.status === 'pending_payment' ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
+    + ((inv.status === 'pending_shipment' || inv.status === 'paid') && inv.packiyoOrderId ? '<button onclick="invSyncShipment()" class="btn-secondary btn-sm">&#8635; Sync from Packiyo</button>' : '')
+    + (inv.trackingNumber ? '<span style="font-size:12px;font-family:monospace;background:var(--surface2);padding:6px 12px;border-radius:4px;">&#128230; ' + invEsc(inv.trackingNumber) + '</span>' : '')
     + '<button onclick="invDelete()" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;">&#128465; Delete</button>'
     + '</div></div>'
 
@@ -961,7 +978,7 @@ async function invCreatePackiyoOrder(inv) {
 
     if (!orderId) throw new Error('No order ID returned from Packiyo');
 
-    inv.status          = 'sent';
+    inv.status          = inv.paymentHold ? 'pending_payment' : 'pending_shipment';
     inv.packiyoOrderId  = orderId;
     inv.packiyoOrderNum = orderNum || null;
     inv.sentAt          = new Date().toISOString();
@@ -1003,11 +1020,40 @@ window.invDeleteById = function(id) {
   if (window.toast) toast('Invoice deleted.', '');
 };
 
+window.invSyncShipment = async function() {
+  const inv = InvState.draft;
+  if (!inv || !inv.packiyoOrderId) return;
+  if (window.toast) toast('Checking Packiyo for shipment...', '');
+  try {
+    const res = await invPackiyoFetch('/orders/' + inv.packiyoOrderId + '?include=shipments,shipments.shipment_trackings');
+    const shipments = (res.included || []).filter(function(i) { return i.type === 'shipments' && i.attributes.status_text !== 'Voided'; });
+    const trackings = (res.included || []).filter(function(i) { return i.type === 'shipment-trackings'; });
+
+    if (shipments.length) {
+      inv.shippedAt = shipments[0].attributes.created_at || new Date().toISOString();
+      inv.status    = inv.paidAt ? 'complete' : 'shipped';
+      if (trackings.length) {
+        inv.trackingNumber = trackings[0].attributes.tracking_number || '';
+        inv.trackingUrl    = trackings[0].attributes.tracking_url    || '';
+      }
+      const idx = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
+      if (idx >= 0) InvState.invoices[idx] = inv;
+      await invSave();
+      invRender();
+      if (window.toast) toast('Shipped! ' + (inv.trackingNumber ? 'Tracking: ' + inv.trackingNumber : 'No tracking number yet.'), 'success');
+    } else {
+      if (window.toast) toast('Not yet shipped in Packiyo.', '');
+    }
+  } catch(e) {
+    if (window.toast) toast('Sync error: ' + e.message, 'error');
+  }
+};
+
 window.invMarkPaid = function() {
   const inv = InvState.draft;
   if (!inv) return;
   if (!confirm('Mark ' + INV_PREFIX + inv.number + ' as paid?')) return;
-  inv.status = 'paid';
+  inv.status = 'pending_shipment';
   inv.paidAt = new Date().toISOString();
   const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
   if (i >= 0) InvState.invoices[i] = inv;
