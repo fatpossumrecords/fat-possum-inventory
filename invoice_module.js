@@ -1022,7 +1022,7 @@ async function invCreatePackiyoOrder(inv) {
         type: 'orders',
         attributes: {
           number:        inv.poNumber ? inv.poNumber : INV_PREFIX + inv.number,
-          external_id:   INV_PREFIX + inv.number,
+          external_id:   INV_PREFIX + inv.number + '-' + Date.now().toString().slice(-6),
           order_channel_name: 'FP-WH-INV',
           ordered_at:    inv.createdAt,
           shipping:      inv.shipping.cost || 0,
