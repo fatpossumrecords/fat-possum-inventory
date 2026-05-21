@@ -181,7 +181,7 @@ function invIsPast(inv) {
 }
 
 function invIsPending(inv) {
-  return inv.status === 'pending_payment' || inv.status === 'pending_shipment' || inv.status === 'paid';
+  return inv.status === 'pending_payment' || inv.status === 'pending_shipment' || inv.status === 'paid' || inv.status === 'sent';
 }
 
 function invRenderLog(body) {
@@ -208,6 +208,7 @@ function invRenderLog(body) {
   function statusBadge(s) {
     const map = {
       draft:            '#888',
+      sent:             '#e67e22',
       pending_payment:  '#e67e22',
       pending_shipment: 'var(--accent)',
       paid:             '#2980b9',
@@ -216,6 +217,7 @@ function invRenderLog(body) {
     };
     const labels = {
       draft:            'Draft',
+      sent:             'Pending Payment',
       pending_payment:  'Pending Payment',
       pending_shipment: 'Pending Shipment',
       paid:             'Paid',
@@ -228,7 +230,7 @@ function invRenderLog(body) {
   const rows = filtered.length
     ? filtered.map(function(inv) {
         const total = invCalcTotal(inv);
-        const canMarkPaid = inv.status === 'pending_payment';
+        const canMarkPaid = inv.status === 'pending_payment' || inv.status === 'sent';
         return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="invOpenDetail(\'' + inv.id + '\')">'
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--accent);font-size:13px;">' + invEsc(INV_PREFIX + inv.number) + '</td>'
           + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '') + '</td>'
@@ -834,8 +836,8 @@ function invRenderDetail(body) {
     + (isDraft ? '<button onclick="invEditDraft()" class="btn-secondary btn-sm">&#9998; Edit</button>' : '')
     + '<button onclick="invPrint()" class="btn-secondary btn-sm">&#128438; Print / PDF</button>'
     + (isDraft ? '<button onclick="invPushToPackiyo()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#9654; Send &amp; Push to Packiyo</button>' : '')
-    + (inv.status === 'pending_payment' ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
-    + ((inv.status === 'pending_shipment' || inv.status === 'paid') && inv.packiyoOrderId ? '<button onclick="invSyncShipment()" class="btn-secondary btn-sm">&#8635; Sync from Packiyo</button>' : '')
+    + ((inv.status === 'pending_payment' || inv.status === 'sent') ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
+    + ((inv.status === 'pending_shipment' || inv.status === 'paid' || inv.status === 'sent' || inv.status === 'shipped') && inv.packiyoOrderId ? '<button onclick="invSyncShipment()" class="btn-secondary btn-sm">&#8635; Sync from Packiyo</button>' : '')
     + (inv.trackingNumber ? '<span style="font-size:12px;font-family:monospace;background:var(--surface2);padding:6px 12px;border-radius:4px;">&#128230; ' + invEsc(inv.trackingNumber) + '</span>' : '')
     + '<button onclick="invDelete()" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;">&#128465; Delete</button>'
     + '</div></div>'
@@ -1083,6 +1085,7 @@ window.invMarkPaidById = function(id) {
   const inv = InvState.invoices.find(function(x) { return x.id === id; });
   if (!inv || !confirm('Mark ' + INV_PREFIX + inv.number + ' as paid?')) return;
   inv.status = 'pending_shipment';
+  if (!inv.paidAt) inv.paidAt = new Date().toISOString();
   inv.paidAt = new Date().toISOString();
   const idx = InvState.invoices.findIndex(function(x) { return x.id === id; });
   if (idx >= 0) InvState.invoices[idx] = inv;
