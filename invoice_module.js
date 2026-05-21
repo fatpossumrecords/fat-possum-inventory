@@ -106,6 +106,7 @@ async function invLoad() {
       InvState.nextNum      = data.nextNum      || INV_START_NUM;
       InvState.credits      = data.credits      || [];
       InvState.nextCrNum    = data.nextCrNum    || 1000;
+      InvState._deletedIds  = data.deletedIds   || [];
       invSaveLocal();
       const view = document.getElementById('view-invoices');
       if (view && !view.classList.contains('hidden')) invRender();
@@ -134,7 +135,8 @@ async function invSave() {
 
     // Merge: our invoices win for IDs we own, keep others' invoices we don't have
     const ourIds = new Set(InvState.invoices.map(function(i) { return i.id; }));
-    const theirInvoices = (base.invoices || []).filter(function(i) { return !ourIds.has(i.id); });
+    const deletedIds = new Set(InvState._deletedIds || []);
+    const theirInvoices = (base.invoices || []).filter(function(i) { return !ourIds.has(i.id) && !deletedIds.has(i.id); });
     const merged = theirInvoices.concat(InvState.invoices);
 
     // Take highest nextNum to avoid duplicate invoice numbers
@@ -163,6 +165,7 @@ async function invSave() {
       invoices: merged, customers: allCustomers,
       priceCatalog: priceCatalog, nextNum: nextNum,
       credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
+      deletedIds: Array.from(deletedIds),
       savedAt: new Date().toISOString(),
     };
     await fetch('https://api.github.com/gists/' + creds.gistId, {
@@ -179,6 +182,7 @@ function invSaveLocal() {
       invoices: InvState.invoices, customers: InvState.customers,
       priceCatalog: InvState.priceCatalog, nextNum: InvState.nextNum,
       credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
+      deletedIds: InvState._deletedIds || [],
     }));
   } catch(e) {}
 }
@@ -1106,24 +1110,46 @@ async function invCreatePackiyoOrder(inv) {
 window.invDelete = function() {
   const inv = InvState.draft;
   if (!inv) return;
-  if (!confirm('Delete ' + INV_PREFIX + inv.number + '? This cannot be undone.')) return;
+  const hasPackiyo = !!(inv.packiyoOrderId);
+  const msg = 'Delete ' + INV_PREFIX + inv.number + '? This cannot be undone.'
+    + (hasPackiyo ? '\n\nThis will also cancel order ' + (inv.packiyoOrderNum || inv.packiyoOrderId) + ' in Packiyo.' : '');
+  if (!confirm(msg)) return;
+  InvState._deletedIds = InvState._deletedIds || [];
+  InvState._deletedIds.push(inv.id);
   InvState.invoices = InvState.invoices.filter(function(x) { return x.id !== inv.id; });
   InvState.draft = null;
   InvState.view  = 'log';
   invSave();
   invRender();
   if (window.toast) toast('Invoice deleted.', '');
+  if (hasPackiyo) invCancelPackiyoOrder(inv.packiyoOrderId, inv.packiyoOrderNum);
 };
 
 window.invDeleteById = function(id) {
   const inv = InvState.invoices.find(function(x) { return x.id === id; });
   if (!inv) return;
-  if (!confirm('Delete ' + INV_PREFIX + inv.number + '? This cannot be undone.')) return;
+  const hasPackiyo = !!(inv.packiyoOrderId);
+  const msg = 'Delete ' + INV_PREFIX + inv.number + '? This cannot be undone.'
+    + (hasPackiyo ? '\n\nThis will also cancel order ' + (inv.packiyoOrderNum || inv.packiyoOrderId) + ' in Packiyo.' : '');
+  if (!confirm(msg)) return;
+  InvState._deletedIds = InvState._deletedIds || [];
+  InvState._deletedIds.push(id);
   InvState.invoices = InvState.invoices.filter(function(x) { return x.id !== id; });
   invSave();
   invRender();
   if (window.toast) toast('Invoice deleted.', '');
+  if (hasPackiyo) invCancelPackiyoOrder(inv.packiyoOrderId, inv.packiyoOrderNum);
 };
+
+async function invCancelPackiyoOrder(orderId, orderNum) {
+  try {
+    await invPackiyoFetch('/orders/' + orderId, { method: 'DELETE' });
+    if (window.toast) toast('Order ' + (orderNum || orderId) + ' cancelled in Packiyo.', 'success');
+  } catch(e) {
+    console.warn('Packiyo cancel failed:', e.message);
+    if (window.toast) toast('Invoice deleted but Packiyo cancel failed: ' + e.message, '');
+  }
+}
 
 async function invSyncById(id) {
   const inv = InvState.invoices.find(function(x) { return x.id === id; });
