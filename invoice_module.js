@@ -1170,7 +1170,17 @@ async function invCancelPackiyoOrder(orderId, orderNum) {
     if (window.toast) toast('Order ' + (orderNum || orderId) + ' cancelled in Packiyo.', 'success');
   } catch(e) {
     console.warn('Packiyo cancel failed:', e.message);
-    if (window.toast) toast('Invoice deleted but Packiyo cancel failed: ' + e.message, '');
+    // 500 usually means order is fulfilled/shipped and can't be cancelled
+    // 404 means already deleted — both are acceptable outcomes
+    const is404 = e.message.includes('404');
+    const is500 = e.message.includes('500');
+    if (is404) {
+      // Already gone — no need to warn
+    } else if (is500) {
+      if (window.toast) toast('Invoice deleted. Note: Packiyo order ' + (orderNum||orderId) + ' could not be auto-cancelled (may already be fulfilled — cancel manually in Packiyo if needed).', '');
+    } else {
+      if (window.toast) toast('Invoice deleted but Packiyo cancel failed: ' + e.message, '');
+    }
   }
 }
 
