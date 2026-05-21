@@ -1280,26 +1280,6 @@ window.wtToggleEmpty = function() {
   document.addEventListener('DOMContentLoaded', watchDashboard);
 
   // Override doomsdayKeepIt with a clean implementation
-  function reverseMovementGroups() {
-    const tbody = document.getElementById('movements-tbody');
-    if (!tbody) return;
-    // Collect rows into groups
-    const rows = [...tbody.querySelectorAll('tr')];
-    const groups = [];
-    let current = [];
-    rows.forEach(function(row) {
-      const firstCell = row.querySelector('td,th');
-      const colspanVal = firstCell ? parseInt(firstCell.getAttribute('colspan')||'1') : 1;
-      if (colspanVal >= 3 && current.length) { groups.push(current); current = []; }
-      current.push(row);
-    });
-    if (current.length) groups.push(current);
-    // Reverse and re-append
-    groups.reverse().forEach(function(grp) {
-      grp.forEach(function(row) { tbody.appendChild(row); });
-    });
-
-  }
 
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
@@ -2211,15 +2191,13 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       if (!tbody) return;
       clearInterval(check);
       enhanceMovements();
-      reverseMovementGroups();
       var _movLock = false;
       new MutationObserver(function() {
         if (_movLock) return;
         _movLock = true;
         setTimeout(function() {
           enhanceMovements();
-          reverseMovementGroups();
-          setTimeout(function() { _movLock = false; }, 200);
+              setTimeout(function() { _movLock = false; }, 200);
         }, 80);
       }).observe(tbody, { childList: true, subtree: true });
     }, 500);
