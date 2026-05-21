@@ -2023,3 +2023,149 @@ window.whPrintPickList = function() {
 };
 
 function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── MOVEMENTS ENHANCER ──────────────────────────────────────────────────────
+// Adds collapse toggles, header dates, and → Invoice button to movements table
+(function() {
+  const COLLAPSED_KEY = 'fp_mov_collapsed';
+
+  function getCollapsed() {
+    try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}'); } catch(e) { return {}; }
+  }
+  function setCollapsed(key, val) {
+    var c = getCollapsed(); c[key] = val;
+    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(c)); } catch(e) {}
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
+
+  function enhanceMovements() {
+    var tbody = document.getElementById('movements-tbody');
+    if (!tbody) return;
+    var collapsed = getCollapsed();
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    var currentKey = null;
+
+    rows.forEach(function(row) {
+      if (row.dataset.movEnhanced) return;
+      row.dataset.movEnhanced = '1';
+      var cells = Array.prototype.slice.call(row.querySelectorAll('td,th'));
+      if (!cells.length) return;
+      var firstCell = cells[0];
+      var colspan = parseInt(firstCell.getAttribute('colspan') || '1');
+      var isHeader = colspan >= 4;
+
+      if (isHeader) {
+        currentKey = firstCell.textContent.trim().slice(0, 80);
+
+        // Collapse toggle
+        if (!row.querySelector('.mov-collapse-btn')) {
+          var isCollapsed = !!collapsed[currentKey];
+          var btn = document.createElement('button');
+          btn.className = 'mov-collapse-btn';
+          btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:0 6px;color:var(--text-muted);';
+          btn.textContent = isCollapsed ? '\u25b8' : '\u25be';
+          var key = currentKey;
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var nowCollapsed = !getCollapsed()[key];
+            setCollapsed(key, nowCollapsed);
+            btn.textContent = nowCollapsed ? '\u25b8' : '\u25be';
+            var sib = row.nextElementSibling;
+            while (sib && !sib.querySelector('.mov-collapse-btn')) {
+              sib.style.display = nowCollapsed ? 'none' : '';
+              sib = sib.nextElementSibling;
+            }
+          });
+          firstCell.insertBefore(btn, firstCell.firstChild);
+        }
+
+        // Apply saved collapsed state
+        if (collapsed[currentKey]) {
+          var sib = row.nextElementSibling;
+          while (sib && !sib.querySelector('.mov-collapse-btn')) {
+            sib.style.display = 'none';
+            sib = sib.nextElementSibling;
+          }
+        }
+
+        // Date on header only
+        if (!row.querySelector('.mov-hdr-date') && typeof State !== 'undefined' && State.movements) {
+          var grpKey = currentKey;
+          var mov = null;
+          for (var i = 0; i < State.movements.length; i++) {
+            var m = State.movements[i];
+            if (grpKey.indexOf((m.from||'') + '\u2192' + (m.to||'')) > -1 ||
+                (m.shipmentId && grpKey.indexOf(m.shipmentId) > -1)) {
+              mov = m; break;
+            }
+          }
+          if (mov) {
+            var dateSpan = document.createElement('span');
+            dateSpan.className = 'mov-hdr-date';
+            dateSpan.style.cssText = 'font-size:10px;color:var(--text-muted);font-weight:400;margin-left:10px;';
+            dateSpan.textContent = fmtDate(mov.confirmedAt || mov.shippedAt || mov.timestamp);
+            firstCell.appendChild(dateSpan);
+          }
+        }
+
+        // → Invoice button
+        if (!row.querySelector('.mov-invoice-btn')) {
+          var lastCell = cells[cells.length - 1];
+          if (lastCell) {
+            var invBtn = document.createElement('button');
+            invBtn.className = 'mov-invoice-btn';
+            invBtn.style.cssText = 'margin-left:8px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;';
+            invBtn.textContent = '\u2192 Invoice';
+            var k = currentKey;
+            invBtn.addEventListener('click', function(e) { e.stopPropagation(); movCreateInvoice(k); });
+            lastCell.appendChild(invBtn);
+          }
+        }
+      }
+    });
+  }
+
+  function movCreateInvoice(groupKey) {
+    if (typeof window.switchToInvoices !== 'function') { alert('Invoice module not loaded.'); return; }
+    var movs = [];
+    if (typeof State !== 'undefined' && State.movements) {
+      movs = State.movements.filter(function(m) {
+        return groupKey.indexOf((m.from||'') + '\u2192' + (m.to||'')) > -1 ||
+               (m.shipmentId && groupKey.indexOf(m.shipmentId) > -1);
+      });
+    }
+    if (!movs.length) { alert('Could not match movements for this group.'); return; }
+    switchToInvoices('new');
+    setTimeout(function() {
+      if (!window.InvState || !InvState.draft) return;
+      var inv = InvState.draft;
+      inv.poNumber = movs[0].poNumber || '';
+      inv.notes = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
+      movs.forEach(function(m) {
+        var price = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog] || InvState.priceCatalog[m.upc])) || 0);
+        inv.items.push({ sku:m.catalog||'', artist:m.artist||'', title:m.title||'', catalog:m.catalog||'', upc:m.upc||'', format:m.format||'', qty:m.qty||1, price:price });
+      });
+      if (typeof invRender === 'function') invRender();
+      if (window.toast) toast(movs.length + ' items added to invoice draft.', 'success');
+    }, 300);
+  }
+
+  var _movLock = false;
+  document.addEventListener('DOMContentLoaded', function() {
+    var check = setInterval(function() {
+      var tbody = document.getElementById('movements-tbody');
+      if (!tbody) return;
+      clearInterval(check);
+      enhanceMovements();
+      // childList only — no subtree — prevents infinite loop from row manipulation
+      new MutationObserver(function() {
+        if (_movLock) return;
+        _movLock = true;
+        setTimeout(function() { enhanceMovements(); _movLock = false; }, 100);
+      }).observe(tbody, { childList: true });
+    }, 500);
+  });
+})();
