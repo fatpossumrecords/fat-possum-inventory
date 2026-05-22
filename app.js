@@ -1769,7 +1769,7 @@ function renderInventory() {
       }
       if (col.id === 'total')   return `<td class="num mob-total${pinnedClass}" style="font-weight:600;${style}">${numCell(v)}</td>`;
       if (col.id === 'catalog') return `<td class="mob-catalog${pinnedClass}" style="${style}"><code>${esc(v)}</code></td>`;
-      if (col.id === 'upc')     return `<td class="${pinnedClass}" style="${style}"><code style="font-size:10px">${esc(v)}</code></td>`;
+      if (col.id === 'upc')     return <td class="${pinnedClass}" style="${style}"><code style="font-size:10px">${esc(v.padStart(12,'0'))}</code></td>;
       if (col.id === 'box_lot') {
         const bl = State.boxLots[p.upc] || '';
         return `<td class="${pinnedClass}" style="${style}">
