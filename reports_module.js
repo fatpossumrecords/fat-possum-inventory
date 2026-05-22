@@ -127,25 +127,18 @@ function rptRenderConfig(body) {
     + rptQuickBtn('This Year',      rptThisYear)
     + '</div></div></div>'
 
-    // App invoices opt-in
+    // App invoices summary
     + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px;">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
-    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;">Include App Invoices</div>'
-    + '<div style="display:flex;gap:8px;">'
-    + '<button onclick="rptSelectAllInv(true)"  class="btn-secondary btn-sm" style="font-size:10px;">Select All</button>'
-    + '<button onclick="rptSelectAllInv(false)" class="btn-secondary btn-sm" style="font-size:10px;">Deselect All</button>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;">App Invoices</div>'
+    + '<a href="#" onclick="switchToInvoices();return false;" style="font-size:11px;color:var(--accent);">Manage in Invoices &#8594;</a>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Invoices marked Include in Sales Reports (green checkbox) will be automatically included. Set default customers in Settings.</div>'
+    + '<div style="background:var(--surface2);border-radius:6px;padding:12px 16px;display:flex;gap:24px;">'
+    + '<div><span style="font-size:22px;font-weight:700;font-family:monospace;color:var(--green);">' + rptInvoices.filter(function(i){return i.includeInReports;}).length + '</span> <span style="font-size:11px;color:var(--text-muted);">included</span></div>'
+    + '<div><span style="font-size:22px;font-weight:700;font-family:monospace;color:var(--text-muted);">' + rptInvoices.filter(function(i){return !i.includeInReports;}).length + '</span> <span style="font-size:11px;color:var(--text-muted);">excluded</span></div>'
+    + '<div><span style="font-size:22px;font-weight:700;font-family:monospace;">' + rptInvoices.length + '</span> <span style="font-size:11px;color:var(--text-muted);">total</span></div>'
     + '</div></div>'
-    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Check invoices to include in this report. Use Settings → Reports to configure default opt-in customers.</div>'
-    + '<div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;">'
-    + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
-    + '<thead><tr style="background:var(--surface2);">'
-    + '<th style="padding:8px 12px;width:40px;"></th>'
-    + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Invoice #</th>'
-    + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Customer</th>'
-    + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Date</th>'
-    + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Total</th>'
-    + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Items</th>'
-    + '</tr></thead><tbody>' + invRows + '</tbody></table></div></div>'
 
     // Run button
     + '<div style="display:flex;justify-content:flex-end;">'
@@ -328,7 +321,7 @@ window.rptRun = async function() {
     setProgress(90, 'Adding app invoices...');
     const invoices = (typeof InvState !== 'undefined' ? InvState.invoices : []) || [];
     invoices.forEach(function(inv) {
-      if (!RptState.invSelected[inv.id]) return;
+      if (!inv.includeInReports) return;
       const d = new Date(inv.sentAt || inv.createdAt);
       const year     = d.getFullYear();
       const month    = d.toLocaleString('en-US', { month: 'long' });
