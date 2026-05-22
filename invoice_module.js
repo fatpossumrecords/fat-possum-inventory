@@ -1125,6 +1125,31 @@ async function invCreatePackiyoOrder(inv) {
     invRender();
 
   } catch(e) {
+    // If number collision, retry without PO# as the order number
+    if (e.message.includes('422') && e.message.includes('number') && inv.poNumber) {
+      console.warn('PO# collision, retrying with FPINV number...');
+      try {
+        orderPayload.data.attributes.number = INV_PREFIX + inv.number;
+        orderPayload.data.attributes.packing_note = 'PO# ' + inv.poNumber;
+        const retryResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
+        const orderId  = retryResult.data && retryResult.data.id;
+        const orderNum = retryResult.data && retryResult.data.attributes && retryResult.data.attributes.number;
+        if (!orderId) throw new Error('No order ID returned from Packiyo on retry');
+        inv.status          = inv.paymentHold ? 'pending_payment' : 'pending_shipment';
+        inv.packiyoOrderId  = orderId;
+        inv.packiyoOrderNum = orderNum || null;
+        inv.sentAt          = new Date().toISOString();
+        InvState.nextNum++;
+        const idx = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
+        if (idx >= 0) InvState.invoices[idx] = inv; else InvState.invoices.push(inv);
+        await invSave();
+        if (window.toast) toast('Order #' + (orderNum||orderId) + ' created in Packiyo (used FPINV# as PO# already existed).', 'success');
+        invRender();
+        return;
+      } catch(e2) {
+        console.error('Retry also failed:', e2);
+      }
+    }
     console.error('Packiyo order creation failed:', e);
     if (window.toast) toast('Packiyo error: ' + e.message, 'error');
   }
