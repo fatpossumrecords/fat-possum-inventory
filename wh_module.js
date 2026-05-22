@@ -2274,11 +2274,12 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     switchToInvoices('new');
 
     function tryFill(attempts) {
-      if (!window.InvState || !InvState.draft) {
-        if (attempts > 20) { if (window.toast) toast('Could not load invoice form.', 'error'); return; }
-        setTimeout(function() { tryFill(attempts + 1); }, 100);
-        return;
-      }
+      try {
+        if (!window.InvState || !InvState.draft || InvState.view !== 'edit') {
+          if (attempts > 30) { if (window.toast) toast('Could not load invoice form — please try again.', 'error'); return; }
+          setTimeout(function() { tryFill(attempts + 1); }, 150);
+          return;
+        }
       var inv = InvState.draft;
       inv.poNumber = movs[0].poNumber || '';
       inv.notes    = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
@@ -2314,7 +2315,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       if (window.toast) toast(movs.length + ' items pre-loaded into invoice draft.', 'success');
     }
 
-    setTimeout(function() { tryFill(0); }, 200);
+    setTimeout(function() { tryFill(0); }, 500);
   };
 
   // Inject summary panel above the movements table and hide raw table
