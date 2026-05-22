@@ -360,6 +360,7 @@ window.invNewInvoice = function() {
     shipping: { method:'', methodName:'', cost:0 },
     poNumber: '',
     paymentHold: false,
+    includeInReports: false, // set true by default if customer is in reports opt-in list
     notes: '',
     terms: 'Net 30',
     packiyoOrderId: null,
@@ -479,7 +480,7 @@ function invRenderEdit(body) {
     + '<input type="checkbox" id="inv-payment-hold" ' + (inv.paymentHold?'checked':'') + ' onchange="invTogglePaymentHold(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'
     + '<span><strong style="color:' + (inv.paymentHold?'var(--red)':'var(--text)') + ';">Payment Hold</strong> <span style="font-size:11px;color:var(--text-muted);">Order enters Packiyo on hold — not pickable until payment received</span></span>'
     + '</label></div>'
-    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Notes</label>'
+    + '<div style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;background:' + (inv.includeInReports?'rgba(30,126,74,0.08)':'var(--surface2)') + ';border:1px solid ' + (inv.includeInReports?'var(--green)':'var(--border2)') + ';border-radius:4px;">'    + '<input type="checkbox" id="inv-include-reports" ' + (inv.includeInReports?'checked':'') + ' onchange="invToggleIncludeReports(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'    + '<span><strong style="color:' + (inv.includeInReports?'var(--green)':'var(--text)') + ';">Include in Sales Reports</strong> <span style="font-size:11px;color:var(--text-muted);">This invoice will be included in monthly sales report exports</span></span>'    + '</label></div>'    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Notes</label>'
     + '<textarea id="inv-notes" rows="3" placeholder="Notes or message..." '
     + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);resize:vertical;">'
     + invEsc(inv.notes) + '</textarea></div></div>'
@@ -675,6 +676,12 @@ window.invSelectCustomer = function(idx) {
   if (!c || !InvState.draft) return;
   InvState.draft.billTo = Object.assign({}, c);
   if (InvState.draft.shipSame) InvState.draft.shipTo = Object.assign({}, c);
+  // Auto-set includeInReports based on default customer list
+  try {
+    const defaultCustomers = JSON.parse(localStorage.getItem('fp_rpt_optin_customers') || '[]');
+    const company = (c.company || c.name || '').toLowerCase();
+    InvState.draft.includeInReports = defaultCustomers.some(function(d) { return d.toLowerCase() === company; });
+  } catch(e) {}
   document.getElementById('inv-customer-results').style.display = 'none';
   invRenderEdit(document.getElementById('inv-body'));
 };
@@ -714,6 +721,18 @@ window.invPrint = function() {
     win.print();
   };
 };
+window.invToggleIncludeReports = function(checked) {
+  if (!InvState.draft) return;
+  InvState.draft.includeInReports = checked;
+  const label = document.querySelector('label:has(#inv-include-reports)');
+  if (label) {
+    label.style.background = checked ? 'rgba(30,126,74,0.08)' : 'var(--surface2)';
+    label.style.border = '1px solid ' + (checked ? 'var(--green)' : 'var(--border2)');
+    const strong = label.querySelector('strong');
+    if (strong) strong.style.color = checked ? 'var(--green)' : 'var(--text)';
+  }
+};
+
 window.invTogglePaymentHold = function(checked) {
   InvState.draft.paymentHold = checked;
   // Update checkbox label color in place
@@ -825,6 +844,7 @@ function invCollectForm() {
   inv.paymentHold = !!(document.getElementById('inv-payment-hold') && document.getElementById('inv-payment-hold').checked);
   inv.notes = g('inv-notes');
   inv.terms = g('inv-terms') || 'Net 30';
+  inv.includeInReports = !!(document.getElementById('inv-include-reports') && document.getElementById('inv-include-reports').checked);
 
   // Auto-save to address book
   const company = inv.billTo.company || inv.billTo.name;
