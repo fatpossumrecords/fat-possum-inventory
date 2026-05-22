@@ -226,20 +226,26 @@ window.rptRun = async function() {
     let page = 1, lastPage = null;
 
     while (true) {
-      const url = '/orders?include=order_items,shipping_contact_information'
-        + '&filter[order_channel_id]=' + RPT_CHANNEL_ID
+      const url = '/orders?include=order_items,shipping_contact_information,order_channel'
+        + '&filter[fulfilled]=true'
         + '&filter[fulfilled_at_min]=' + RptState.dateFrom
         + '&filter[fulfilled_at_max]=' + RptState.dateTo
         + '&page[number]=' + page + '&page[size]=100';
 
       const data = await rptPackiyoFetch(url);
-      allOrders.push(...(data.data || []));
 
-      // Collect included items and contacts
+      // Collect included items, contacts and channels
       (data.included || []).forEach(function(inc) {
         if (inc.type === 'order-items') allItems.push(inc);
         if (inc.type === 'contact-informations') allContacts[inc.id] = inc.attributes;
       });
+
+      // Only keep B2B channel orders (channel ID 7), filter client-side
+      const b2bOrders = (data.data || []).filter(function(o) {
+        const chId = o.relationships && o.relationships.order_channel && o.relationships.order_channel.data && o.relationships.order_channel.data.id;
+        return chId === RPT_CHANNEL_ID;
+      });
+      allOrders.push(...b2bOrders);
 
       const meta = data.meta?.page || data.meta || {};
       lastPage = parseInt(meta.lastPage || meta.last_page || meta.total_pages || 1) || 1;
