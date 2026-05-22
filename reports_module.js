@@ -282,8 +282,9 @@ window.rptRun = async function() {
     allOrders.forEach(function(order) {
       const fulfilledAt = order.attributes.fulfilled_at || order.attributes.ordered_at || '';
       const d = new Date(fulfilledAt);
-      const year  = d.getFullYear();
-      const month = d.toLocaleString('en-US', { month: 'long' });
+      const year     = d.getFullYear();
+      const month    = d.toLocaleString('en-US', { month: 'long' });
+      const monthNum = d.getMonth() + 1;
       const contact = order._contact || {};
       const customerDisplay = contact.company_name || contact.name || '';
       const countryCode = contact.country || '';
@@ -310,6 +311,7 @@ window.rptRun = async function() {
           countryCode:     countryCode,
           year:            year,
           month:           month,
+          monthNum:        monthNum,
           format:          format,
           artist:          artist,
           title:           title,
@@ -344,6 +346,7 @@ window.rptRun = async function() {
           countryCode:     inv.billTo.country || 'US',
           year:            year,
           month:           month,
+          monthNum:        monthNum,
           format:          item.format || '',
           artist:          item.artist || '',
           title:           item.title  || '',
