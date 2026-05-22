@@ -2268,20 +2268,53 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     var movs = (typeof State !== 'undefined' && State.movements)
       ? State.movements.filter(function(m) { return (m.shipmentId || ((m.from||'')+'\u2192'+(m.to||'')+'-legacy')) === sid; })
       : [];
-    if (!movs.length) { alert('Could not match movements.'); return; }
+    if (!movs.length) { alert('Could not match movements for this shipment.'); return; }
+
+    // Switch to invoices and wait for new draft to be ready
     switchToInvoices('new');
-    setTimeout(function() {
-      if (!window.InvState || !InvState.draft) return;
+
+    function tryFill(attempts) {
+      if (!window.InvState || !InvState.draft) {
+        if (attempts > 20) { if (window.toast) toast('Could not load invoice form.', 'error'); return; }
+        setTimeout(function() { tryFill(attempts + 1); }, 100);
+        return;
+      }
       var inv = InvState.draft;
       inv.poNumber = movs[0].poNumber || '';
-      inv.notes = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
+      inv.notes    = 'Stock movement: ' + (movs[0].from||'') + ' \u2192 ' + (movs[0].to||'');
+
       movs.forEach(function(m) {
-        var price = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog]||InvState.priceCatalog[m.upc]))||0);
-        inv.items.push({ sku:m.catalog||'', artist:m.artist||'', title:m.title||'', catalog:m.catalog||'', upc:m.upc||'', format:m.format||'', qty:m.qty||1, price:price });
+        // Look up full product from catalog for clean title/format
+        var cat = null;
+        if (typeof State !== 'undefined' && State.merged) {
+          cat = State.merged.find(function(p) {
+            return p.upc === m.upc || p.catalog === m.catalog;
+          });
+        }
+        var price  = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog] || InvState.priceCatalog[m.upc])) || 0);
+        var artist = cat ? (cat.artist  || m.artist  || '') : (m.artist  || '');
+        var title  = cat ? (cat.title   || m.title   || '') : (m.title   || '');
+        var format = cat ? (cat.format  || m.format  || '') : (m.format  || '');
+        var upc    = cat ? (cat.upc     || m.upc     || '') : (m.upc     || '');
+        var onHand = cat ? cat.fp_available : undefined;
+        inv.items.push({
+          sku:     m.catalog || '',
+          artist:  artist,
+          title:   title,
+          catalog: m.catalog || '',
+          upc:     upc,
+          format:  format,
+          qty:     m.qty || 1,
+          price:   price,
+          onHand:  onHand,
+        });
       });
+
       if (typeof invRender === 'function') invRender();
-      if (window.toast) toast(movs.length + ' items added to invoice draft.', 'success');
-    }, 300);
+      if (window.toast) toast(movs.length + ' items pre-loaded into invoice draft.', 'success');
+    }
+
+    setTimeout(function() { tryFill(0); }, 200);
   };
 
   // Inject summary panel above the movements table and hide raw table
