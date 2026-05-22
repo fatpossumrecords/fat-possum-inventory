@@ -80,18 +80,47 @@ async function getDateRange() {
 
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
+  let from, to, year, month;
 
-  if (period === 'last_quarter') {
-    const q = Math.floor((now.getMonth()) / 3);
-    const qStart = q === 0 ? new Date(now.getFullYear() - 1, 9, 1) : new Date(now.getFullYear(), (q - 1) * 3, 1);
-    const qEnd   = new Date(qStart.getFullYear(), qStart.getMonth() + 3, 0);
-    return { from: qStart.toISOString().slice(0,10), to: qEnd.toISOString().slice(0,10), year: qStart.getFullYear(), month: qStart.getMonth() + 1 };
+  if (period === 'week_to_date') {
+    const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay());
+    from = startOfWeek.toISOString().slice(0,10); to = now.toISOString().slice(0,10);
+  } else if (period === 'last_week') {
+    const startOfLastWeek = new Date(now); startOfLastWeek.setDate(now.getDate() - now.getDay() - 7);
+    const endOfLastWeek   = new Date(startOfLastWeek); endOfLastWeek.setDate(startOfLastWeek.getDate() + 6);
+    from = startOfLastWeek.toISOString().slice(0,10); to = endOfLastWeek.toISOString().slice(0,10);
+  } else if (period === 'last_two_weeks') {
+    const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(now.getDate() - 14);
+    from = twoWeeksAgo.toISOString().slice(0,10); to = now.toISOString().slice(0,10);
+  } else if (period === 'this_month') {
+    from = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`; to = now.toISOString().slice(0,10);
+  } else if (period === 'two_months_ago') {
+    const tma = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    year = tma.getFullYear(); month = tma.getMonth() + 1;
+    from = `${year}-${pad(month)}-01`; to = `${year}-${pad(month)}-${new Date(year, month, 0).getDate()}`;
+  } else if (period === 'this_quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    from = `${now.getFullYear()}-${pad(q*3+1)}-01`; to = now.toISOString().slice(0,10);
+  } else if (period === 'last_quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    const qStart = q === 0 ? new Date(now.getFullYear()-1, 9, 1) : new Date(now.getFullYear(), (q-1)*3, 1);
+    const qEnd   = new Date(qStart.getFullYear(), qStart.getMonth()+3, 0);
+    from = qStart.toISOString().slice(0,10); to = qEnd.toISOString().slice(0,10);
+  } else if (period === 'year_to_date') {
+    from = `${now.getFullYear()}-01-01`; to = now.toISOString().slice(0,10);
+  } else if (period === 'last_year') {
+    const ly = now.getFullYear() - 1;
+    from = `${ly}-01-01`; to = `${ly}-12-31`;
+  } else {
+    // Default: last month
+    const last = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    year = last.getFullYear(); month = last.getMonth()+1;
+    from = `${year}-${pad(month)}-01`; to = `${year}-${pad(month)}-${new Date(year, month, 0).getDate()}`;
   }
 
-  // Default: last month
-  const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const year = last.getFullYear(), month = last.getMonth() + 1;
-  return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-${new Date(year, month, 0).getDate()}`, year, month };
+  if (!year) year = new Date(from).getFullYear();
+  if (!month) month = new Date(from).getMonth() + 1;
+  return { from, to, year, month };
 }
 
 // ── PACKIYO FETCH ───────────────────────────────────────────────
