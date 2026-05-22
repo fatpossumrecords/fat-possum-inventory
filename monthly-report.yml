@@ -1,16 +1,21 @@
-name: Monthly Sales Report
+name: Sales Report (Daily Check)
 
 on:
-  # Run at 8:00 AM Central on the 1st of every month
+  # Run daily at 14:00 UTC (8:00 AM CDT / 9:00 AM CST)
+  # Script checks schedule config from Gist and only emails on the right day
   schedule:
-    - cron: '0 14 1 * *'  # 14:00 UTC = 8:00 AM CDT / 9:00 AM CST
-  # Also allow manual trigger from GitHub Actions UI
+    - cron: '0 14 * * *'
+  # Manual trigger with optional month override
   workflow_dispatch:
     inputs:
       month_override:
-        description: 'Override month (YYYY-MM, e.g. 2026-04 for April 2026). Leave blank for last month.'
+        description: 'Override month (YYYY-MM, e.g. 2026-04). Leave blank for configured period.'
         required: false
         default: ''
+      force_send:
+        description: 'Force send even if today is not the scheduled day (true/false)'
+        required: false
+        default: 'false'
 
 jobs:
   generate-report:
@@ -35,4 +40,5 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           REPORT_TO:      ${{ secrets.REPORT_TO }}
           MONTH_OVERRIDE: ${{ github.event.inputs.month_override }}
+          FORCE_SEND:     ${{ github.event.inputs.force_send }}
         run: node scripts/generate-report.js
