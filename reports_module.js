@@ -328,8 +328,9 @@ window.rptRun = async function() {
     invoices.forEach(function(inv) {
       if (!RptState.invSelected[inv.id]) return;
       const d = new Date(inv.sentAt || inv.createdAt);
-      const year  = d.getFullYear();
-      const month = d.toLocaleString('en-US', { month: 'long' });
+      const year     = d.getFullYear();
+      const month    = d.toLocaleString('en-US', { month: 'long' });
+      const monthNum = d.getMonth() + 1;
       const customerDisplay = inv.billTo.company || inv.billTo.name || '';
 
       (inv.items || []).forEach(function(item) {
@@ -378,11 +379,7 @@ function rptRenderPreview(body) {
   const totalRevenue = rows.reduce(function(s,r) { return s + r.netRevenue; }, 0);
 
   const tableRows = rows.slice(0, 200).map(function(r) {
-    const srcBadge = r.source === 'invoice'
-      ? '<span style="background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;">INV</span>'
-      : '<span style="background:var(--surface2);color:var(--text-muted);padding:1px 5px;border-radius:3px;font-size:9px;">B2B</span>';
     return '<tr style="border-bottom:1px solid var(--border);">'
-      + '<td style="padding:6px 10px;">' + srcBadge + '</td>'
       + '<td style="padding:6px 10px;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + rptEsc(r.customerDisplay) + '</td>'
       + '<td style="padding:6px 10px;font-size:11px;">' + rptEsc(r.countryCode) + '</td>'
       + '<td style="padding:6px 10px;font-size:11px;">' + r.year + '</td>'
@@ -427,7 +424,6 @@ function rptRenderPreview(body) {
     + '<div style="background:var(--surface);border-radius:8px;border:1px solid var(--border);overflow:auto;">'
     + '<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:900px;">'
     + '<thead><tr style="background:var(--surface2);">'
-    + '<th style="' + th + '">Src</th>'
     + '<th style="' + th + '">Customer</th>'
     + '<th style="' + th + '">Country</th>'
     + '<th style="' + th + '">Year</th>'
@@ -455,8 +451,8 @@ window.rptExportCSV = function() {
   if (!rows.length) { if (window.toast) toast('No data to export.', 'error'); return; }
 
   const headers = [
-    'Customer: Display name',
-    'Customer: Default address: Company',
+    'Customer Name',
+    'Customer Company',
     'Country Code',
     'Sale Year',
     'Sale Month',
@@ -470,16 +466,19 @@ window.rptExportCSV = function() {
   ];
 
   const csvRows = rows.map(function(r) {
+    const saleYear  = String(r.year).slice(-2); // 2-digit year
+    const saleMonth = String(r.monthNum).padStart(2,'0'); // 2-digit month number
+    const upcStr    = r.upc ? '="' + r.upc + '"' : ''; // force as string to preserve leading zeros
     return [
       r.customerDisplay,
       r.company,
       r.countryCode,
-      r.year,
-      r.month,
+      saleYear,
+      saleMonth,
       r.format,
       r.artist,
       r.title,
-      r.upc,
+      upcStr,
       r.catalog,
       r.netUnits,
       r.netRevenue.toFixed(2),
