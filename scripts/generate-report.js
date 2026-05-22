@@ -79,7 +79,7 @@ async function ensureSheet(token, sheetName) {
 
 async function appendRows(token, sheetName, rows) {
   await sheetsRequest(token, 'POST',
-    `/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { values: rows }
   );
 }
@@ -89,7 +89,7 @@ async function clearAndWriteSheet(token, sheetName, rows) {
   await sheetsRequest(token, 'POST', `/values/${encodeURIComponent(sheetName)}!A:Z:clear`, {});
   // Write fresh
   await sheetsRequest(token, 'PUT',
-    `/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`,
+    `/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=RAW`,
     { values: rows }
   );
 }
@@ -256,30 +256,64 @@ async function main() {
       order._items   = itemsArr.filter(i => refs.includes(i.id));
     });
 
-    // 2. Catalog
-    console.log('\n[2/5] Fetching catalog...');
-    let catalog = [];
+    // 2. Build catalog from orchardData + Packiyo products
+    console.log('\n[2/5] Building catalog...');
+    const catBySku = {}, catByUpc = {};
+
+    // Load orchardData (LUM, Secretly, etc — has artist/format)
     try {
       const d = await gistFetch(CAT_GIST_FILE);
-      // fp_data.json uses orchardData with abbreviated field names:
-      // u=upc, pc=catalog, rn=title, an=artist, cf=format
-      const raw = d?.orchardData || d?.merged || d?.products || [];
-      catalog = raw.map(function(p) {
-        return {
-          upc:     p.u    || p.upc     || '',
-          catalog: p.pc   || p.catalog || '',
-          title:   p.rn   || p.title   || '',
-          artist:  p.an   || p.artist  || '',
-          format:  p.cf   || p.format  || '',
-        };
+      const raw = d?.orchardData || [];
+      raw.forEach(p => {
+        const item = { upc: p.u||'', catalog: p.pc||'', title: p.rn||'', artist: p.an||'', format: p.cf||'' };
+        if (item.catalog) catBySku[item.catalog.toLowerCase()] = item;
+        if (item.upc)     catByUpc[item.upc] = item;
       });
-    } catch(e) { console.warn('Catalog load error:', e.message); }
-    const catBySku = {}, catByUpc = {};
-    catalog.forEach(p => {
-      if (p.catalog) catBySku[p.catalog.toLowerCase()] = p;
-      if (p.upc)     catByUpc[p.upc] = p;
+      console.log(`  orchardData: ${raw.length}`);
+    } catch(e) { console.warn('  orchardData error:', e.message); }
+
+    // Fetch Packiyo products (FP catalog numbers with UPC + name)
+    try {
+      const { allData: pkProducts } = await packiyoFetchAll('/products');
+      pkProducts.forEach(p => {
+        const a = p.attributes || {};
+        const sku = (a.sku||'').toLowerCase();
+        const upc = a.barcode || '';
+        const name = a.name || '';
+        // Only add if not already in orchardData (orchardData has better artist/format data)
+        if (sku && !catBySku[sku]) catBySku[sku] = { upc, catalog: a.sku||'', title: name, artist: '', format: '' };
+        if (upc && !catByUpc[upc]) catByUpc[upc]  = { upc, catalog: a.sku||'', title: name, artist: '', format: '' };
+        // But always update UPC on orchardData entries if missing
+        if (sku && catBySku[sku] && !catBySku[sku].upc && upc) catBySku[sku].upc = upc;
+      });
+      console.log(`  Packiyo products: ${pkProducts.length}`);
+    } catch(e) { console.warn('  Packiyo products error:', e.message); }
+
+    // Load artist data from fp_config.json (shopifyVendors + manualArtists keyed by UPC)
+    let shopifyVendors = {}, manualArtists = {};
+    try {
+      const cfg = await gistFetch('fp_config.json');
+      shopifyVendors = cfg?.shopifyVendors || {};
+      manualArtists  = cfg?.manualArtists  || {};
+      console.log(`  shopifyVendors: ${Object.keys(shopifyVendors).length}, manualArtists: ${Object.keys(manualArtists).length}`);
+    } catch(e) { console.warn('  config load error:', e.message); }
+
+    // Apply artist enrichment — same logic as app.js applyShopifyVendors()
+    Object.values(catBySku).forEach(p => {
+      if (p.artist) return;
+      if (manualArtists[p.upc])  { p.artist = manualArtists[p.upc];  return; }
+      if (shopifyVendors[p.upc]) { p.artist = shopifyVendors[p.upc]; return; }
+      const bySku = shopifyVendors['sku:' + p.catalog];
+      if (bySku) p.artist = bySku;
     });
-    console.log(`  ${catalog.length} products`);
+    // Also apply to UPC map
+    Object.values(catByUpc).forEach(p => {
+      if (p.artist) return;
+      if (manualArtists[p.upc])  { p.artist = manualArtists[p.upc];  return; }
+      if (shopifyVendors[p.upc]) { p.artist = shopifyVendors[p.upc]; return; }
+    });
+
+    console.log(`  Lookup: ${Object.keys(catBySku).length} by SKU, ${Object.keys(catByUpc).length} by UPC`);
 
     // 3. Invoices
     console.log('\n[3/5] Fetching invoices...');
@@ -307,9 +341,9 @@ async function main() {
         const cat = catBySku[sku.toLowerCase()]||catBySku[sku]||null;
         dataRows.push([
           customer, contact.company_name||'', contact.country||'',
-          "'" + rowYear, "'" + rowMonth,
+          rowYear, rowMonth,
           cat?.format||'', cat?.artist||'', cat?.title||a.name||sku,
-          cat?.upc ? "'"+cat.upc : '', cat?.catalog||sku,
+          cat?.upc||'', cat?.catalog||sku,
           netUnits, (netUnits*parseFloat(a.price||0)).toFixed(2)
         ]);
       });
