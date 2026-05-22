@@ -1,0 +1,38 @@
+name: Monthly Sales Report
+
+on:
+  # Run at 8:00 AM Central on the 1st of every month
+  schedule:
+    - cron: '0 14 1 * *'  # 14:00 UTC = 8:00 AM CDT / 9:00 AM CST
+  # Also allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      month_override:
+        description: 'Override month (YYYY-MM, e.g. 2026-04 for April 2026). Leave blank for last month.'
+        required: false
+        default: ''
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install node-fetch@2
+
+      - name: Generate and email report
+        env:
+          PACKIYO_TOKEN:  ${{ secrets.PACKIYO_TOKEN }}
+          GIST_ID:        ${{ secrets.GIST_ID }}
+          GIST_TOKEN:     ${{ secrets.GIST_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REPORT_TO:      ${{ secrets.REPORT_TO }}
+          MONTH_OVERRIDE: ${{ github.event.inputs.month_override }}
+        run: node scripts/generate-report.js
