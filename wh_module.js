@@ -2295,7 +2295,6 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
             return p.upc === m.upc || p.catalog === m.catalog;
           });
         }
-        var price  = parseFloat((typeof InvState !== 'undefined' && (InvState.priceCatalog[m.catalog] || InvState.priceCatalog[m.upc])) || 0);
         var artist = cat ? (cat.artist  || m.artist  || '') : (m.artist  || '');
         var title  = cat ? (cat.title   || m.title   || '') : (m.title   || '');
         var format = cat ? (cat.format  || m.format  || '') : (m.format  || '');
@@ -2303,8 +2302,15 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
         var onHand = cat ? cat.fp_available : undefined;
         // Use Packiyo SKU from catalog (fp catalog#) not movement catalog (orchard #)
         var fpSku  = cat ? (cat.packiyo_sku || cat.catalog || m.catalog || '') : (m.catalog || '');
-        // Also try price lookup by FP sku
-        if (!price && cat) price = parseFloat(InvState.priceCatalog[cat.catalog] || InvState.priceCatalog[cat.packiyo_sku] || 0);
+        // Price lookup — try FP sku first, then orchard catalog, then UPC
+        var price = parseFloat(
+          (typeof InvState !== 'undefined' && (
+            InvState.priceCatalog[fpSku] ||
+            InvState.priceCatalog[cat?.catalog] ||
+            InvState.priceCatalog[m.catalog] ||
+            InvState.priceCatalog[m.upc]
+          )) || 0
+        );
         inv.items.push({
           sku:     fpSku,
           artist:  artist,
