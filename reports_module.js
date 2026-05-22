@@ -62,10 +62,30 @@ function rptDayOptions() {
   const saved = rptGetSchedule().day || 1;
   let html = '';
   for (let d = 1; d <= 28; d++) {
-    const suffix = d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
+    const s = d % 100;
+    const suffix = (s >= 11 && s <= 13) ? 'th' : (d % 10 === 1) ? 'st' : (d % 10 === 2) ? 'nd' : (d % 10 === 3) ? 'rd' : 'th';
     html += '<option value="' + d + '"' + (saved === d ? ' selected' : '') + '>' + d + suffix + '</option>';
   }
   return html;
+}
+
+function rptPeriodOptions() {
+  const saved = rptGetSchedule().period || 'last_month';
+  const opts = [
+    ['week_to_date',   'Week To Date'],
+    ['last_week',      'Last Week'],
+    ['last_two_weeks', 'Last Two Weeks'],
+    ['this_month',     'This Month'],
+    ['last_month',     'Last Month'],
+    ['two_months_ago', 'Two Months Ago'],
+    ['this_quarter',   'This Quarter'],
+    ['last_quarter',   'Last Quarter'],
+    ['year_to_date',   'Year To Date'],
+    ['last_year',      'Last Year'],
+  ];
+  return opts.map(function(o) {
+    return '<option value="' + o[0] + '"' + (saved === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+  }).join('');
 }
 
 function rptHourOptions() {
@@ -213,8 +233,7 @@ function rptRenderConfig(body) {
     + '</select></div>'
     + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Report Period</label>'
     + '<select id="rpt-schedule-period" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
-    + '<option value="last_month">Last Month</option>'
-    + '<option value="last_quarter">Last Quarter</option>'
+    + rptPeriodOptions()
     + '</select></div>'
     + '</div>'
     + '<div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Email Recipients (comma-separated)</label>'
@@ -242,7 +261,7 @@ function rptRenderConfig(body) {
     const saved = s.day || 1;
     const statusEl = document.getElementById('rpt-schedule-status');
     if (statusEl && s.day) {
-      const suffix = saved===1?'st':saved===2?'nd':saved===3?'rd':'th';
+      const s2 = saved % 100; const suffix = (s2 >= 11 && s2 <= 13) ? 'th' : (saved % 10 === 1) ? 'st' : (saved % 10 === 2) ? 'nd' : (saved % 10 === 3) ? 'rd' : 'th';
       statusEl.textContent = 'Currently: ' + saved + suffix + ' of each month';
     }
   }, 50);
