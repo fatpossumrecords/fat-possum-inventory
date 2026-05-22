@@ -58,6 +58,59 @@ function rptRender() {
 }
 
 // ── CONFIG VIEW ───────────────────────────────────────────────
+function rptDayOptions() {
+  const saved = rptGetSchedule().day || 1;
+  let html = '';
+  for (let d = 1; d <= 28; d++) {
+    const suffix = d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';
+    html += '<option value="' + d + '"' + (saved === d ? ' selected' : '') + '>' + d + suffix + '</option>';
+  }
+  return html;
+}
+
+function rptHourOptions() {
+  const saved = rptGetSchedule().hour || 8;
+  const labels = ['12:00 AM','1:00 AM','2:00 AM','3:00 AM','4:00 AM','5:00 AM','6:00 AM','7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM','10:00 PM','11:00 PM'];
+  return labels.map(function(l, i) {
+    return '<option value="' + i + '"' + (saved === i ? ' selected' : '') + '>' + l + '</option>';
+  }).join('');
+}
+
+function rptGetSchedule() {
+  try { return JSON.parse(localStorage.getItem('fp_rpt_schedule') || '{}'); } catch(e) { return {}; }
+}
+
+window.rptSaveSchedule = async function() {
+  const day    = parseInt(document.getElementById('rpt-schedule-day')?.value || '1');
+  const hour   = parseInt(document.getElementById('rpt-schedule-hour')?.value || '8');
+  const period = document.getElementById('rpt-schedule-period')?.value || 'last_month';
+  const emails = document.getElementById('rpt-schedule-emails')?.value.trim() || '';
+  const schedule = { day, hour, period, emails, updatedAt: new Date().toISOString() };
+
+  // Save to localStorage
+  try { localStorage.setItem('fp_rpt_schedule', JSON.stringify(schedule)); } catch(e) {}
+
+  // Save to Gist so GitHub Action can read it
+  const statusEl = document.getElementById('rpt-schedule-status');
+  if (statusEl) statusEl.textContent = 'Saving...';
+  try {
+    const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
+    if (creds) {
+      await fetch('https://api.github.com/gists/' + creds.gistId, {
+        method: 'PATCH',
+        headers: { 'Authorization': 'token ' + creds.token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: { 'fp_report_schedule.json': { content: JSON.stringify(schedule, null, 2) } } }),
+      });
+      if (statusEl) statusEl.textContent = '✓ Schedule saved — runs on the ' + day + (day===1?'st':day===2?'nd':day===3?'rd':'th') + ' of each month at ' + document.getElementById('rpt-schedule-hour').options[hour].text + ' Central';
+    } else {
+      if (statusEl) statusEl.textContent = '✓ Saved locally (Gist not available)';
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Error saving: ' + e.message;
+  }
+  if (window.toast) toast('Schedule saved.', 'success');
+};
+
 function rptRenderConfig(body) {
   // Load saved date range
   let savedFrom = '', savedTo = '';
@@ -141,9 +194,36 @@ function rptRenderConfig(body) {
     + '</div></div>'
 
     // Run button
-    + '<div style="display:flex;justify-content:flex-end;">'
+    + '<div style="display:flex;justify-content:flex-end;margin-bottom:24px;">'
     + '<button onclick="rptRun()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:10px 28px;font-size:14px;font-weight:700;cursor:pointer;">Generate Report &#8594;</button>'
     + '</div>'
+
+    // Schedule config
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px;">Automated Email Schedule</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">The GitHub Action runs daily and emails the report on the day you configure below. Requires RESEND_API_KEY secret to be set in GitHub.</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">'
+    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Day of Month</label>'
+    + '<select id="rpt-schedule-day" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
+    + rptDayOptions()
+    + '</select></div>'
+    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Time (Central)</label>'
+    + '<select id="rpt-schedule-hour" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
+    + rptHourOptions()
+    + '</select></div>'
+    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Report Period</label>'
+    + '<select id="rpt-schedule-period" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
+    + '<option value="last_month">Last Month</option>'
+    + '<option value="last_quarter">Last Quarter</option>'
+    + '</select></div>'
+    + '</div>'
+    + '<div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Email Recipients (comma-separated)</label>'
+    + '<input type="text" id="rpt-schedule-emails" placeholder="you@fatpossum.com, accounting@fatpossum.com" '
+    + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);box-sizing:border-box;" /></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+    + '<div id="rpt-schedule-status" style="font-size:12px;color:var(--text-muted);"></div>'
+    + '<button onclick="rptSaveSchedule()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">Save Schedule</button>'
+    + '</div></div>'
 
     // Loading state
     + '<div id="rpt-loading" style="display:none;margin-top:20px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;text-align:center;">'
@@ -153,6 +233,19 @@ function rptRenderConfig(body) {
     + '</div></div>'
 
     + '</div>';
+
+  // Load saved schedule values
+  setTimeout(function() {
+    const s = rptGetSchedule();
+    if (s.emails) { const el = document.getElementById('rpt-schedule-emails'); if (el) el.value = s.emails; }
+    if (s.period) { const el = document.getElementById('rpt-schedule-period'); if (el) el.value = s.period; }
+    const saved = s.day || 1;
+    const statusEl = document.getElementById('rpt-schedule-status');
+    if (statusEl && s.day) {
+      const suffix = saved===1?'st':saved===2?'nd':saved===3?'rd':'th';
+      statusEl.textContent = 'Currently: ' + saved + suffix + ' of each month';
+    }
+  }, 50);
 }
 
 function rptQuickBtn(label, fn) {
