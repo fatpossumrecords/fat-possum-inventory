@@ -911,6 +911,7 @@ function invRenderDetail(body) {
     + (isDraft ? '<button onclick="invPushToPackiyo()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#9654; Send &amp; Push to Packiyo</button>' : '')
     + ((inv.status === 'pending_payment' || inv.status === 'sent') ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
     + ((inv.status === 'pending_shipment' || inv.status === 'paid' || inv.status === 'sent' || inv.status === 'shipped') && inv.packiyoOrderId ? '<button onclick="invSyncShipment()" class="btn-secondary btn-sm">&#8635; Sync from Packiyo</button>' : '')
+    + ((inv.status === 'pending_payment' || inv.status === 'pending_shipment' || inv.status === 'sent') && !inv.packiyoOrderId ? '<button onclick="invRepushToPackiyo()" style="background:var(--yellow);color:#111;border:none;border-radius:4px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">&#8635; Re-push to Packiyo</button>' : '')
     + (inv.trackingNumber ? '<span style="font-size:12px;font-family:monospace;background:var(--surface2);padding:6px 12px;border-radius:4px;">&#128230; ' + invEsc(inv.trackingNumber) + '</span>' : '')
     + '<button onclick="invDelete()" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;">&#128465; Delete</button>'
     + '</div></div>'
@@ -1166,12 +1167,10 @@ window.invDeleteById = function(id) {
 
 async function invCancelPackiyoOrder(orderId, orderNum) {
   try {
-    await invPackiyoFetch('/orders/' + orderId, { method: 'DELETE' });
+    await invPackiyoFetch('/orders/' + orderId + '/cancel', { method: 'POST' });
     if (window.toast) toast('Order ' + (orderNum || orderId) + ' cancelled in Packiyo.', 'success');
   } catch(e) {
     console.warn('Packiyo cancel failed:', e.message);
-    // 500 usually means order is fulfilled/shipped and can't be cancelled
-    // 404 means already deleted — both are acceptable outcomes
     const is404 = e.message.includes('404');
     const is500 = e.message.includes('500');
     if (is404) {
@@ -1203,6 +1202,15 @@ async function invSyncById(id) {
     }
   } catch(e) {}
 }
+
+window.invRepushToPackiyo = function() {
+  const inv = InvState.draft;
+  if (!inv) return;
+  if (inv._pushing) { if (window.toast) toast('Already pushing...', ''); return; }
+  if (!confirm('Re-push ' + INV_PREFIX + inv.number + ' to Packiyo?\n\nThis will create a new order in Packiyo.')) return;
+  inv._pushing = true;
+  invCreatePackiyoOrder(inv).finally(function() { inv._pushing = false; });
+};
 
 window.invSyncShipment = async function() {
   const inv = InvState.draft;
