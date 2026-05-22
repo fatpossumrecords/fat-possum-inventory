@@ -2275,9 +2275,9 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
     function tryFill(attempts) {
       try {
-        if (!window.InvState || !InvState.draft) {
+        if (typeof InvState === 'undefined' || !InvState.draft) {
           if (attempts > 30) {
-            console.warn('movInvoice timeout - InvState:', typeof window.InvState, 'draft:', window.InvState?.draft, 'view:', window.InvState?.view);
+            console.warn('movInvoice timeout - InvState:', typeof InvState, 'draft:', typeof InvState !== 'undefined' && InvState.draft);
             if (window.toast) toast('Could not load invoice form — please try again.', 'error'); return;
           }
           setTimeout(function() { tryFill(attempts + 1); }, 150);
@@ -2295,7 +2295,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
             return p.upc === m.upc || p.catalog === m.catalog;
           });
         }
-        var price  = parseFloat((window.InvState && (InvState.priceCatalog[m.catalog] || InvState.priceCatalog[m.upc])) || 0);
+        var price  = parseFloat((typeof InvState !== 'undefined' && (InvState.priceCatalog[m.catalog] || InvState.priceCatalog[m.upc])) || 0);
         var artist = cat ? (cat.artist  || m.artist  || '') : (m.artist  || '');
         var title  = cat ? (cat.title   || m.title   || '') : (m.title   || '');
         var format = cat ? (cat.format  || m.format  || '') : (m.format  || '');
