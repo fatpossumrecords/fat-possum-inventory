@@ -1,19 +1,16 @@
 name: Sales Report (Daily Check)
 
 on:
-  # Run daily at 14:00 UTC (8:00 AM CDT / 9:00 AM CST)
-  # Script checks schedule config from Gist and only emails on the right day
   schedule:
-    - cron: '0 14 * * *'
-  # Manual trigger with optional month override
+    - cron: '0 14 * * *'  # 8:00 AM CDT / 9:00 AM CST daily
   workflow_dispatch:
     inputs:
       month_override:
-        description: 'Override month (YYYY-MM, e.g. 2026-04). Leave blank for configured period.'
+        description: 'Override month (YYYY-MM). Leave blank for configured period.'
         required: false
         default: ''
       force_send:
-        description: 'Force send even if today is not the scheduled day (true/false)'
+        description: 'Force send even if not scheduled day (true/false)'
         required: false
         default: 'false'
 
@@ -34,11 +31,13 @@ jobs:
 
       - name: Generate and email report
         env:
-          PACKIYO_TOKEN:  ${{ secrets.PACKIYO_TOKEN }}
-          GIST_ID:        ${{ secrets.GIST_ID }}
-          GIST_TOKEN:     ${{ secrets.GIST_TOKEN }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          REPORT_TO:      ${{ secrets.REPORT_TO }}
-          MONTH_OVERRIDE: ${{ github.event.inputs.month_override }}
-          FORCE_SEND:     ${{ github.event.inputs.force_send }}
+          PACKIYO_TOKEN:          ${{ secrets.PACKIYO_TOKEN }}
+          GIST_ID:                ${{ secrets.GIST_ID }}
+          GIST_TOKEN:             ${{ secrets.GIST_TOKEN }}
+          RESEND_API_KEY:         ${{ secrets.RESEND_API_KEY }}
+          REPORT_TO:              ${{ secrets.REPORT_TO }}
+          SHEETS_ID:              ${{ secrets.SHEETS_ID }}
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          MONTH_OVERRIDE:         ${{ github.event.inputs.month_override }}
+          FORCE_SEND:             ${{ github.event.inputs.force_send }}
         run: node scripts/generate-report.js
