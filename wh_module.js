@@ -2301,11 +2301,15 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
         var format = cat ? (cat.format  || m.format  || '') : (m.format  || '');
         var upc    = cat ? (cat.upc     || m.upc     || '') : (m.upc     || '');
         var onHand = cat ? cat.fp_available : undefined;
+        // Use Packiyo SKU from catalog (fp catalog#) not movement catalog (orchard #)
+        var fpSku  = cat ? (cat.packiyo_sku || cat.catalog || m.catalog || '') : (m.catalog || '');
+        // Also try price lookup by FP sku
+        if (!price && cat) price = parseFloat(InvState.priceCatalog[cat.catalog] || InvState.priceCatalog[cat.packiyo_sku] || 0);
         inv.items.push({
-          sku:     m.catalog || '',
+          sku:     fpSku,
           artist:  artist,
           title:   title,
-          catalog: m.catalog || '',
+          catalog: cat ? (cat.catalog || m.catalog || '') : (m.catalog || ''),
           upc:     upc,
           format:  format,
           qty:     m.qty || 1,
