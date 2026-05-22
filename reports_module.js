@@ -50,6 +50,69 @@ window.switchToReports = function() {
   rptRender();
 };
 
+window.rptBackToConfig = function() { RptState.view = 'config'; rptRender(); };
+
+window.rptShowLog = async function() {
+  const body = document.getElementById('rpt-body');
+  if (!body) return;
+  body.innerHTML = '<div style="padding:24px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'
+    + '<div><h2 style="margin:0;">Report History</h2><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">All generated reports — manual and scheduled</div></div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<a href="https://docs.google.com/spreadsheets/d/1lRTU74QE711rxlB3x10Dj0SaEyxbkesPSRaEJknaTw4" target="_blank" class="btn-secondary btn-sm">&#128196; Open in Sheets</a>'
+    + '<button onclick="rptBackToConfig()" class="btn-secondary btn-sm">&#8592; Back</button>'
+    + '</div></div>'
+    + '<div id="rpt-log-content" style="text-align:center;padding:32px;color:var(--text-muted);">Loading log...</div>'
+    + '</div>';
+
+  // Load log from Gist
+  try {
+    const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
+    if (!creds) { document.getElementById('rpt-log-content').textContent = 'Not available — Gist credentials not loaded.'; return; }
+    const res = await fetch('https://api.github.com/gists/' + creds.gistId, {
+      headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
+    });
+    const gist = await res.json();
+    const file = gist.files && gist.files['fp_reports_log.json'];
+    const log  = file && file.content ? JSON.parse(file.content) : { runs: [] };
+    const runs = log.runs || [];
+
+    if (!runs.length) {
+      document.getElementById('rpt-log-content').innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">No report runs yet. Reports will appear here after the first scheduled or manual run.</div>';
+      return;
+    }
+
+    const statusColor = { sent:'var(--green)', failed:'var(--red)', running:'var(--yellow)', generated:'var(--accent)' };
+    const rows = runs.map(function(r) {
+      const sc = statusColor[r.status] || 'var(--text-muted)';
+      return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;">'
+        + '<td style="padding:10px 12px;font-size:12px;">' + rptEsc(r.runAt ? new Date(r.runAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '') + '</td>'
+        + '<td style="padding:10px 12px;font-size:13px;font-weight:600;">' + rptEsc(r.period||'') + '</td>'
+        + '<td style="padding:10px 12px;font-size:11px;color:var(--text-muted);">' + rptEsc(r.dateFrom||'') + ' → ' + rptEsc(r.dateTo||'') + '</td>'
+        + '<td style="padding:10px 12px;font-size:11px;">' + rptEsc(r.source||'') + '</td>'
+        + '<td style="padding:10px 12px;"><span style="background:' + sc + ';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">' + rptEsc(r.status||'') + '</span></td>'
+        + '<td style="padding:10px 12px;font-size:12px;font-family:monospace;">' + (r.rowCount||0) + '</td>'
+        + '<td style="padding:10px 12px;font-size:11px;color:var(--text-muted);">' + (r.b2bOrders||0) + ' B2B · ' + (r.invoices||0) + ' inv</td>'
+        + '<td style="padding:10px 12px;font-size:11px;color:var(--red);">' + rptEsc(r.error||'') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    document.getElementById('rpt-log-content').innerHTML = '<div style="background:var(--surface);border-radius:8px;border:1px solid var(--border);overflow:auto;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px;">'
+      + '<thead><tr style="background:var(--surface2);">'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Run At</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Period</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Date Range</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Source</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Status</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Rows</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Breakdown</th>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Error</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(e) {
+    document.getElementById('rpt-log-content').textContent = 'Error loading log: ' + e.message;
+  }
+};
+
 function rptRender() {
   const body = document.getElementById('rpt-body');
   if (!body) return;
@@ -214,7 +277,8 @@ function rptRenderConfig(body) {
     + '</div></div>'
 
     // Run button
-    + '<div style="display:flex;justify-content:flex-end;margin-bottom:24px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">'
+    + '<button onclick="rptShowLog()" class="btn-secondary btn-sm">&#128203; Report History</button>'
     + '<button onclick="rptRun()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:10px 28px;font-size:14px;font-weight:700;cursor:pointer;">Generate Report &#8594;</button>'
     + '</div>'
 
@@ -604,6 +668,41 @@ window.rptExportCSV = function() {
   a.click();
   URL.revokeObjectURL(a.href);
   if (window.toast) toast(rows.length + ' rows exported to CSV.', 'success');
+
+  // Log the manual export to Gist
+  try {
+    const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
+    if (creds) {
+      const logEntry = {
+        id: 'rpt-' + Date.now(),
+        runAt: new Date().toISOString(),
+        period: RptState.dateFrom + ' → ' + RptState.dateTo,
+        dateFrom: RptState.dateFrom,
+        dateTo: RptState.dateTo,
+        source: 'manual',
+        status: 'generated',
+        rowCount: rows.length,
+        b2bOrders: rows.filter(function(r){return r.source==='packiyo';}).length,
+        invoices: rows.filter(function(r){return r.source==='invoice';}).length,
+        recipients: [],
+        error: null,
+      };
+      fetch('https://api.github.com/gists/' + creds.gistId, {
+        headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
+      }).then(function(r){return r.json();}).then(function(gist) {
+        const file = gist.files && gist.files['fp_reports_log.json'];
+        const log  = file && file.content ? JSON.parse(file.content) : { runs: [] };
+        if (!log.runs) log.runs = [];
+        log.runs.unshift(logEntry);
+        if (log.runs.length > 100) log.runs = log.runs.slice(0,100);
+        return fetch('https://api.github.com/gists/' + creds.gistId, {
+          method: 'PATCH',
+          headers: { 'Authorization': 'token ' + creds.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: { 'fp_reports_log.json': { content: JSON.stringify(log) } } }),
+        });
+      }).catch(function(){});
+    }
+  } catch(e) {}
 };
 
 // ── BOOT ──────────────────────────────────────────────────────
