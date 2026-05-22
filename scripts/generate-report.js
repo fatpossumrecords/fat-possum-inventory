@@ -259,7 +259,21 @@ async function main() {
     // 2. Catalog
     console.log('\n[2/5] Fetching catalog...');
     let catalog = [];
-    try { const d = await gistFetch(CAT_GIST_FILE); catalog = d?.merged||d?.products||[]; } catch(e) {}
+    try {
+      const d = await gistFetch(CAT_GIST_FILE);
+      // fp_data.json uses orchardData with abbreviated field names:
+      // u=upc, pc=catalog, rn=title, an=artist, cf=format
+      const raw = d?.orchardData || d?.merged || d?.products || [];
+      catalog = raw.map(function(p) {
+        return {
+          upc:     p.u    || p.upc     || '',
+          catalog: p.pc   || p.catalog || '',
+          title:   p.rn   || p.title   || '',
+          artist:  p.an   || p.artist  || '',
+          format:  p.cf   || p.format  || '',
+        };
+      });
+    } catch(e) { console.warn('Catalog load error:', e.message); }
     const catBySku = {}, catByUpc = {};
     catalog.forEach(p => {
       if (p.catalog) catBySku[p.catalog.toLowerCase()] = p;
@@ -293,9 +307,9 @@ async function main() {
         const cat = catBySku[sku.toLowerCase()]||catBySku[sku]||null;
         dataRows.push([
           customer, contact.company_name||'', contact.country||'',
-          rowYear, rowMonth,
+          "'" + rowYear, "'" + rowMonth,
           cat?.format||'', cat?.artist||'', cat?.title||a.name||sku,
-          cat?.upc||'', cat?.catalog||sku,
+          cat?.upc ? "'"+cat.upc : '', cat?.catalog||sku,
           netUnits, (netUnits*parseFloat(a.price||0)).toFixed(2)
         ]);
       });
