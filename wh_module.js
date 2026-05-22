@@ -2275,8 +2275,11 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
     function tryFill(attempts) {
       try {
-        if (!window.InvState || !InvState.draft || InvState.view !== 'edit') {
-          if (attempts > 30) { if (window.toast) toast('Could not load invoice form — please try again.', 'error'); return; }
+        if (!window.InvState || !InvState.draft) {
+          if (attempts > 30) {
+            console.warn('movInvoice timeout - InvState:', typeof window.InvState, 'draft:', window.InvState?.draft, 'view:', window.InvState?.view);
+            if (window.toast) toast('Could not load invoice form — please try again.', 'error'); return;
+          }
           setTimeout(function() { tryFill(attempts + 1); }, 150);
           return;
         }
