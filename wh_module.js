@@ -2313,6 +2313,10 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
       if (typeof invRender === 'function') invRender();
       if (window.toast) toast(movs.length + ' items pre-loaded into invoice draft.', 'success');
+      } catch(e) {
+        console.warn('movInvoice fill error:', e);
+        if (window.toast) toast('Error pre-loading items: ' + e.message, 'error');
+      }
     }
 
     setTimeout(function() { tryFill(0); }, 500);
