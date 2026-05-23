@@ -136,8 +136,8 @@ async function getDateRange() {
   if (MONTH_OVERRIDE && /^\d{4}-\d{2}$/.test(MONTH_OVERRIDE)) {
     const [year, month] = MONTH_OVERRIDE.split('-').map(Number);
     const pad    = n => String(n).padStart(2,'0');
-  const padUPC = u => u ? String(u).replace(/\D/g,'').padStart(12,'0') : '';
-    return { from:`${year}-${pad(month)}-01`, to:`${year}-${pad(month)}-${new Date(year,month,0).getDate()}`, year, month, periodLabel: `${year}-${pad(month)}` };
+
+
   }
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
@@ -210,6 +210,9 @@ async function packiyoFetchAll(path) {
 }
 
 // ── MAIN ────────────────────────────────────────────────────────
+// UPC padding helper
+const padUPC = u => u ? String(u).replace(/\D/g,'').padStart(12,'0') : '';
+
 async function main() {
   console.log('\n=== Fat Possum Sales Report ===');
   const runTime = new Date().toISOString();
