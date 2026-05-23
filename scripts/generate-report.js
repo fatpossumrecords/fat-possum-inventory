@@ -135,7 +135,8 @@ async function getDateRange() {
   try { const s = await gistFetch(SCHED_GIST_FILE); if (s?.period) period = s.period; } catch(e) {}
   if (MONTH_OVERRIDE && /^\d{4}-\d{2}$/.test(MONTH_OVERRIDE)) {
     const [year, month] = MONTH_OVERRIDE.split('-').map(Number);
-    const pad = n => String(n).padStart(2,'0');
+    const pad    = n => String(n).padStart(2,'0');
+  const padUPC = u => u ? String(u).replace(/\D/g,'').padStart(12,'0') : '';
     return { from:`${year}-${pad(month)}-01`, to:`${year}-${pad(month)}-${new Date(year,month,0).getDate()}`, year, month, periodLabel: `${year}-${pad(month)}` };
   }
   const now = new Date();
@@ -266,8 +267,16 @@ async function main() {
       const raw = d?.orchardData || [];
       raw.forEach(p => {
         const item = { upc: p.u||'', catalog: p.pc||'', title: p.rn||'', artist: p.an||'', format: p.cf||'' };
-        if (item.catalog) catBySku[item.catalog.toLowerCase()] = item;
-        if (item.upc)     catByUpc[item.upc] = item;
+        if (item.catalog) {
+          catBySku[item.catalog.toLowerCase()] = item;
+          // Also index without hyphens for FP catalog matching (FP16021 → FP1602-1)
+          catBySku[item.catalog.replace(/-/g,'').toLowerCase()] = item;
+        }
+        if (item.upc) {
+          catByUpc[item.upc] = item;
+          // Also index without leading zeros since app.js strips them
+          catByUpc[item.upc.replace(/^0+/,'')] = item;
+        }
       });
       console.log(`  orchardData: ${raw.length}`);
     } catch(e) { console.warn('  orchardData error:', e.message); }
@@ -338,12 +347,17 @@ async function main() {
         const sku = a.sku||'';
         const netUnits = parseInt(a.quantity_shipped||0);
         if (netUnits <= 0) return;
-        const cat = catBySku[sku.toLowerCase()]||catBySku[sku]||null;
+        const upcStripped = (a.barcode||'').replace(/^0+/,'');
+        const cat = catBySku[sku.toLowerCase()]
+          || catBySku[sku.replace(/-/g,'').toLowerCase()]
+          || catByUpc[a.barcode||'']
+          || catByUpc[upcStripped]
+          || null;
         dataRows.push([
           customer, contact.company_name||'', contact.country||'',
           rowYear, rowMonth,
           cat?.format||'', cat?.artist||'', cat?.title||a.name||sku,
-          cat?.upc||'', cat?.catalog||sku,
+          padUPC(cat?.upc||a.barcode||''), cat?.catalog||sku,
           netUnits, (netUnits*parseFloat(a.price||0)).toFixed(2)
         ]);
       });
@@ -357,7 +371,7 @@ async function main() {
       (inv.items||[]).forEach(item => {
         const netUnits = item.qty||0;
         if (netUnits <= 0) return;
-        dataRows.push([customer, inv.billTo?.company||'', inv.billTo?.country||'US', rowYear, rowMonth, item.format||'', item.artist||'', item.title||'', item.upc||'', item.catalog||'', netUnits, (netUnits*parseFloat(item.price||0)).toFixed(2)]);
+        dataRows.push([customer, inv.billTo?.company||'', inv.billTo?.country||'US', rowYear, rowMonth, item.format||'', item.artist||'', item.title||'', padUPC(item.upc||''), item.catalog||'', netUnits, (netUnits*parseFloat(item.price||0)).toFixed(2)]);
       });
     });
     console.log(`  Total rows: ${dataRows.length}`);
