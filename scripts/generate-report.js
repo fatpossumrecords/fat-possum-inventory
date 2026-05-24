@@ -290,13 +290,21 @@ async function main() {
       pkProducts.forEach(p => {
         const a = p.attributes || {};
         const sku = (a.sku||'').toLowerCase();
+        const skuNoHyphen = sku.replace(/-/g,'');
         const upc = a.barcode || '';
         const name = a.name || '';
-        // Only add if not already in orchardData (orchardData has better artist/format data)
-        if (sku && !catBySku[sku]) catBySku[sku] = { upc, catalog: a.sku||'', title: name, artist: '', format: '' };
-        if (upc && !catByUpc[upc]) catByUpc[upc]  = { upc, catalog: a.sku||'', title: name, artist: '', format: '' };
-        // But always update UPC on orchardData entries if missing
-        if (sku && catBySku[sku] && !catBySku[sku].upc && upc) catBySku[sku].upc = upc;
+        // Check if orchardData already has this via unhyphenated key or UPC
+        const orchardMatch = catBySku[skuNoHyphen] || catByUpc[upc] || catByUpc[upc.replace(/^0+/,'')] || null;
+        const format = orchardMatch?.format || '';
+        const artist = orchardMatch?.artist || '';
+        const title  = orchardMatch?.title  || name;
+        const entry  = { upc: upc||orchardMatch?.upc||'', catalog: a.sku||'', title, artist, format };
+        // Add under hyphenated key (what Packiyo uses) — always add/overwrite with enriched data
+        if (sku) catBySku[sku] = entry;
+        if (upc && !catByUpc[upc]) catByUpc[upc] = entry;
+        if (upc) catByUpc[upc.replace(/^0+/,'')] = entry;
+        // Update UPC on orchardData unhyphenated entry if missing
+        if (skuNoHyphen && catBySku[skuNoHyphen] && !catBySku[skuNoHyphen].upc && upc) catBySku[skuNoHyphen].upc = upc;
       });
       console.log(`  Packiyo products: ${pkProducts.length}`);
     } catch(e) { console.warn('  Packiyo products error:', e.message); }
