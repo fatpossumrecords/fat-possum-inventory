@@ -356,6 +356,8 @@ async function main() {
           || catByUpc[a.barcode||'']
           || catByUpc[upcStripped]
           || null;
+        if (!cat) console.log(`  NO MATCH: sku=${sku} barcode=${a.barcode}`);
+        else if (!cat.format) console.log(`  NO FORMAT: sku=${sku} cat.catalog=${cat.catalog} cat.format=${cat.format}`);
         dataRows.push([
           customer, contact.company_name||'', contact.country||'',
           rowYear, rowMonth,
