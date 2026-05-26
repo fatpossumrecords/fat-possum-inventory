@@ -2171,11 +2171,39 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
         // Items
         html += '<div id="movgrp-' + encodeURIComponent(sid) + '" style="' + (grpCollapsed ? 'display:none;' : '') + 'padding:6px 12px 8px;">';
         grp.items.forEach(function(m) {
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">'
+          var isDraft = grp.status === 'draft';
+          // Look up source stock from catalog
+          var prod = (typeof State !== 'undefined' && State.merged) ? State.merged.find(function(p) { return p.upc === m.upc || p.catalog === m.catalog; }) : null;
+          var sourceAvail = '';
+          if (prod) {
+            var fromKey = m.from;
+            var avail = fromKey === 'fp' ? (prod.fp_available||0)
+                      : fromKey === 'us' ? (prod.us_avail||0)
+                      : fromKey === 'ca' ? (prod.ca_avail||0)
+                      : fromKey === 'uk' ? (prod.uk_avail||0)
+                      : fromKey === 'eu' ? (prod.eu_avail||0) : null;
+            if (avail !== null) {
+              var afterTransfer = avail - (m.qty||0);
+              sourceAvail = '<span style="font-size:10px;color:' + (afterTransfer < 0 ? 'var(--red)' : 'var(--text-muted)') + ';margin-left:4px;" title="Stock at source">'
+                + 'src: ' + avail + ' → ' + afterTransfer
+                + '</span>';
+            }
+          }
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">'
             + '<span style="flex:2;font-weight:600;color:var(--text);">' + (m.artist||'') + ' \u2014 ' + (m.title||'') + '</span>'
             + '<span style="font-family:monospace;font-size:11px;color:var(--text-muted);flex:1;">' + (m.catalog||'') + '</span>'
-            + '<span style="font-size:11px;color:var(--text-muted);">' + (m.format||'') + '</span>'
-            + '<span style="font-family:monospace;font-weight:700;color:var(--accent);min-width:40px;text-align:right;">' + (m.qty||0) + '</span>'
+            + '<span style="font-size:11px;color:var(--text-muted);min-width:50px;">' + (m.format||'') + '</span>'
+            + (isDraft
+              ? '<div style="display:flex;align-items:center;gap:4px;">'
+                + '<input type="number" min="0" value="' + (m.qty||0) + '" '
+                + 'style="width:64px;padding:3px 6px;font-size:12px;font-family:monospace;font-weight:700;color:var(--accent);border:1px solid var(--border2);border-radius:3px;background:var(--surface);text-align:right;" '
+                + 'onchange="movUpdateQty(\'' + encodeURIComponent(m.upc) + '\',\'' + encodeURIComponent(sid) + '\',parseInt(this.value)||0)" />'
+                + sourceAvail
+                + '<button onclick="movRemoveItem(\'' + encodeURIComponent(m.upc) + '\',\'' + encodeURIComponent(sid) + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;padding:0 2px;" title="Remove">&#x2715;</button>'
+                + '</div>'
+              : '<span style="font-family:monospace;font-weight:700;color:var(--accent);min-width:40px;text-align:right;">' + (m.qty||0) + '</span>'
+                + sourceAvail
+            )
             + '</div>';
         });
         html += '</div></div>';
@@ -2189,6 +2217,31 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
   }
 
   // Toggle functions exposed to window
+  window.movUpdateQty = function(upcEnc, sidEnc, newQty) {
+    var upc = decodeURIComponent(upcEnc);
+    var sid = decodeURIComponent(sidEnc);
+    if (typeof State === 'undefined' || !State.movements) return;
+    State.movements.forEach(function(m) {
+      if (m.upc === upc && (m.shipmentId || ((m.from||'')+'\u2192'+(m.to||'')+'-legacy')) === sid) {
+        m.qty = newQty;
+      }
+    });
+    if (typeof saveGistData === 'function') saveGistData();
+    buildSummary();
+  };
+
+  window.movRemoveItem = function(upcEnc, sidEnc) {
+    var upc = decodeURIComponent(upcEnc);
+    var sid = decodeURIComponent(sidEnc);
+    if (typeof State === 'undefined' || !State.movements) return;
+    if (!confirm('Remove this item from the shipment?')) return;
+    State.movements = State.movements.filter(function(m) {
+      return !(m.upc === upc && (m.shipmentId || ((m.from||'')+'\u2192'+(m.to||'')+'-legacy')) === sid);
+    });
+    if (typeof saveGistData === 'function') saveGistData();
+    buildSummary();
+  };
+
   window.movToggleRoute = function(rkEnc) {
     var rk = decodeURIComponent(rkEnc);
     var rc = getRC();
