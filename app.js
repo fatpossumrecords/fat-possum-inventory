@@ -2137,8 +2137,9 @@ function renderAlerts(preserveExpanded=false) {
           &nbsp;·&nbsp;
           <a href="#" onclick="event.preventDefault();deselectAllAlerts('${wh.key}')" style="color:var(--text-muted);font-size:10px">Deselect all</a>
           &nbsp;·&nbsp;
-          <a href="#" onclick="event.preventDefault();clearSelectedAlerts('${wh.key}')" style="color:var(--accent);font-size:10px;font-weight:600;">Clear alert</a>
-        </span>
+<a href="#" onclick="event.preventDefault();clearSelectedAlerts('${wh.key}')" style="color:var(--accent);font-size:10px;font-weight:600;">Clear alert</a>
+          &nbsp;·&nbsp;
+          <a href="#" onclick="event.preventDefault();restoreClearedAlerts('${wh.key}')" style="color:var(--green);font-size:10px;font-weight:600;">Restore cleared</a>        </span>
       </h3>
       <div class="alert-table-wrap" style="display:${isExpanded ? 'block' : 'none'}"><div class="table-wrap"><table id="alert-table-${wh.key}" style="table-layout:fixed;min-width:1100px;">
         <colgroup>
@@ -2270,6 +2271,15 @@ window.clearSelectedAlerts = async function(whKey) {
   renderAlerts();
   updateNotifications();
   toast(checked.length + ' alert' + (checked.length>1?'s':'') + ' cleared. Will restore if stock increases.', 'success');
+};
+window.restoreClearedAlerts = async function(whKey) {
+  const keys = Object.keys(State.clearedAlerts).filter(k => k.endsWith('|' + whKey));
+  if (!keys.length) { toast('No cleared alerts for this warehouse.', ''); return; }
+  keys.forEach(k => delete State.clearedAlerts[k]);
+  await saveGistData();
+  renderAlerts(true);
+  updateNotifications();
+  toast(keys.length + ' cleared alert' + (keys.length > 1 ? 's' : '') + ' restored for ' + WH_LABELS[whKey] + '.', 'success');
 };
 
 // Track expanded alert section
