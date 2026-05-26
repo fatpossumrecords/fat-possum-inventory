@@ -2164,6 +2164,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
             } else if (grp.status === 'processed') {
               btns += '<span style="font-size:10px;color:var(--text-muted);">Clears in 30d</span>';
             }
+            btns += '<button onclick="event.stopPropagation();movExportShipmentCSV(\'' + encodeURIComponent(sid) + '\')" class="btn-secondary btn-sm" style="font-size:10px;">&#8595; CSV</button>';
             btns += '</span>';
             return btns;
           })()
@@ -2218,6 +2219,36 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
   }
 
   // Toggle functions exposed to window
+  window.movExportShipmentCSV = function(sidEnc) {
+    var sid = decodeURIComponent(sidEnc);
+    if (typeof State === 'undefined' || !State.movements) return;
+    var items = State.movements.filter(function(m) {
+      return (m.shipmentId || ((m.from||'')+'\u2192'+(m.to||'')+'-legacy')) === sid;
+    });
+    if (!items.length) { if (window.toast) toast('No items found.', 'error'); return; }
+    var route = (items[0].from||'') + ' → ' + (items[0].to||'');
+    var status = items[0].status || '';
+    var po = items[0].poNumber || '';
+    var headers = ['Artist', 'Title', 'Catalog #', 'UPC', 'Format', 'Qty', 'Route', 'Status', 'PO Number'];
+    var rows = items.map(function(m) {
+      return [m.artist||'', m.title||'', m.catalog||'', m.upc||'', m.format||'', m.qty||0, route, status, po]
+        .map(function(v) {
+          var s = String(v||'').replace(/"/g,'""');
+          return /,|"|\n/.test(s) ? '"'+s+'"' : s;
+        }).join(',');
+    });
+    var csv = headers.join(',') + '\n' + rows.join('\n');
+    var blob = new Blob([csv], {type:'text/csv'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    var dateStr = new Date().toISOString().slice(0,10);
+    var routeStr = (items[0].from||'') + '-' + (items[0].to||'');
+    a.download = 'fp-movement-' + routeStr + (po ? '-' + po.replace(/[^a-z0-9]/gi,'-') : '') + '-' + dateStr + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    if (window.toast) toast(items.length + ' items exported.', 'success');
+  };
+
   window.movExportCSV = function() {
     if (typeof State === 'undefined' || !State.movements || !State.movements.length) {
       if (window.toast) toast('No movements to export.', 'error');
