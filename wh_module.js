@@ -93,6 +93,8 @@ window.switchWHTab = function(tab) {
     }
     if (tab === 'walkthrough') wtRender();
     if (tab === 'locations') locInit();
+    // Default to locations when switching to this view
+    if (!tab) locInit();
   }, 0);
 };
 
@@ -2637,6 +2639,12 @@ function locRender() {
   else locRenderShelf();
 }
 
+window.locReload = function() {
+  LocState.loaded  = false;
+  LocState.loading = false;
+  locInit();
+};
+
 // ── PRODUCT SEARCH VIEW ────────────────────────────────────────
 function locRenderProduct() {
   const area  = document.getElementById('loc-content-area');
@@ -2665,15 +2673,19 @@ function locRenderProduct() {
   const cards = results.map(p => {
     const locBadges = p.locations.map(l => {
       const isNow  = whIsNowLoc(l.name);
-      const bg     = isNow ? 'var(--yellow)' : 'var(--accent)';
-      const color  = isNow ? '#111' : '#fff';
+      const bg     = isNow ? '#f59e0b' : 'var(--accent)';
+      const color  = '#fff';
       return `<span onclick="locJumpToLocation('${locEsc(l.name)}')"
-        style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;background:${bg};color:${color};
-        padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;
-        margin:2px;transition:opacity 0.15s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1"
+        style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+        background:${bg};color:${color};
+        padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;
+        font-family:'DM Mono',monospace;margin:3px;transition:opacity 0.15s;
+        box-shadow:0 1px 3px rgba(0,0,0,0.15);"
+        onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1"
         title="View on shelf map">
-        ${locEsc(l.name)} <span style="opacity:0.7;font-size:10px;">${l.qty}</span>
-        ${isNow ? '<span style="font-size:9px;opacity:0.6;">NOW</span>' : ''}
+        <span style="letter-spacing:0.3px;">${locEsc(l.name)}</span>
+        <span style="background:rgba(255,255,255,0.25);border-radius:4px;padding:1px 6px;font-size:13px;font-weight:900;">${l.qty}</span>
+        ${isNow ? '<span style="font-size:9px;opacity:0.8;background:rgba(0,0,0,0.15);border-radius:3px;padding:1px 4px;">NOW</span>' : ''}
       </span>`;
     }).join('');
 
@@ -2712,90 +2724,155 @@ function locRenderProduct() {
 function locRenderShelf() {
   const area = document.getElementById('loc-content-area');
   if (!area) return;
-
-  const q = (LocState.searchQuery || '').toLowerCase().trim();
+  const q      = (LocState.searchQuery || '').toLowerCase().trim();
   const jumpTo = LocState.jumpToLoc;
   LocState.jumpToLoc = null;
 
-  // Group locations by aisle
-  const mainLocs = {}, nowLocs = {};
+  const pSectionBins = {}, mwBins = {}, nowBins = {}, otherLocs = [];
   for (const locName of Object.keys(LocState.locMap)) {
-    if (whIsNowLoc(locName)) nowLocs[locName] = LocState.locMap[locName];
-    else mainLocs[locName] = LocState.locMap[locName];
+    const parsed = wtParseBin(locName);
+    if (whIsNowLoc(locName)) {
+      nowBins[locName] = true;
+    } else if (parsed && parsed.type === 'P') {
+      if (!pSectionBins[parsed.section]) pSectionBins[parsed.section] = [];
+      pSectionBins[parsed.section].push({ locName, parsed });
+    } else if (parsed && parsed.type === 'MW') {
+      const key = 'MW-' + parsed.aisle;
+      if (!mwBins[key]) mwBins[key] = [];
+      mwBins[key].push({ locName, parsed });
+    } else {
+      otherLocs.push(locName);
+    }
   }
 
-  function buildSection(locsObj, sectionLabel, sectionId) {
-    // Group by aisle
-    const aisleMap = {};
-    for (const locName of Object.keys(locsObj)) {
-      const key = whLocSortKey(locName);
-      const aisle = key[0] || 'Other';
-      if (!aisleMap[aisle]) aisleMap[aisle] = [];
-      aisleMap[aisle].push(locName);
-    }
-    // Sort locations within each aisle
-    for (const aisle of Object.keys(aisleMap)) {
-      aisleMap[aisle].sort((a, b) => {
-        const ka = whLocSortKey(a), kb = whLocSortKey(b);
-        for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
-        return 0;
-      });
-    }
+  const container = document.createElement('div');
+  container.style.cssText = 'padding:16px 24px;';
 
-    const aisles = Object.keys(aisleMap).sort();
-    const aisleHtml = aisles.map(aisle => {
-      const locs = aisleMap[aisle];
-      const cells = locs.map(locName => {
-        const items = locsObj[locName];
-        const totalQty = items.reduce((s, i) => s + i.qty, 0);
-        const isJump   = locName === jumpTo;
-        const hasMatch = q && items.some(i =>
-          i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
-          i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q)
-        );
-        const bg = isJump ? 'var(--accent)' : hasMatch ? '#fef3c7' : 'var(--surface2)';
-        const border = isJump ? '2px solid var(--accent)' : hasMatch ? '2px solid #f59e0b' : '1px solid var(--border)';
-        const textColor = isJump ? '#fff' : 'var(--text)';
-        return `<div id="loc-cell-${locEsc(locName).replace(/[^a-z0-9]/gi,'-')}"
-          onclick="locToggleCell('${locEsc(locName)}')"
-          style="cursor:pointer;background:${bg};border:${border};border-radius:6px;padding:8px 10px;
-          min-width:90px;text-align:center;transition:all 0.15s;"
-          onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
-          <div style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${textColor};">${locEsc(locName)}</div>
-          <div style="font-size:10px;color:${isJump ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)'};">${items.length} SKU${items.length !== 1 ? 's' : ''} · ${totalQty} units</div>
-        </div>
-        <div id="loc-expand-${locEsc(locName).replace(/[^a-z0-9]/gi,'-')}" style="display:${isJump?'block':'none'};grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin:4px 0;">
-          ${locBuildExpandedCell(locName, items, q)}
-        </div>`;
-      }).join('');
+  function buildCell(locName) {
+    const items    = LocState.locMap[locName] || [];
+    const totalQty = items.reduce(function(s, i) { return s + i.qty; }, 0);
+    const isJump   = locName === jumpTo;
+    const hasMatch = q && items.some(function(i) {
+      return i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
+             i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q);
+    });
+    const isNow    = whIsNowLoc(locName);
+    const bg       = isJump ? 'var(--accent)' : hasMatch ? '#fef3c7' : isNow ? 'rgba(245,158,11,0.1)' : 'var(--surface2)';
+    const border   = isJump ? '2px solid var(--accent)' : hasMatch ? '2px solid #f59e0b' : isNow ? '1px solid #f59e0b' : '1px solid var(--border)';
+    const nameColor = isJump ? '#fff' : isNow ? '#b45309' : 'var(--text)';
+    const subColor  = isJump ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)';
+    const qtyColor  = isJump ? '#fff' : 'var(--accent)';
+    const safeId    = locName.replace(/[^a-z0-9]/gi, '-');
+    const autoExpand = isJump || hasMatch;
 
-      return `<div style="margin-bottom:20px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border);">Aisle ${aisle}</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;align-items:start;">${cells}</div>
-      </div>`;
-    }).join('');
-
-    return `<div style="margin-bottom:32px;">
-      <h3 style="font-size:14px;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--border2);" id="${sectionId}">${sectionLabel}</h3>
-      ${aisleHtml || '<div style="color:var(--text-muted);font-size:12px;">No locations</div>'}
-    </div>`;
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:contents;';
+    const cellHtml = '<div id="loc-cell-' + safeId + '" onclick="locToggleCell(\'' + locEsc(locName) + '\')"'
+      + ' style="cursor:pointer;background:' + bg + ';border:' + border + ';border-radius:6px;'
+      + 'padding:9px 10px;text-align:center;transition:all 0.15s;"'
+      + ' onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:' + nameColor + ';white-space:nowrap;letter-spacing:0.3px;">' + locEsc(locName) + '</div>'
+      + '<div style="font-size:10px;color:' + subColor + ';margin-top:3px;">'
+      + items.length + ' SKU' + (items.length !== 1 ? 's' : '')
+      + ' &nbsp;&middot;&nbsp; <strong style="color:' + qtyColor + ';font-family:\'DM Mono\',monospace;">' + totalQty + '</strong> units'
+      + '</div></div>'
+      + '<div id="loc-expand-' + safeId + '" style="display:' + (autoExpand ? 'block' : 'none') + ';'
+      + 'grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin:2px 0;">'
+      + locBuildExpandedCell(locName, items, q)
+      + '</div>';
+    wrapper.innerHTML = cellHtml;
+    return wrapper;
   }
 
-  const mainSection = buildSection(mainLocs, '📦 Main Warehouse', 'loc-section-main');
-  const nowSection  = Object.keys(nowLocs).length
-    ? buildSection(nowLocs, '🏭 North Warehouse (NOW)', 'loc-section-now')
-    : '';
+  function sectionHeader(text, mt) {
+    const el = document.createElement('div');
+    el.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-muted);margin:' + (mt||'0') + ' 0 16px;padding-bottom:8px;border-bottom:2px solid var(--border);';
+    el.textContent = text;
+    container.appendChild(el);
+  }
 
-  area.innerHTML = `<div style="padding:16px 24px;">
-    ${mainSection}
-    ${nowSection}
-  </div>`;
+  function makeGrid() {
+    const g = document.createElement('div');
+    g.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:8px;align-items:start;';
+    return g;
+  }
 
-  // Scroll to jump target
+  function sortBins(bins) {
+    return bins.sort(function(a, b) {
+      const ka = whLocSortKey(a.locName), kb = whLocSortKey(b.locName);
+      for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+      return 0;
+    });
+  }
+
+  // Pick Bins
+  sectionHeader('Pick Bins', '0');
+  for (const def of WT_P_SECTIONS) {
+    const bins = sortBins(pSectionBins[def.id] || []);
+    if (!bins.length) continue;
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-bottom:20px;';
+    sec.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">' + (def.label || def.id) + '</div>';
+    const grid = makeGrid();
+    bins.forEach(function(b) { grid.appendChild(buildCell(b.locName)); });
+    sec.appendChild(grid);
+    container.appendChild(sec);
+  }
+
+  // MW Bulk Locations
+  sectionHeader('MW Bulk Locations', '24px');
+  for (const aisleDef of WT_MW_AISLES) {
+    const key  = 'MW-' + aisleDef.aisle;
+    const bins = sortBins(mwBins[key] || []);
+    if (!bins.length) continue;
+    const aisleDiv = document.createElement('div');
+    aisleDiv.style.cssText = 'margin-bottom:20px;';
+    aisleDiv.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Aisle ' + aisleDef.aisle + '</div>';
+    for (const half of aisleDef.halves) {
+      const halfLetters = half.letters.split(',').map(function(l) { return l.trim(); });
+      const halfBins = bins.filter(function(b) { return halfLetters.includes(b.parsed.col); });
+      if (!halfBins.length) continue;
+      const halfDiv = document.createElement('div');
+      halfDiv.style.cssText = 'margin-bottom:12px;';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:10px;color:var(--text-dim);margin-bottom:6px;font-family:\'DM Mono\',monospace;';
+      lbl.textContent = half.label;
+      halfDiv.appendChild(lbl);
+      const grid = makeGrid();
+      halfBins.forEach(function(b) { grid.appendChild(buildCell(b.locName)); });
+      halfDiv.appendChild(grid);
+      aisleDiv.appendChild(halfDiv);
+    }
+    container.appendChild(aisleDiv);
+  }
+
+  // North Warehouse
+  const nowNames = Object.keys(nowBins).sort(function(a, b) {
+    const ka = whLocSortKey(a), kb = whLocSortKey(b);
+    for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+    return 0;
+  });
+  if (nowNames.length) {
+    sectionHeader('North Warehouse (NOW)', '24px');
+    const grid = makeGrid();
+    nowNames.forEach(function(n) { grid.appendChild(buildCell(n)); });
+    container.appendChild(grid);
+  }
+
+  // Other
+  if (otherLocs.length) {
+    sectionHeader('Other Locations', '24px');
+    const grid = makeGrid();
+    otherLocs.sort().forEach(function(n) { grid.appendChild(buildCell(n)); });
+    container.appendChild(grid);
+  }
+
+  area.innerHTML = '';
+  area.appendChild(container);
+
   if (jumpTo) {
-    const id = 'loc-cell-' + jumpTo.replace(/[^a-z0-9]/gi,'-');
-    setTimeout(() => {
-      const el = document.getElementById(id);
+    setTimeout(function() {
+      const el = document.getElementById('loc-cell-' + jumpTo.replace(/[^a-z0-9]/gi, '-'));
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
   }
