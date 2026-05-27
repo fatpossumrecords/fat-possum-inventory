@@ -567,11 +567,11 @@ window.whExportCSV = function() {
 
 // P-section definitions (pick bins)
 const WT_P_SECTIONS = [
-  {id:'P1',label:'P1',sub:'Vinyl & CD     Pick Aisle',type:'standard'},
-  {id:'P2',label:'P2',sub:'Vinyl & CD     Pick Aisle',type:'standard'},
-  {id:'P3',label:'P3',sub:'Apparel',                type:'p3'},
-  {id:'P4',label:'P4',sub:'Books',                  type:'p4'},
-  {id:'P5',label:'P5',sub:'7" Records',             type:'standard'},
+  {id:'P1',label:'P1',sub:'Vinyl & CD Pick Aisle',type:'p1'},
+  {id:'P2',label:'P2',sub:'Vinyl & CD Pick Aisle',type:'standard'},
+  {id:'P3',label:'P3',sub:'Apparel',              type:'p3'},
+  {id:'P4',label:'P4',sub:'Books',                type:'p4'},
+  {id:'P5',label:'P5',sub:'7" Records',           type:'p5'},
 ];
 
 // MW aisle definitions --- two halves per aisle
@@ -2766,125 +2766,231 @@ function locRenderPSection(def, binEntries, q, jumpTo) {
   const el = document.createElement('div');
   el.style.marginBottom = '28px';
   el.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
-    + def.label + '<span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);">' + (def.sub||'') + '</span></div>'
-    + '<div id="loc-pshelf-' + def.id + '" style="display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;"></div>';
-  const shelf = el.querySelector('#loc-pshelf-' + def.id);
+    + def.label + '<span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);">' + (def.sub||'') + '</span></div>';
 
+  // P4: single numbered column
   if (def.type === 'p4') {
-    // P4: single column of numbered slots
+    const shelf = document.createElement('div');
+    shelf.style.cssText = 'display:flex;gap:4px;align-items:flex-start;';
     const col = document.createElement('div');
     col.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
-    col.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">P4</div>';
     const maxLvl = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 6;
     const lu = {}; binEntries.forEach(function(b){ lu[b.parsed.level] = b.locName; });
-    for (let l = 1; l <= maxLvl; l++) {
-      col.appendChild(locMakePBinEl(lu[l] || null, 'P4-' + String(l).padStart(2,'0'), q, jumpTo));
+    for (var l = 1; l <= maxLvl; l++) {
+      col.appendChild(locMakePBinEl(lu[l]||null, 'P4-'+String(l).padStart(2,'0'), q, jumpTo, false));
     }
     shelf.appendChild(col);
-  } else {
-    // Standard P section (P1, P2, P5) and P3
+    el.appendChild(shelf);
+    return el;
+  }
+
+  // P5: rows are letters, columns are numbers (01-04)
+  if (def.type === 'p5') {
+    const shelf = document.createElement('div');
+    shelf.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+    const lu = {};
+    binEntries.forEach(function(b){ lu[b.parsed.col+'-'+String(b.parsed.level).padStart(2,'0')] = b.locName; });
+    const rows = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
+    const maxNum = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 4;
+    for (var ri = 0; ri < rows.length; ri++) {
+      var rowLetter = rows[ri];
+      var rowEl = document.createElement('div');
+      rowEl.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      rowEl.innerHTML = '<div style="font-family:monospace;font-size:10px;font-weight:700;color:var(--text-muted);width:14px;text-align:right;flex-shrink:0;">' + rowLetter + '</div>';
+      for (var num = 1; num <= maxNum; num++) {
+        var key = rowLetter + '-' + String(num).padStart(2,'0');
+        rowEl.appendChild(locMakePBinEl(lu[key]||null, def.id+'-'+rowLetter+'-'+String(num).padStart(2,'0'), q, jumpTo, false));
+      }
+      shelf.appendChild(rowEl);
+    }
+    el.appendChild(shelf);
+    return el;
+  }
+
+  // P1: columns A, AA, AB, AC, AD — AC/AD have sub-slots on some levels
+  if (def.type === 'p1') {
+    const shelf = document.createElement('div');
+    shelf.style.cssText = 'display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;';
+    const lu = {}, luSub = {};
+    binEntries.forEach(function(b){
+      if (b.parsed.sub) luSub[b.parsed.col+'-'+b.parsed.level+'-'+b.parsed.sub] = b.locName;
+      else lu[b.parsed.col+'-'+b.parsed.level] = b.locName;
+    });
     const cols = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
     const maxLvl = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 7;
-    const lu = {}; binEntries.forEach(function(b){
-      var key = def.type === 'p3' ? b.parsed.col+'-'+b.parsed.level+'-'+(b.parsed.sub||'A') : b.parsed.col+'-'+b.parsed.level;
-      lu[key] = b.locName;
-    });
-    for (const col of cols) {
-      const up = document.createElement('div');
-      const isLast = col === cols[cols.length-1];
-      up.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast?'':'border-right:2px solid var(--border);');
-      up.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:1px;">' + col + '</div>';
-      for (let l = 1; l <= maxLvl; l++) {
-        if (def.type === 'p3') {
-          const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:2px;';
-          ['A','B','C','D'].forEach(function(s) {
-            var locName = lu[col+'-'+l+'-'+s] || null;
-            var defName = def.id + '-' + col + '-' + String(l).padStart(2,'0') + '-' + s;
-            row.appendChild(locMakePBinEl(locName, defName, q, jumpTo, true));
+
+    for (var ci = 0; ci < cols.length; ci++) {
+      var col = cols[ci];
+      var isLast = col === cols[cols.length-1];
+      var colEl = document.createElement('div');
+      colEl.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast?'':'border-right:2px solid var(--border);');
+      colEl.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">' + col + '</div>';
+      for (var l = 1; l <= maxLvl; l++) {
+        // Check if this level has sub-slots
+        var subKeys = ['A','B','C'].filter(function(s){ return luSub[col+'-'+l+'-'+s]; });
+        if (subKeys.length) {
+          var subRow = document.createElement('div'); subRow.style.cssText = 'display:flex;gap:2px;';
+          ['A','B','C'].forEach(function(s){
+            var ln = luSub[col+'-'+l+'-'+s]||null;
+            subRow.appendChild(locMakePBinEl(ln, def.id+'-'+col+'-'+String(l).padStart(2,'0')+'-'+s, q, jumpTo, true));
           });
-          if (row.children.length) up.appendChild(row);
+          colEl.appendChild(subRow);
         } else {
-          var locName = lu[col+'-'+l] || null;
-          var defName = def.id + '-' + col + '-' + String(l).padStart(2,'0');
-          up.appendChild(locMakePBinEl(locName, defName, q, jumpTo, false));
+          var ln = lu[col+'-'+l]||null;
+          colEl.appendChild(locMakePBinEl(ln, def.id+'-'+col+'-'+String(l).padStart(2,'0'), q, jumpTo, false));
         }
       }
-      shelf.appendChild(up);
+      shelf.appendChild(colEl);
     }
+    el.appendChild(shelf);
+    return el;
   }
+
+  // P3: columns A-M, sub-slots A-D per level. Render in two rows: A-H and I-M.
+  // Collapse sub-slots that have zero active items.
+  if (def.type === 'p3') {
+    const lu = {};
+    binEntries.forEach(function(b){ lu[b.parsed.col+'-'+b.parsed.level+'-'+(b.parsed.sub||'A')] = b.locName; });
+    const allCols = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
+    const maxLvl = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 7;
+
+    // Find which sub-slots actually have data across all levels/cols
+    const activeSubs = new Set();
+    binEntries.forEach(function(b){ if(b.parsed.sub) activeSubs.add(b.parsed.sub); });
+    const subsToShow = ['A','B','C','D'].filter(function(s){ return activeSubs.has(s); });
+
+    function renderP3Row(cols, rowLabel) {
+      if (!cols.length) return null;
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-bottom:12px;';
+      if (rowLabel) {
+        var lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:10px;color:var(--text-dim);margin-bottom:6px;font-family:monospace;';
+        lbl.textContent = rowLabel;
+        wrap.appendChild(lbl);
+      }
+      var shelf = document.createElement('div');
+      shelf.style.cssText = 'display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:4px;';
+      for (var ci = 0; ci < cols.length; ci++) {
+        var col = cols[ci];
+        var isLast = col === cols[cols.length-1];
+        var colEl = document.createElement('div');
+        colEl.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast?'':'border-right:2px solid var(--border);');
+        colEl.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">' + col + '</div>';
+        for (var l = 1; l <= maxLvl; l++) {
+          var subRow = document.createElement('div'); subRow.style.cssText = 'display:flex;gap:2px;';
+          var hasSomething = false;
+          subsToShow.forEach(function(s){
+            var ln = lu[col+'-'+l+'-'+s]||null;
+            if (ln) hasSomething = true;
+            subRow.appendChild(locMakePBinEl(ln, 'P3-'+col+'-'+String(l).padStart(2,'0')+'-'+s, q, jumpTo, true));
+          });
+          if (hasSomething) colEl.appendChild(subRow);
+        }
+        if (colEl.children.length > 1) shelf.appendChild(colEl); // >1 = has content beyond header
+      }
+      if (shelf.children.length) { wrap.appendChild(shelf); return wrap; }
+      return null;
+    }
+
+    var rowAH = allCols.filter(function(c){ return wtColKey(c) <= wtColKey('H'); });
+    var rowIM = allCols.filter(function(c){ return wtColKey(c) > wtColKey('H'); });
+    var r1 = renderP3Row(rowAH, allCols.length > 8 ? 'A – H' : null);
+    var r2 = renderP3Row(rowIM, 'I – M');
+    if (r1) el.appendChild(r1);
+    if (r2) el.appendChild(r2);
+    return el;
+  }
+
+  // Standard (P2)
+  const shelf = document.createElement('div');
+  shelf.style.cssText = 'display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;';
+  const cols = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
+  const maxLvl2 = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 7;
+  const lu2 = {}; binEntries.forEach(function(b){ lu2[b.parsed.col+'-'+b.parsed.level] = b.locName; });
+  for (var ci2 = 0; ci2 < cols.length; ci2++) {
+    var col2 = cols[ci2];
+    var isLast2 = col2 === cols[cols.length-1];
+    var colEl2 = document.createElement('div');
+    colEl2.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast2?'':'border-right:2px solid var(--border);');
+    colEl2.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">' + col2 + '</div>';
+    for (var l2 = 1; l2 <= maxLvl2; l2++) {
+      var ln2 = lu2[col2+'-'+l2]||null;
+      colEl2.appendChild(locMakePBinEl(ln2, def.id+'-'+col2+'-'+String(l2).padStart(2,'0'), q, jumpTo, false));
+    }
+    shelf.appendChild(colEl2);
+  }
+  el.appendChild(shelf);
   return el;
 }
 
-// Build a single P bin cell for locations view
+// Single P bin cell — plain readable colors
 function locMakePBinEl(locName, defaultName, q, jumpTo, isSub) {
   const el       = document.createElement('div');
   const items    = locName ? (LocState.locMap[locName] || []) : [];
   const hasItems = items.length > 0;
-  const displayName = locName || defaultName;
-  const safeId   = displayName.replace(/[^a-z0-9]/gi, '-');
-  const isJump   = displayName === jumpTo;
-  const hasMatch = q && hasItems && items.some(function(i) {
+  const display  = locName || defaultName;
+  const safeId   = display.replace(/[^a-z0-9]/gi, '-');
+  const isJump   = display === jumpTo;
+  const hasMatch = q && hasItems && items.some(function(i){
     return i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
            i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q);
   });
-  const totalQty = items.reduce(function(s, i) { return s + i.qty; }, 0);
-  const w = isSub ? '28px' : '56px';
+  const totalQty = items.reduce(function(s,i){ return s+i.qty; }, 0);
+  const w = isSub ? '32px' : '64px';
 
-  let bg, border, nameColor;
-  if (!hasItems)   { bg='var(--surface2)'; border='1px solid var(--border)'; nameColor='var(--text-dim)'; }
-  else if (isJump) { bg='var(--accent)'; border='2px solid var(--accent)'; nameColor='#fff'; }
-  else if (hasMatch){ bg='#fef3c7'; border='2px solid #f59e0b'; nameColor='#92400e'; }
-  else             { bg='#14532d'; border='1px solid #16a34a'; nameColor='#86efac'; }
+  var bg, border, nameCol, qtyCol;
+  if (!hasItems)    { bg='var(--surface2)'; border='1px solid var(--border)';      nameCol='var(--text-dim)'; qtyCol=''; }
+  else if (isJump)  { bg='var(--accent)';   border='2px solid var(--accent)';      nameCol='#fff';           qtyCol='#fff'; }
+  else if (hasMatch){ bg='#fef3c7';         border='2px solid #f59e0b';            nameCol='#92400e';        qtyCol='#b45309'; }
+  else              { bg='var(--surface)';  border='1.5px solid var(--green)';     nameCol='var(--text)';    qtyCol='var(--green)'; }
 
-  el.id = hasItems ? ('loc-cell-' + safeId) : '';
-  el.style.cssText = 'width:' + w + ';min-height:42px;border-radius:4px;padding:3px 4px;text-align:center;cursor:' + (hasItems?'pointer':'default') + ';background:' + bg + ';border:' + border + ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:opacity 0.15s;';
-  if (hasItems) { el.onmouseover = function(){ el.style.opacity='0.8'; }; el.onmouseout = function(){ el.style.opacity='1'; }; el.onclick = function(){ locToggleCell(displayName); }; }
-  el.innerHTML = '<div style="font-family:monospace;font-size:' + (isSub?'8px':'10px') + ';font-weight:700;color:' + nameColor + ';white-space:nowrap;overflow:hidden;">' + locEsc(displayName) + '</div>'
-    + (hasItems ? '<div style="font-family:monospace;font-size:13px;font-weight:900;color:' + (isJump?'#fff':hasMatch?'#92400e':'#86efac') + ';">' + totalQty + '</div>' : '');
+  el.style.cssText = 'width:'+w+';min-height:48px;border-radius:4px;padding:4px 3px;text-align:center;'
+    + 'cursor:'+(hasItems?'pointer':'default')+';background:'+bg+';border:'+border+';'
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:opacity 0.15s;';
+  if (hasItems) {
+    el.id = 'loc-cell-'+safeId;
+    el.onmouseover = function(){ el.style.opacity='0.75'; };
+    el.onmouseout  = function(){ el.style.opacity='1'; };
+    el.onclick     = function(){ locToggleCell(display); };
+  }
+  el.innerHTML = '<div style="font-family:monospace;font-size:'+(isSub?'8px':'10px')+';font-weight:700;color:'+nameCol+';white-space:nowrap;overflow:hidden;max-width:100%;">' + locEsc(display) + '</div>'
+    + (hasItems ? '<div style="font-family:monospace;font-size:'+(isSub?'12px':'14px')+';font-weight:900;color:'+qtyCol+';">'+totalQty+'</div>' : '');
   return el;
 }
 
-// Build a single MW shelf cell for locations view
+// Single MW shelf cell — plain readable colors
 function locMakeMWCell(locName, defaultName, q, jumpTo) {
-  const el = document.createElement('div');
+  const el       = document.createElement('div');
   const items    = locName ? (LocState.locMap[locName] || []) : [];
   const hasItems = items.length > 0;
-  const isJump   = locName === jumpTo;
-  const hasMatch = q && hasItems && items.some(function(i) {
+  const display  = locName || defaultName;
+  const safeId   = display.replace(/[^a-z0-9]/gi, '-');
+  const isJump   = display === jumpTo;
+  const hasMatch = q && hasItems && items.some(function(i){
     return i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
            i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q);
   });
-  const totalQty = items.reduce(function(s, i) { return s + i.qty; }, 0);
-  const displayName = locName || defaultName;
-  const safeId = displayName.replace(/[^a-z0-9]/gi, '-');
+  const totalQty = items.reduce(function(s,i){ return s+i.qty; }, 0);
 
-  let bg, border, nameColor, qtyStr;
-  if (!hasItems) {
-    bg = 'var(--surface2)'; border = '1px solid var(--border)';
-    nameColor = 'var(--text-dim)'; qtyStr = '';
-  } else if (isJump) {
-    bg = 'var(--accent)'; border = '2px solid var(--accent)';
-    nameColor = '#fff'; qtyStr = '<div style="font-size:13px;font-weight:900;font-family:\'DM Mono\',monospace;color:#fff;">' + totalQty + '</div>';
-  } else if (hasMatch) {
-    bg = '#fef3c7'; border = '2px solid #f59e0b';
-    nameColor = '#92400e'; qtyStr = '<div style="font-size:13px;font-weight:900;font-family:\'DM Mono\',monospace;color:#92400e;">' + totalQty + '</div>';
-  } else {
-    bg = '#1e3a5f'; border = '1px solid #2563eb';
-    nameColor = '#93c5fd'; qtyStr = '<div style="font-size:13px;font-weight:900;font-family:\'DM Mono\',monospace;color:#fff;">' + totalQty + '</div>';
-  }
+  var bg, border, nameCol, qtyCol, skuCol;
+  if (!hasItems)    { bg='var(--surface2)'; border='1px solid var(--border)';   nameCol='var(--text-dim)'; qtyCol=''; skuCol=''; }
+  else if (isJump)  { bg='var(--accent)';   border='2px solid var(--accent)';   nameCol='#fff';           qtyCol='#fff'; skuCol='rgba(255,255,255,0.7)'; }
+  else if (hasMatch){ bg='#fef3c7';         border='2px solid #f59e0b';         nameCol='#92400e';        qtyCol='#b45309'; skuCol='#92400e'; }
+  else              { bg='var(--surface)';  border='1.5px solid var(--accent)'; nameCol='var(--text)';    qtyCol='var(--accent)'; skuCol='var(--text-muted)'; }
 
-  el.style.cssText = 'width:64px;min-height:46px;border-radius:4px;padding:4px 5px;text-align:center;cursor:' + (hasItems?'pointer':'default') + ';background:' + bg + ';border:' + border + ';transition:opacity 0.15s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;';
-  if (hasItems) { el.onmouseover = function() { el.style.opacity='0.8'; }; el.onmouseout = function() { el.style.opacity='1'; }; }
-  el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:' + nameColor + ';white-space:nowrap;">' + locEsc(displayName) + '</div>'
-    + (hasItems ? ('<div style="font-size:9px;color:' + (isJump?'rgba(255,255,255,0.7)':'var(--text-dim)') + ';">' + items.length + ' SKU' + (items.length!==1?'s':'') + '</div>') : '')
-    + qtyStr;
-
+  el.style.cssText = 'width:72px;min-height:52px;border-radius:4px;padding:5px 4px;text-align:center;'
+    + 'cursor:'+(hasItems?'pointer':'default')+';background:'+bg+';border:'+border+';'
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:opacity 0.15s;';
   if (hasItems) {
-    el.onclick = function() { locToggleCell(displayName); };
-    // Also add expand div
-    el.id = 'loc-cell-' + safeId;
+    el.id = 'loc-cell-'+safeId;
+    el.onmouseover = function(){ el.style.opacity='0.75'; };
+    el.onmouseout  = function(){ el.style.opacity='1'; };
+    el.onclick     = function(){ locToggleCell(display); };
   }
-
+  el.innerHTML = '<div style="font-family:monospace;font-size:10px;font-weight:700;color:'+nameCol+';white-space:nowrap;">' + locEsc(display) + '</div>'
+    + (hasItems ? '<div style="font-size:9px;color:'+skuCol+';">'+items.length+' SKU'+(items.length!==1?'s':'')+'</div>' : '')
+    + (hasItems ? '<div style="font-family:monospace;font-size:15px;font-weight:900;color:'+qtyCol+';">'+totalQty+'</div>' : '');
   return el;
 }
 
