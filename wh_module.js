@@ -3254,4 +3254,12 @@ window.locJumpToLocation = function(locName) {
 function locEsc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// On first load, ensure Locations tab state is correct (title, config hidden, prompt shown)
+document.addEventListener('DOMContentLoaded', function() {
+  // Use a short delay so app.js finishes its own init first
+  setTimeout(function() {
+    if (typeof switchWHTab === 'function') switchWHTab('locations');
+  }, 200);
+});
 // END LOCATIONS MODULE
