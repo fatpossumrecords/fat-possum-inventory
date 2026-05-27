@@ -2539,9 +2539,24 @@ const LocState = {
 };
 
 // ── INIT ───────────────────────────────────────────────────────
-window.locInit = async function() {
+window.locInit = async function(forceReload) {
   if (LocState.loading) return;
-  if (LocState.loaded) { locRender(); return; }
+  // If already loaded and not forcing reload, just render
+  if (LocState.loaded && !forceReload) { locRender(); return; }
+  // If first visit (not yet loaded), show prompt rather than auto-fetching
+  // This avoids competing with app startup Packiyo calls
+  if (!LocState.loaded && !forceReload) {
+    const area   = document.getElementById('loc-content-area');
+    const status = document.getElementById('loc-status');
+    if (area) area.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;">'
+      + '<div style="font-size:32px;margin-bottom:16px;">📍</div>'
+      + '<div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px;">Location data not loaded</div>'
+      + '<div style="font-size:12px;margin-bottom:20px;">Click Load Locations to fetch current inventory from Packiyo.</div>'
+      + '<button onclick="locInit(true)" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;">⟳ Load Locations</button>'
+      + '</div>';
+    if (status) status.textContent = '';
+    return;
+  }
   LocState.loading = true;
   const status = document.getElementById('loc-status');
   const area   = document.getElementById('loc-content-area');
@@ -2659,7 +2674,7 @@ function locRender() {
 window.locReload = function() {
   LocState.loaded  = false;
   LocState.loading = false;
-  locInit();
+  locInit(true);
 };
 
 // ── PRODUCT SEARCH VIEW ────────────────────────────────────────
