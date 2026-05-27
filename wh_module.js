@@ -2695,22 +2695,12 @@ function locRenderProduct() {
     const otherL   = p.locations.filter(l => !l.name.startsWith('MW-') && !/^P\d/i.test(l.name) && !whIsNowLoc(l.name));
 
     function locPill(l, type) {
-      const colors = {
-        mw:    { bg: '#1e3a5f', border: '#2563eb', label: '#93c5fd', qty: '#fff' },
-        pick:  { bg: '#14532d', border: '#16a34a', label: '#86efac', qty: '#fff' },
-        now:   { bg: '#78350f', border: '#f59e0b', label: '#fcd34d', qty: '#fff' },
-        other: { bg: 'var(--surface2)', border: 'var(--border2)', label: 'var(--text)', qty: 'var(--accent)' },
-      };
-      const c = colors[type] || colors.other;
-      return `<span onclick="locJumpToLocation('${locEsc(l.name)}')"
-        style="display:inline-flex;align-items:center;gap:0;cursor:pointer;
-        background:${c.bg};border:1px solid ${c.border};border-radius:6px;
-        overflow:hidden;margin:3px;transition:opacity 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"
-        onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1"
-        title="View on shelf map">
-        <span style="padding:5px 10px;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${c.label};letter-spacing:0.3px;">${locEsc(l.name)}</span>
-        <span style="padding:5px 10px;background:rgba(255,255,255,0.12);font-family:'DM Mono',monospace;font-size:14px;font-weight:900;color:${c.qty};border-left:1px solid rgba(255,255,255,0.15);">${l.qty}</span>
-      </span>`;
+      var accent = type === 'now' ? '#f59e0b' : type === 'pick' ? 'var(--green)' : 'var(--accent)';
+      var name   = locEsc(l.name);
+      return '<span onclick="locJumpToLocation(\'' + name + '\')" style="display:inline-flex;align-items:center;gap:0;cursor:pointer;background:var(--surface);border:1.5px solid ' + accent + ';border-radius:6px;overflow:hidden;margin:3px;transition:opacity 0.15s;" onmouseover="this.style.opacity=0.75" onmouseout="this.style.opacity=1" title="View on shelf map">'
+        + '<span style="padding:5px 12px;font-family:monospace;font-size:13px;font-weight:700;color:var(--text);">' + name + '</span>'
+        + '<span style="padding:5px 12px;background:' + accent + ';font-family:monospace;font-size:15px;font-weight:900;color:#fff;">' + l.qty + '</span>'
+        + '</span>';
     }
 
     function locGroup(locs, type, label) {
@@ -2754,6 +2744,89 @@ function locRenderProduct() {
     <div style="font-size:11px;color:var(--text-muted);padding:4px 16px;">${results.length} result${results.length !== 1 ? 's' : ''}${results.length === 50 ? ' (showing first 50)' : ''}</div>
     ${cards}
   </div>`;
+}
+
+// Render a P section for the Locations shelf map (mirrors wtRenderPSection/wtRenderStandardShelf)
+function locRenderPSection(def, binEntries, q, jumpTo) {
+  const el = document.createElement('div');
+  el.style.marginBottom = '28px';
+  el.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
+    + def.label + '<span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);">' + (def.sub||'') + '</span></div>'
+    + '<div id="loc-pshelf-' + def.id + '" style="display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;"></div>';
+  const shelf = el.querySelector('#loc-pshelf-' + def.id);
+
+  if (def.type === 'p4') {
+    // P4: single column of numbered slots
+    const col = document.createElement('div');
+    col.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
+    col.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">P4</div>';
+    const maxLvl = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 6;
+    const lu = {}; binEntries.forEach(function(b){ lu[b.parsed.level] = b.locName; });
+    for (let l = 1; l <= maxLvl; l++) {
+      col.appendChild(locMakePBinEl(lu[l] || null, 'P4-' + String(l).padStart(2,'0'), q, jumpTo));
+    }
+    shelf.appendChild(col);
+  } else {
+    // Standard P section (P1, P2, P5) and P3
+    const cols = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
+    const maxLvl = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 7;
+    const lu = {}; binEntries.forEach(function(b){
+      var key = def.type === 'p3' ? b.parsed.col+'-'+b.parsed.level+'-'+(b.parsed.sub||'A') : b.parsed.col+'-'+b.parsed.level;
+      lu[key] = b.locName;
+    });
+    for (const col of cols) {
+      const up = document.createElement('div');
+      const isLast = col === cols[cols.length-1];
+      up.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast?'':'border-right:2px solid var(--border);');
+      up.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:1px;">' + col + '</div>';
+      for (let l = 1; l <= maxLvl; l++) {
+        if (def.type === 'p3') {
+          const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:2px;';
+          ['A','B','C','D'].forEach(function(s) {
+            var locName = lu[col+'-'+l+'-'+s] || null;
+            var defName = def.id + '-' + col + '-' + String(l).padStart(2,'0') + '-' + s;
+            row.appendChild(locMakePBinEl(locName, defName, q, jumpTo, true));
+          });
+          if (row.children.length) up.appendChild(row);
+        } else {
+          var locName = lu[col+'-'+l] || null;
+          var defName = def.id + '-' + col + '-' + String(l).padStart(2,'0');
+          up.appendChild(locMakePBinEl(locName, defName, q, jumpTo, false));
+        }
+      }
+      shelf.appendChild(up);
+    }
+  }
+  return el;
+}
+
+// Build a single P bin cell for locations view
+function locMakePBinEl(locName, defaultName, q, jumpTo, isSub) {
+  const el       = document.createElement('div');
+  const items    = locName ? (LocState.locMap[locName] || []) : [];
+  const hasItems = items.length > 0;
+  const displayName = locName || defaultName;
+  const safeId   = displayName.replace(/[^a-z0-9]/gi, '-');
+  const isJump   = displayName === jumpTo;
+  const hasMatch = q && hasItems && items.some(function(i) {
+    return i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
+           i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q);
+  });
+  const totalQty = items.reduce(function(s, i) { return s + i.qty; }, 0);
+  const w = isSub ? '28px' : '56px';
+
+  let bg, border, nameColor;
+  if (!hasItems)   { bg='var(--surface2)'; border='1px solid var(--border)'; nameColor='var(--text-dim)'; }
+  else if (isJump) { bg='var(--accent)'; border='2px solid var(--accent)'; nameColor='#fff'; }
+  else if (hasMatch){ bg='#fef3c7'; border='2px solid #f59e0b'; nameColor='#92400e'; }
+  else             { bg='#14532d'; border='1px solid #16a34a'; nameColor='#86efac'; }
+
+  el.id = hasItems ? ('loc-cell-' + safeId) : '';
+  el.style.cssText = 'width:' + w + ';min-height:42px;border-radius:4px;padding:3px 4px;text-align:center;cursor:' + (hasItems?'pointer':'default') + ';background:' + bg + ';border:' + border + ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:opacity 0.15s;';
+  if (hasItems) { el.onmouseover = function(){ el.style.opacity='0.8'; }; el.onmouseout = function(){ el.style.opacity='1'; }; el.onclick = function(){ locToggleCell(displayName); }; }
+  el.innerHTML = '<div style="font-family:monospace;font-size:' + (isSub?'8px':'10px') + ';font-weight:700;color:' + nameColor + ';white-space:nowrap;overflow:hidden;">' + locEsc(displayName) + '</div>'
+    + (hasItems ? '<div style="font-family:monospace;font-size:13px;font-weight:900;color:' + (isJump?'#fff':hasMatch?'#92400e':'#86efac') + ';">' + totalQty + '</div>' : '');
+  return el;
 }
 
 // Build a single MW shelf cell for locations view
@@ -2931,18 +3004,16 @@ function locRenderShelf() {
     container.appendChild(aisleDiv);
   }
 
-  // ── Pick Bins (second) ──
+  // ── Pick Bins (second) -- use same stacked structure as walkthrough ──
   sectionHeader('Pick Bins', '24px');
   for (const def of WT_P_SECTIONS) {
     const bins = sortBins(pSectionBins[def.id] || []);
     if (!bins.length) continue;
-    const sec = document.createElement('div');
-    sec.style.cssText = 'margin-bottom:20px;';
-    sec.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">' + (def.label || def.id) + '</div>';
-    const grid = makeGrid();
-    bins.forEach(function(b) { grid.appendChild(buildCell(b.locName)); });
-    sec.appendChild(grid);
-    container.appendChild(sec);
+    // Build binEntries in the format wtRenderPSection expects but adapted for locMap
+    const binEntries = bins.map(function(b) {
+      return { locName: b.locName, parsed: b.parsed, items: (LocState.locMap[b.locName]||[]).map(function(i){ return {sku:i.sku,name:i.name,upc:i.upc,state:'ok',row:null}; }) };
+    });
+    container.appendChild(locRenderPSection(def, binEntries, q, jumpTo));
   }
 
   // North Warehouse
