@@ -88,13 +88,30 @@ window.switchWHTab = function(tab) {
     document.getElementById('wh-tabbtn-replen')?.classList.toggle('active',    tab === 'replenishment');
     document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',      tab === 'walkthrough');
     document.getElementById('wh-tabbtn-locations')?.classList.toggle('active', tab === 'locations');
+
+    // Update title + subtitle + config visibility per tab
+    const title  = document.getElementById('wh-main-title');
+    const sub    = document.getElementById('wh-main-sub');
+    const config = document.getElementById('wh-config');
+    if (tab === 'locations') {
+      if (title)  title.textContent = 'Locations';
+      if (sub)    sub.textContent   = 'FP Oxford warehouse location lookup';
+      if (config) config.style.display = 'none';
+    } else if (tab === 'replenishment') {
+      if (title)  title.textContent = 'FP Warehouse Replenishment';
+      if (sub)    sub.textContent   = 'Velocity-based pick bin replenishment suggestions';
+      if (config) config.style.display = '';
+    } else if (tab === 'walkthrough') {
+      if (title)  title.textContent = 'Warehouse View';
+      if (sub)    sub.textContent   = 'Visual bin layout — run replenishment first';
+      if (config) config.style.display = 'none';
+    }
+
     if (tab === 'replenishment' && window._FPUserSettings && window._FPUserSettings.replen) {
       if (window.applyReplenDefaults) applyReplenDefaults(window._FPUserSettings.replen);
     }
     if (tab === 'walkthrough') wtRender();
     if (tab === 'locations') locInit();
-    // Default to locations when switching to this view
-    if (!tab) locInit();
   }, 0);
 };
 
@@ -2671,24 +2688,43 @@ function locRenderProduct() {
   }
 
   const cards = results.map(p => {
-    const locBadges = p.locations.map(l => {
-      const isNow  = whIsNowLoc(l.name);
-      const bg     = isNow ? '#f59e0b' : 'var(--accent)';
-      const color  = '#fff';
+    // Sort locations: MW bulk first, then P pick bins, then NOW
+    const mwLocs   = p.locations.filter(l => l.name.startsWith('MW-'));
+    const pickLocs = p.locations.filter(l => /^P\d/i.test(l.name) && !whIsNowLoc(l.name));
+    const nowLocs2 = p.locations.filter(l => whIsNowLoc(l.name));
+    const otherL   = p.locations.filter(l => !l.name.startsWith('MW-') && !/^P\d/i.test(l.name) && !whIsNowLoc(l.name));
+
+    function locPill(l, type) {
+      const colors = {
+        mw:    { bg: '#1e3a5f', border: '#2563eb', label: '#93c5fd', qty: '#fff' },
+        pick:  { bg: '#14532d', border: '#16a34a', label: '#86efac', qty: '#fff' },
+        now:   { bg: '#78350f', border: '#f59e0b', label: '#fcd34d', qty: '#fff' },
+        other: { bg: 'var(--surface2)', border: 'var(--border2)', label: 'var(--text)', qty: 'var(--accent)' },
+      };
+      const c = colors[type] || colors.other;
       return `<span onclick="locJumpToLocation('${locEsc(l.name)}')"
-        style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;
-        background:${bg};color:${color};
-        padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;
-        font-family:'DM Mono',monospace;margin:3px;transition:opacity 0.15s;
-        box-shadow:0 1px 3px rgba(0,0,0,0.15);"
+        style="display:inline-flex;align-items:center;gap:0;cursor:pointer;
+        background:${c.bg};border:1px solid ${c.border};border-radius:6px;
+        overflow:hidden;margin:3px;transition:opacity 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"
         onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1"
         title="View on shelf map">
-        <span style="letter-spacing:0.3px;">${locEsc(l.name)}</span>
-        <span style="background:rgba(255,255,255,0.25);border-radius:4px;padding:1px 6px;font-size:13px;font-weight:900;">${l.qty}</span>
-        ${isNow ? '<span style="font-size:9px;opacity:0.8;background:rgba(0,0,0,0.15);border-radius:3px;padding:1px 4px;">NOW</span>' : ''}
+        <span style="padding:5px 10px;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${c.label};letter-spacing:0.3px;">${locEsc(l.name)}</span>
+        <span style="padding:5px 10px;background:rgba(255,255,255,0.12);font-family:'DM Mono',monospace;font-size:14px;font-weight:900;color:${c.qty};border-left:1px solid rgba(255,255,255,0.15);">${l.qty}</span>
       </span>`;
-    }).join('');
+    }
 
+    function locGroup(locs, type, label) {
+      if (!locs.length) return '';
+      return `<div style="margin-bottom:8px;">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px;">${label}</div>
+        <div style="display:flex;flex-wrap:wrap;">${locs.map(l => locPill(l, type)).join('')}</div>
+      </div>`;
+    }
+
+    const locBadges = locGroup(mwLocs, 'mw', 'Bulk (MW)')
+      + locGroup(pickLocs, 'pick', 'Pick Bins')
+      + locGroup(nowLocs2, 'now', 'North Warehouse (NOW)')
+      + locGroup(otherL, 'other', 'Other');
     const poBadge = p.hasPO
       ? '<span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px;">📦 PO Inbound</span>'
       : '';
@@ -2718,6 +2754,50 @@ function locRenderProduct() {
     <div style="font-size:11px;color:var(--text-muted);padding:4px 16px;">${results.length} result${results.length !== 1 ? 's' : ''}${results.length === 50 ? ' (showing first 50)' : ''}</div>
     ${cards}
   </div>`;
+}
+
+// Build a single MW shelf cell for locations view
+function locMakeMWCell(locName, defaultName, q, jumpTo) {
+  const el = document.createElement('div');
+  const items    = locName ? (LocState.locMap[locName] || []) : [];
+  const hasItems = items.length > 0;
+  const isJump   = locName === jumpTo;
+  const hasMatch = q && hasItems && items.some(function(i) {
+    return i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
+           i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q);
+  });
+  const totalQty = items.reduce(function(s, i) { return s + i.qty; }, 0);
+  const displayName = locName || defaultName;
+  const safeId = displayName.replace(/[^a-z0-9]/gi, '-');
+
+  let bg, border, nameColor, qtyStr;
+  if (!hasItems) {
+    bg = 'var(--surface2)'; border = '1px solid var(--border)';
+    nameColor = 'var(--text-dim)'; qtyStr = '';
+  } else if (isJump) {
+    bg = 'var(--accent)'; border = '2px solid var(--accent)';
+    nameColor = '#fff'; qtyStr = '<div style="font-size:13px;font-weight:900;font-family:\'DM Mono\',monospace;color:#fff;">' + totalQty + '</div>';
+  } else if (hasMatch) {
+    bg = '#fef3c7'; border = '2px solid #f59e0b';
+    nameColor = '#92400e'; qtyStr = '<div style="font-size:13px;font-weight:900;font-family:\'DM Mono\',monospace;color:#92400e;">' + totalQty + '</div>';
+  } else {
+    bg = '#1e3a5f'; border = '1px solid #2563eb';
+    nameColor = '#93c5fd'; qtyStr = '<div style="font-size:13px;font-weight:900;font-family:\'DM Mono\',monospace;color:#fff;">' + totalQty + '</div>';
+  }
+
+  el.style.cssText = 'width:64px;min-height:46px;border-radius:4px;padding:4px 5px;text-align:center;cursor:' + (hasItems?'pointer':'default') + ';background:' + bg + ';border:' + border + ';transition:opacity 0.15s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;';
+  if (hasItems) { el.onmouseover = function() { el.style.opacity='0.8'; }; el.onmouseout = function() { el.style.opacity='1'; }; }
+  el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;color:' + nameColor + ';white-space:nowrap;">' + locEsc(displayName) + '</div>'
+    + (hasItems ? ('<div style="font-size:9px;color:' + (isJump?'rgba(255,255,255,0.7)':'var(--text-dim)') + ';">' + items.length + ' SKU' + (items.length!==1?'s':'') + '</div>') : '')
+    + qtyStr;
+
+  if (hasItems) {
+    el.onclick = function() { locToggleCell(displayName); };
+    // Also add expand div
+    el.id = 'loc-cell-' + safeId;
+  }
+
+  return el;
 }
 
 // ── SHELF MAP VIEW ─────────────────────────────────────────────
@@ -2805,8 +2885,54 @@ function locRenderShelf() {
     });
   }
 
-  // Pick Bins
-  sectionHeader('Pick Bins', '0');
+  // ── MW Bulk Locations (first) ── rendered as stacked shelves like walkthrough
+  sectionHeader('MW Bulk Locations', '0');
+  for (const aisleDef of WT_MW_AISLES) {
+    const key  = 'MW-' + aisleDef.aisle;
+    const bins = sortBins(mwBins[key] || []);
+    if (!bins.length) continue;
+    const aisleDiv = document.createElement('div');
+    aisleDiv.style.cssText = 'margin-bottom:28px;';
+    aisleDiv.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:10px;">Aisle MW-' + aisleDef.aisle + '</div>';
+    const halvesRow = document.createElement('div');
+    halvesRow.style.cssText = 'display:flex;gap:24px;flex-wrap:wrap;';
+
+    // Build lookup: col-level -> locName
+    const lu = {};
+    for (const b of bins) {
+      const key2 = b.parsed.sub ? b.parsed.col + '-' + b.parsed.level + '-' + b.parsed.sub : b.parsed.col + '-' + b.parsed.level;
+      lu[key2] = b.locName;
+    }
+    const maxLvl = bins.length ? Math.max.apply(null, bins.map(function(b) { return b.parsed.level; })) : 6;
+
+    for (const half of aisleDef.halves) {
+      const letters = half.letters.split(',').map(function(s) { return s.trim(); });
+      const halfEl  = document.createElement('div');
+      halfEl.style.cssText = 'flex-shrink:0;';
+      halfEl.innerHTML = '<div style="font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:6px;font-family:\'DM Mono\',monospace;">' + half.label + '</div>';
+      const shelfEl = document.createElement('div');
+      shelfEl.style.cssText = 'display:flex;gap:4px;align-items:flex-start;';
+
+      for (const letter of letters) {
+        const col = document.createElement('div');
+        const isLast = letter === letters[letters.length - 1];
+        col.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast ? '' : 'border-right:2px solid var(--border);');
+        col.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;letter-spacing:1px;">' + letter + '</div>';
+        for (let l = 1; l <= maxLvl; l++) {
+          const locName = lu[letter + '-' + l] || null;
+          col.appendChild(locMakeMWCell(locName, 'MW-' + aisleDef.aisle + '-' + letter + l, q, jumpTo));
+        }
+        shelfEl.appendChild(col);
+      }
+      halfEl.appendChild(shelfEl);
+      halvesRow.appendChild(halfEl);
+    }
+    aisleDiv.appendChild(halvesRow);
+    container.appendChild(aisleDiv);
+  }
+
+  // ── Pick Bins (second) ──
+  sectionHeader('Pick Bins', '24px');
   for (const def of WT_P_SECTIONS) {
     const bins = sortBins(pSectionBins[def.id] || []);
     if (!bins.length) continue;
@@ -2817,33 +2943,6 @@ function locRenderShelf() {
     bins.forEach(function(b) { grid.appendChild(buildCell(b.locName)); });
     sec.appendChild(grid);
     container.appendChild(sec);
-  }
-
-  // MW Bulk Locations
-  sectionHeader('MW Bulk Locations', '24px');
-  for (const aisleDef of WT_MW_AISLES) {
-    const key  = 'MW-' + aisleDef.aisle;
-    const bins = sortBins(mwBins[key] || []);
-    if (!bins.length) continue;
-    const aisleDiv = document.createElement('div');
-    aisleDiv.style.cssText = 'margin-bottom:20px;';
-    aisleDiv.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Aisle ' + aisleDef.aisle + '</div>';
-    for (const half of aisleDef.halves) {
-      const halfLetters = half.letters.split(',').map(function(l) { return l.trim(); });
-      const halfBins = bins.filter(function(b) { return halfLetters.includes(b.parsed.col); });
-      if (!halfBins.length) continue;
-      const halfDiv = document.createElement('div');
-      halfDiv.style.cssText = 'margin-bottom:12px;';
-      const lbl = document.createElement('div');
-      lbl.style.cssText = 'font-size:10px;color:var(--text-dim);margin-bottom:6px;font-family:\'DM Mono\',monospace;';
-      lbl.textContent = half.label;
-      halfDiv.appendChild(lbl);
-      const grid = makeGrid();
-      halfBins.forEach(function(b) { grid.appendChild(buildCell(b.locName)); });
-      halfDiv.appendChild(grid);
-      aisleDiv.appendChild(halfDiv);
-    }
-    container.appendChild(aisleDiv);
   }
 
   // North Warehouse
@@ -2897,16 +2996,32 @@ function locBuildExpandedCell(locName, items, q) {
 
 // Toggle expand/collapse a shelf cell
 window.locToggleCell = function(locName) {
-  const safeId = locName.replace(/[^a-z0-9]/gi,'-');
-  const expandEl = document.getElementById('loc-expand-' + safeId);
+  const safeId   = locName.replace(/[^a-z0-9]/gi, '-');
+  const cellEl   = document.getElementById('loc-cell-' + safeId);
+  let expandEl   = document.getElementById('loc-expand-' + safeId);
+  const items    = LocState.locMap[locName] || [];
+  const q        = (LocState.searchQuery || '').toLowerCase().trim();
+
+  if (!expandEl && cellEl && items.length) {
+    // Create and insert expand div after the cell
+    expandEl = document.createElement('div');
+    expandEl.id = 'loc-expand-' + safeId;
+    expandEl.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin:4px 0;';
+    expandEl.innerHTML = locBuildExpandedCell(locName, items, q);
+    cellEl.parentNode.insertBefore(expandEl, cellEl.nextSibling);
+  }
+
   if (!expandEl) return;
   const isOpen = expandEl.style.display !== 'none';
   expandEl.style.display = isOpen ? 'none' : 'block';
-  const cellEl = document.getElementById('loc-cell-' + safeId);
   if (cellEl) {
-    cellEl.style.background = isOpen ? 'var(--surface2)' : 'var(--accent)';
-    cellEl.style.border     = isOpen ? '1px solid var(--border)' : '2px solid var(--accent)';
-    cellEl.querySelectorAll('div').forEach(d => d.style.color = isOpen ? '' : '#fff');
+    if (isOpen) {
+      cellEl.style.background = whIsNowLoc(locName) ? 'rgba(245,158,11,0.1)' : (items.length ? '#1e3a5f' : 'var(--surface2)');
+      cellEl.style.border     = whIsNowLoc(locName) ? '1px solid #f59e0b' : (items.length ? '1px solid #2563eb' : '1px solid var(--border)');
+    } else {
+      cellEl.style.background = 'var(--accent)';
+      cellEl.style.border     = '2px solid var(--accent)';
+    }
   }
 };
 
