@@ -581,7 +581,7 @@ const WT_MW_AISLES = [
   {aisle:'02', halves:[{letters:'A,B,C,D',label:'MW-02 A – D'},{letters:'H,G,F,E',label:'MW-02 H – E'}]},
   {aisle:'03', halves:[{letters:'A,B,C,D',label:'MW-03 A – D'},{letters:'H,G,F,E',label:'MW-03 H – E'}]},
   {aisle:'04', halves:[{letters:'A,B,C,D,E',label:'MW-04 A – E'},{letters:'J,I,H,G,F',label:'MW-04 J – F'}]},
-  {aisle:'05', halves:[{letters:'A,B,C,D',label:'MW-05 A – D'},{letters:'E,F,G,H,I,J',label:'MW-05 E – J'}]},
+  {aisle:'05', halves:[{letters:'A,B,C,D',label:'MW-05 A – D'},{letters:'J,I,H,G,F,E',label:'MW-05 J – E'}]},
   {aisle:'06', halves:[{letters:'A,B,C,D',label:'MW-06 A – D'},{letters:'E',label:'MW-06 E'}]},
 ];
 
