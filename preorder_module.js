@@ -14,6 +14,7 @@ const POState = {
   releasing:       {},
   expandedOrders:  {},
   tagFilters:      {},  // { campaignId: ['tag1','tag2'] }
+  holdFilters:     {},  // { campaignId: ['operator','date','allocation','address'] }
   searchTerms:     {},  // { campaignId: 'searchText' }
 };
 
@@ -320,6 +321,21 @@ function renderPreOrders() {
         poFilterInPlace(c.id);
       });
     });
+
+    // Hold type pill click handlers
+    const HOLD_KEYS = ['operator','date','allocation','address'];
+    HOLD_KEYS.forEach(function(hk) {
+      const pill = document.getElementById('po-hold-' + c.id + '-' + hk);
+      if (!pill) return;
+      pill.addEventListener('click', function() {
+        if (!POState.holdFilters) POState.holdFilters = {};
+        if (!POState.holdFilters[c.id]) POState.holdFilters[c.id] = [];
+        const idx = POState.holdFilters[c.id].indexOf(hk);
+        if (idx > -1) POState.holdFilters[c.id].splice(idx, 1);
+        else POState.holdFilters[c.id].push(hk);
+        poFilterInPlace(c.id);
+      });
+    });
   }
 }
 
@@ -407,13 +423,25 @@ function poCampaignCard(c) {
   const allTags = ALLOWED_TAGS.filter(t =>
     (orders || []).some(o => (o.tags || []).some(ot => ot.toLowerCase() === t.toLowerCase()))
   );
-  const activeTags   = (POState.tagFilters    || {})[c.id] || [];
-  const searchTerm   = (POState.searchTerms   || {})[c.id] || '';
+  const activeTags  = (POState.tagFilters  || {})[c.id] || [];
+  const activeHolds = (POState.holdFilters || {})[c.id] || [];
+  const searchTerm  = (POState.searchTerms || {})[c.id] || '';
   if (!POState.expandedOrders) POState.expandedOrders = {};
 
-  // Apply search + tag filter
+  // Hold type definitions
+  const HOLD_TYPES = [
+    { key: 'operator',   label: 'Operator Hold',   test: function(o){ return !!o.operatorHold; } },
+    { key: 'date',       label: 'Date Hold',        test: function(o){ return !!o.holdUntil; } },
+    { key: 'allocation', label: 'Allocation Hold',  test: function(o){ return !!o.allocationHold; } },
+    { key: 'address',    label: 'Address Hold',     test: function(o){ return !!o.addressHold; } },
+  ];
+  // Only show hold types that actually appear in the data
+  const activeHoldTypes = HOLD_TYPES.filter(function(h){ return (orders||[]).some(h.test); });
+
+  // Apply search + tag + hold filter
   const filteredOrders = orders.filter(o => {
     if (activeTags.length && !activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
+    if (activeHolds.length && !activeHolds.some(function(hk){ return HOLD_TYPES.find(function(h){ return h.key===hk; }).test(o); })) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       if (!o.orderNumber.toLowerCase().includes(term)) return false;
@@ -439,18 +467,27 @@ function poCampaignCard(c) {
       + poEsc(t) + '</span>'
     ).join('');
 
+    const holdPills = activeHoldTypes.map(function(h) {
+      const isActive = activeHolds.includes(h.key);
+      return '<span id="po-hold-' + c.id + '-' + h.key + '" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px;margin-bottom:4px;'
+        + (isActive ? 'background:var(--red);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
+        + poEsc(h.label) + '</span>';
+    }).join('');
+
     // Last refreshed timestamp
     const refreshedAt = (POState.ordersRefreshedAt || {})[c.id];
     const refreshedStr = refreshedAt
       ? 'Last refreshed ' + timeAgo(refreshedAt)
       : 'Not yet refreshed this session';
 
+    const hasFilters = activeTags.length || activeHolds.length || searchTerm;
     const filterBar = '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface2);">'
       + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(searchTerm) + '"'
       + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
-      + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + tagPills + '</div>' : '')
-      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (activeTags.length || searchTerm ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
-      + (activeTags.length || searchTerm ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
+      + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;border-right:1px solid var(--border2);padding-right:10px;margin-right:2px;">' + tagPills + '</div>' : '')
+      + (activeHoldTypes.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + holdPills + '</div>' : '')
+      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (hasFilters ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
+      + (hasFilters ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
       + '</div>';
 
     orderRowsHtml = filterBar
@@ -617,8 +654,10 @@ window.loadCampaignOrders = async function(campaign) {
         orderId:      o.id,
         orderNumber:  attrs.number || ('#' + o.id),
         createdAt:    attrs.ordered_at || attrs.created_at || '',
-        operatorHold: attrs.operator_hold || 0,
-        holdUntil:    attrs.hold_until || null,
+        operatorHold:    attrs.operator_hold || 0,
+        holdUntil:       attrs.hold_until || null,
+        allocationHold:  attrs.allocation_hold || 0,
+        addressHold:     attrs.address_hold || 0,
         statusText:   attrs.status_text || '',
         tags:         (attrs.tags || '').split(',').map(t => t.trim()).filter(Boolean),
         skus:         [...new Set(matchingSkus.map(s => {
@@ -870,24 +909,31 @@ document.addEventListener('click', e => {
 // ── IN-PLACE FILTER — updates order table without full re-render ──
 // Avoids losing focus on search input
 function poFilterInPlace(campaignId) {
-  const orders    = POState.orders[campaignId] || [];
-  const activeTags = (POState.tagFilters || {})[campaignId] || [];
-  const searchTerm = (POState.searchTerms || {})[campaignId] || '';
+  const orders      = POState.orders[campaignId] || [];
+  const activeTags  = (POState.tagFilters  || {})[campaignId] || [];
+  const activeHolds = (POState.holdFilters || {})[campaignId] || [];
+  const searchTerm  = (POState.searchTerms || {})[campaignId] || '';
+
+  const HOLD_TESTS = {
+    operator:   function(o){ return !!o.operatorHold; },
+    date:       function(o){ return !!o.holdUntil; },
+    allocation: function(o){ return !!o.allocationHold; },
+    address:    function(o){ return !!o.addressHold; },
+  };
 
   const filtered = orders.filter(o => {
     if (activeTags.length && !activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
+    if (activeHolds.length && !activeHolds.some(function(hk){ return HOLD_TESTS[hk] && HOLD_TESTS[hk](o); })) return false;
     if (searchTerm && !o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
 
   // Show/hide rows by toggling display
   const tbody = document.querySelector('#po-table-' + campaignId + ' tbody');
-  if (!tbody) { renderPreOrders(); return; } // table not rendered yet, do full render
+  if (!tbody) { renderPreOrders(); return; }
   const rows = [...tbody.querySelectorAll('tr[data-order-id]')];
 
-  // If we have fewer DOM rows than total orders, we need a full re-render
-  // to show all rows (tag filter may need rows not currently in DOM)
-  if (rows.length < orders.length && activeTags.length > 0) {
+  if (rows.length < orders.length && (activeTags.length > 0 || activeHolds.length > 0)) {
     POState.expandedOrders[campaignId] = true;
     renderPreOrders();
     return;
@@ -920,7 +966,8 @@ function poFilterInPlace(campaignId) {
   // Update count label
   const countEl = document.getElementById('po-filter-count-' + campaignId);
   if (countEl) {
-    countEl.textContent = (activeTags.length || searchTerm) ? filtered.length + ' of ' + orders.length + ' orders' : '';
+    const hasFilters = activeTags.length || activeHolds.length || searchTerm;
+    countEl.textContent = hasFilters ? filtered.length + ' of ' + orders.length + ' orders' : '';
   }
 
   // Update tag pill active states
@@ -930,6 +977,17 @@ function poFilterInPlace(campaignId) {
     if (!pill) return;
     pill.style.background = activeTags.includes(tag) ? 'var(--accent)' : 'var(--surface2)';
     pill.style.color      = activeTags.includes(tag) ? '#fff' : 'var(--text-muted)';
+    pill.style.border     = activeTags.includes(tag) ? 'none' : '1px solid var(--border2)';
+  });
+
+  // Update hold pill active states
+  const HOLD_KEYS = ['operator','date','allocation','address'];
+  HOLD_KEYS.forEach(function(hk) {
+    const pill = document.getElementById('po-hold-' + campaignId + '-' + hk);
+    if (!pill) return;
+    pill.style.background = activeHolds.includes(hk) ? 'var(--red)' : 'var(--surface2)';
+    pill.style.color      = activeHolds.includes(hk) ? '#fff' : 'var(--text-muted)';
+    pill.style.border     = activeHolds.includes(hk) ? 'none' : '1px solid var(--border2)';
   });
 }
 
