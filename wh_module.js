@@ -3257,9 +3257,14 @@ function locEsc(s) {
 
 // On first load, ensure Locations tab state is correct (title, config hidden, prompt shown)
 document.addEventListener('DOMContentLoaded', function() {
-  // Use a short delay so app.js finishes its own init first
   setTimeout(function() {
-    if (typeof switchWHTab === 'function') switchWHTab('locations');
+    if (typeof switchWHTab === 'function') {
+      // On mobile/tablet, auto-navigate to Locations
+      if (window.innerWidth <= 1024) {
+        if (typeof switchView === 'function') switchView('replenishment');
+      }
+      switchWHTab('locations');
+    }
   }, 200);
 });
 // END LOCATIONS MODULE
