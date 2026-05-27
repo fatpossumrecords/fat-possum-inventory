@@ -443,18 +443,16 @@ td { overflow: hidden; }
   /* Hide all nav items by default on mobile */
   nav .nav-item { display: none !important; }
 
-  /* Show only: Dashboard, Inventory, Alerts, FP WH Action */
-  nav .nav-item[data-view="dashboard"],
-  nav .nav-item[data-view="inventory"],
-  nav .nav-item[data-view="alerts"],
-  nav .nav-item:not([data-view]):not(.nav-sub-item) { display: flex !important; }
+  /* Show only the Locations (WH) parent item — it has no data-view */
+  /* We'll use #wh-nav-sub sub items exclusively */
+  nav .nav-item:not([data-view]):not(.nav-sub-item):not(#mobile-settings-btn) { display: none !important; }
 
-  /* WH Action toggle (no data-view, uses onclick) */
-  #sidebar > nav + div,
-  #sidebar .nav-item:nth-child(5) { display: flex !important; }
+  /* Bottom nav: Locations + Replenishment + Settings only */
+  #mobile-loc-btn, #mobile-replen-btn { display: flex !important; }
 
   /* Settings button — always visible on mobile */
   #mobile-settings-btn { display: flex !important; }
+
 
   .nav-item {
     flex-direction: column; gap: 2px;
@@ -671,6 +669,33 @@ td { overflow: hidden; }
   #mfg-nav-sub, .wh-nav-sub { display: none !important; }
   .dash-section { padding: 10px 12px; }
   .dash-table { font-size: 11px; }
+}
+
+/* ── TABLET (769px–1024px): sidebar visible, Locations + Replenishment only ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Hide all nav items except the Locations (WH) parent and its sub-items, and Settings */
+  nav .nav-item[data-view="dashboard"],
+  nav .nav-item[data-view="inventory"],
+  nav .nav-item[data-view="movements"],
+  nav .nav-item[data-view="manufacturing"],
+  nav .nav-item[data-view="alerts"] { display: none !important; }
+
+  #inv-nav-sub, #mfg-nav-sub { display: none !important; }
+
+  /* Hide FP Oxford items except Locations (WH) */
+  #sidebar .nav-item:not([data-view]):not(.nav-sub-item):not(#mobile-settings-btn):not(#mobile-loc-btn):not(#mobile-replen-btn) { display: none !important; }
+
+  /* Show the WH parent + its sub items */
+  .nav-item[onclick*="toggleWHNav"] { display: flex !important; }
+  #wh-nav-sub { display: block !important; }
+  #wh-nav-sub .nav-sub-item { display: flex !important; }
+
+  /* Show mobile nav buttons too (they double as sidebar items on tablet) */
+  #mobile-loc-btn, #mobile-replen-btn { display: none !important; }
+  #mobile-settings-btn { display: flex !important; }
+
+  /* Auto-open the WH sub-nav */
+  #wh-nav-sub { display: block !important; }
 }
 
 /* ── MFG TABS ── */
