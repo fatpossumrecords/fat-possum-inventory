@@ -2807,42 +2807,61 @@ function locRenderPSection(def, binEntries, q, jumpTo) {
     return el;
   }
 
-  // P1: columns A, AA, AB, AC, AD — AC/AD have sub-slots on some levels
+  // P1: columns A-Z, AA, AB, AC, AD — split A-Q top row, R-Z+AA-AD bottom row
   if (def.type === 'p1') {
-    const shelf = document.createElement('div');
-    shelf.style.cssText = 'display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;';
     const lu = {}, luSub = {};
     binEntries.forEach(function(b){
       if (b.parsed.sub) luSub[b.parsed.col+'-'+b.parsed.level+'-'+b.parsed.sub] = b.locName;
       else lu[b.parsed.col+'-'+b.parsed.level] = b.locName;
     });
-    const cols = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
+    const allCols = [...new Set(binEntries.map(function(b){ return b.parsed.col; }))].sort(function(a,b){ return wtColKey(a)-wtColKey(b); });
     const maxLvl = binEntries.length ? Math.max.apply(null, binEntries.map(function(b){ return b.parsed.level; })) : 7;
 
-    for (var ci = 0; ci < cols.length; ci++) {
-      var col = cols[ci];
-      var isLast = col === cols[cols.length-1];
-      var colEl = document.createElement('div');
-      colEl.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast?'':'border-right:2px solid var(--border);');
-      colEl.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">' + col + '</div>';
-      for (var l = 1; l <= maxLvl; l++) {
-        // Check if this level has sub-slots
-        var subKeys = ['A','B','C'].filter(function(s){ return luSub[col+'-'+l+'-'+s]; });
-        if (subKeys.length) {
-          var subRow = document.createElement('div'); subRow.style.cssText = 'display:flex;gap:2px;';
-          ['A','B','C'].forEach(function(s){
-            var ln = luSub[col+'-'+l+'-'+s]||null;
-            subRow.appendChild(locMakePBinEl(ln, def.id+'-'+col+'-'+String(l).padStart(2,'0')+'-'+s, q, jumpTo, true));
-          });
-          colEl.appendChild(subRow);
-        } else {
-          var ln = lu[col+'-'+l]||null;
-          colEl.appendChild(locMakePBinEl(ln, def.id+'-'+col+'-'+String(l).padStart(2,'0'), q, jumpTo, false));
-        }
+    function renderP1Cols(cols, rowLabel) {
+      if (!cols.length) return null;
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-bottom:14px;';
+      if (rowLabel) {
+        var lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:10px;color:var(--text-dim);margin-bottom:6px;font-family:monospace;';
+        lbl.textContent = rowLabel;
+        wrap.appendChild(lbl);
       }
-      shelf.appendChild(colEl);
+      var shelf = document.createElement('div');
+      shelf.style.cssText = 'display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:4px;';
+      for (var ci = 0; ci < cols.length; ci++) {
+        var col = cols[ci];
+        var isLast = col === cols[cols.length-1];
+        var colEl = document.createElement('div');
+        colEl.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;padding-right:8px;margin-right:4px;' + (isLast?'':'border-right:2px solid var(--border);');
+        colEl.innerHTML = '<div style="font-family:monospace;font-size:9px;color:var(--text-dim);font-weight:700;text-align:center;margin-bottom:4px;">' + col + '</div>';
+        for (var l = 1; l <= maxLvl; l++) {
+          var subKeys = ['A','B','C'].filter(function(s){ return luSub[col+'-'+l+'-'+s]; });
+          if (subKeys.length) {
+            var subRow = document.createElement('div'); subRow.style.cssText = 'display:flex;gap:2px;';
+            ['A','B','C'].forEach(function(s){
+              var ln = luSub[col+'-'+l+'-'+s]||null;
+              subRow.appendChild(locMakePBinEl(ln, def.id+'-'+col+'-'+String(l).padStart(2,'0')+'-'+s, q, jumpTo, true));
+            });
+            colEl.appendChild(subRow);
+          } else {
+            var ln = lu[col+'-'+l]||null;
+            colEl.appendChild(locMakePBinEl(ln, def.id+'-'+col+'-'+String(l).padStart(2,'0'), q, jumpTo, false));
+          }
+        }
+        shelf.appendChild(colEl);
+      }
+      wrap.appendChild(shelf);
+      return wrap;
     }
-    el.appendChild(shelf);
+
+    // Split: A-Q top, R-Z + AA-AD bottom
+    var colsTop = allCols.filter(function(c){ return wtColKey(c) <= wtColKey('Q'); });
+    var colsBot = allCols.filter(function(c){ return wtColKey(c) > wtColKey('Q'); });
+    var r1 = renderP1Cols(colsTop, allCols.length > 17 ? 'A – Q' : null);
+    var r2 = renderP1Cols(colsBot, 'R – AD');
+    if (r1) el.appendChild(r1);
+    if (r2) el.appendChild(r2);
     return el;
   }
 
@@ -3195,7 +3214,6 @@ window.locToggleCell = function(locName) {
   const q        = (LocState.searchQuery || '').toLowerCase().trim();
 
   if (!expandEl && cellEl && items.length) {
-    // Create and insert expand div after the cell
     expandEl = document.createElement('div');
     expandEl.id = 'loc-expand-' + safeId;
     expandEl.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin:4px 0;';
@@ -3206,13 +3224,20 @@ window.locToggleCell = function(locName) {
   if (!expandEl) return;
   const isOpen = expandEl.style.display !== 'none';
   expandEl.style.display = isOpen ? 'none' : 'block';
+
   if (cellEl) {
     if (isOpen) {
-      cellEl.style.background = whIsNowLoc(locName) ? 'rgba(245,158,11,0.1)' : (items.length ? '#1e3a5f' : 'var(--surface2)');
-      cellEl.style.border     = whIsNowLoc(locName) ? '1px solid #f59e0b' : (items.length ? '1px solid #2563eb' : '1px solid var(--border)');
+      // Restore original style — saved on first open
+      if (cellEl._origBg    !== undefined) cellEl.style.background = cellEl._origBg;
+      if (cellEl._origBorder !== undefined) cellEl.style.border    = cellEl._origBorder;
     } else {
-      cellEl.style.background = 'var(--accent)';
-      cellEl.style.border     = '2px solid var(--accent)';
+      // Snapshot original styles before changing
+      if (cellEl._origBg === undefined) {
+        cellEl._origBg     = cellEl.style.background;
+        cellEl._origBorder = cellEl.style.border;
+      }
+      cellEl.style.background = '#fef3c7';
+      cellEl.style.border     = '2px solid #f59e0b';
     }
   }
 };
