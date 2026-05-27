@@ -692,8 +692,9 @@ window.loadCampaignOrders = async function(campaign) {
 window.poConfirmRelease = function(campaignId) {
   const c = POState.campaigns.find(x => x.id === campaignId);
   if (!c) return;
-  const allOrders  = POState.orders[campaignId] || [];
-  const activeTags = (POState.tagFilters || {})[campaignId] || [];
+  const allOrders   = POState.orders[campaignId] || [];
+  const activeTags  = (POState.tagFilters  || {})[campaignId] || [];
+  const activeHolds = (POState.holdFilters || {})[campaignId] || [];
 
   if (!allOrders.length) {
     if (!confirm('No held orders loaded yet. Click Refresh Orders first, then try releasing.\n\nClick OK to refresh now.')) return;
@@ -701,13 +702,25 @@ window.poConfirmRelease = function(campaignId) {
     return;
   }
 
-  // Filter by active tags — order must match ANY selected tag
-  const orders = activeTags.length
+  const HOLD_TESTS = {
+    operator:   function(o){ return !!o.operatorHold; },
+    date:       function(o){ return !!o.holdUntil; },
+    allocation: function(o){ return !!o.allocationHold; },
+    address:    function(o){ return !!o.addressHold; },
+  };
+
+  // Apply tag filter (AND) then hold filter (OR)
+  let orders = activeTags.length
     ? allOrders.filter(o => activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase())))
     : allOrders;
+  if (activeHolds.length) {
+    orders = orders.filter(o => activeHolds.some(function(hk){ return HOLD_TESTS[hk] && HOLD_TESTS[hk](o); }));
+  }
 
-  const tagNote = activeTags.length ? '\n\nFiltered to tags: ' + activeTags.join(', ') + ' (' + orders.length + ' of ' + allOrders.length + ' orders).' : '';
-  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?' + tagNote + '\n\nThis will clear operator_hold and hold_until. Make sure Co-Pilot hold rule is turned off first.\n\nClick OK to proceed.')) return;
+  const tagNote  = activeTags.length  ? '\n\nTag filter: '       + activeTags.join(', ')                                   : '';
+  const holdNote = activeHolds.length ? '\nHold filter: '        + activeHolds.map(function(hk){ return hk.charAt(0).toUpperCase()+hk.slice(1)+' Hold'; }).join(', ') : '';
+  const countNote = (activeTags.length || activeHolds.length) ? '\n(' + orders.length + ' of ' + allOrders.length + ' orders)' : '';
+  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?' + tagNote + holdNote + countNote + '\n\nThis will clear operator_hold and hold_until. Make sure Co-Pilot hold rule is turned off first.\n\nClick OK to proceed.')) return;
   releaseHolds(campaignId, orders);
 };
 
