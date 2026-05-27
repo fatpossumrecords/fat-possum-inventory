@@ -687,7 +687,7 @@
       </div>
 
       <!-- Config panel -->
-      <div id="wh-config" style="background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;flex-shrink:0;">
+      <div id="wh-config" style="display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;flex-shrink:0;">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
           <div style="display:flex;flex-direction:column;gap:4px;">
             <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Look-back (days)</label>
@@ -838,9 +838,7 @@
           <button onclick="locReload()" class="btn-secondary btn-sm" style="font-size:11px;">⟳ Load Locations</button>
           <div id="loc-status" style="font-size:11px;color:var(--text-muted);margin-left:auto;"></div>
         </div>
-        <div style="flex:1;overflow:auto;min-height:0;" id="loc-content-area">
-          <div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;" id="loc-loading">Loading location data…</div>
-        </div>
+        <div style="flex:1;overflow:auto;min-height:0;" id="loc-content-area"></div>
       </div>
 
     </div>
