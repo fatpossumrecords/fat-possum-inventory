@@ -374,6 +374,7 @@ function whApplyFilters() {
       : f === 'replenish'           ? r.priority === 'replenish'
       : f === 'ok'                  ? r.priority === 'ok'
       : f === 'replenish-and-urgent'? (r.priority === 'urgent' || r.priority === 'replenish')
+      : f === 'now'                 ? (r.bulkLocs||[]).some(l => whIsNowLoc(l.name))
       : true;
     return ms && mf;
   });
@@ -1898,18 +1899,30 @@ window.pickerPrintSummary = function() {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // PRINT PICK LIST (pre-pick reference sheet)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-window.whPrintPickList = function() {
+window.whPrintPickList = function(mode) {
+  mode = mode || 'main'; // 'main' = non-NOW locations, 'now' = NOW locations only
+  const isNowMode = mode === 'now';
   const c = whCfg();
+
+  // Filter rows that have bulk locations relevant to the mode
   const rows = WHState.allRows
     .filter(r => (r.priority === 'urgent' || r.priority === 'replenish') && r.suggest > 0 && r.bulkLocs && r.bulkLocs.length)
+    .map(r => {
+      // Filter bulk locs to only those relevant to this mode
+      const filteredLocs = r.bulkLocs.filter(loc => isNowMode ? whIsNowLoc(loc.name) : !whIsNowLoc(loc.name));
+      if (!filteredLocs.length) return null;
+      return { ...r, bulkLocs: filteredLocs };
+    })
+    .filter(Boolean)
     .sort((a, b) => {
       const ka = whWalkSortKey(a), kb = whWalkSortKey(b);
       for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
       return 0;
     });
 
-  if (!rows.length) { alert('No items need replenishment.'); return; }
+  if (!rows.length) { alert('No items need replenishment in ' + (isNowMode ? 'North Warehouse (NOW)' : 'main warehouse') + '.'); return; }
 
+  const locationLabel = isNowMode ? 'North Warehouse (NOW)' : 'Main Warehouse';
   const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
 
   const tableRows = rows.map((r, i) => {
@@ -1939,7 +1952,7 @@ window.whPrintPickList = function() {
   const totalUnits = rows.reduce((s,r) => s + r.suggest, 0);
 
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick List     ${now}</title>
+  win.document.write(`<!DOCTYPE html><html><head><title>FP Pick List — ${locationLabel}     ${now}</title>
   <style>
     @page { margin: 0.4in 0.5in; size: landscape; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1984,7 +1997,7 @@ window.whPrintPickList = function() {
   </head><body>
   <div class="header">
     <div>
-      <h1>Fat Possum Records     Warehouse Pick List</h1>
+      <h1>Fat Possum Records — ${locationLabel} Pick List</h1>
       <div class="sub">${now}    Look-back: ${c.lookback}d    Days supply target: ${c.daysSupply}d    Walk order</div>
       <div class="legend">
         <div class="leg"><div class="leg-dot" style="background:#fff5f5;border:1px solid #b83228;"></div> Urgent (empty pick bin)</div>
