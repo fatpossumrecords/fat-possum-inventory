@@ -209,9 +209,8 @@
         Settings
       </div>
       <div id="wh-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
-        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">Replenishment</div>
-        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('walkthrough')">Warehouse View</div>
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('locations')">Locations</div>
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">Replenishment</div>
       </div>
     <div class="sidebar-footer">
 
@@ -681,9 +680,9 @@
           <p class="view-sub">Velocity-based pick bin replenishment suggestions</p>
         </div>
         <div class="view-actions">
-          <button id="wh-tabbtn-replen" class="tab-btn active" onclick="switchWHTab('replenishment')">📋 Replenishment</button>
+          <button id="wh-tabbtn-locations" class="tab-btn active" onclick="switchWHTab('locations')">📍 Locations</button>
+          <button id="wh-tabbtn-replen" class="tab-btn" onclick="switchWHTab('replenishment')">📋 Replenishment</button>
           <button id="wh-tabbtn-walk" class="tab-btn" onclick="switchWHTab('walkthrough')">🗺 Warehouse View</button>
-          <button id="wh-tabbtn-locations" class="tab-btn" onclick="switchWHTab('locations')">📍 Locations</button>
         </div>
       </div>
 
@@ -737,7 +736,7 @@
       </div>
 
       <!-- Replenishment tab -->
-      <div id="wh-tab-replenishment" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+      <div id="wh-tab-replenishment" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
         <div id="wh-results" style="display:none;flex:1;overflow:hidden;flex-direction:column;min-height:0;">
           <div id="wh-stat-grid" style="display:flex;gap:0;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--surface);"></div>
           <!-- Filter + action bar -->
@@ -828,7 +827,7 @@
       </div>
 
       <!-- LOCATIONS TAB -->
-      <div id="wh-tab-locations" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+      <div id="wh-tab-locations" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
         <div style="padding:10px 24px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;">
           <input type="text" id="loc-search-input" placeholder="Search artist, title, catalog #, UPC…"
             oninput="locSearch(this.value)"
@@ -836,6 +835,7 @@
           />
           <button id="loc-view-product-btn" class="tab-btn active" onclick="locSwitchView('product')" style="font-size:11px;">🔍 Product Search</button>
           <button id="loc-view-shelf-btn" class="tab-btn" onclick="locSwitchView('shelf')" style="font-size:11px;">🗂 Shelf Map</button>
+          <button onclick="locReload()" class="btn-secondary btn-sm" style="font-size:11px;">⟳ Load Locations</button>
           <div id="loc-status" style="font-size:11px;color:var(--text-muted);margin-left:auto;"></div>
         </div>
         <div style="flex:1;overflow:auto;min-height:0;" id="loc-content-area">
