@@ -81,17 +81,18 @@ function whCfg() {
 
 // ------ TAB SWITCHER ---------------------------------------------------------------------------------------------------------------------------------------
 window.switchWHTab = function(tab) {
-  // Defer so switchView('replenishment') finishes rendering before tab switch
   setTimeout(() => {
     document.getElementById('wh-tab-replenishment')?.classList.toggle('hidden', tab !== 'replenishment');
     document.getElementById('wh-tab-walkthrough')?.classList.toggle('hidden',   tab !== 'walkthrough');
-    document.getElementById('wh-tabbtn-replen')?.classList.toggle('active', tab === 'replenishment');
-    document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',   tab === 'walkthrough');
-    // Apply replen defaults from settings each time the tab opens
+    document.getElementById('wh-tab-locations')?.classList.toggle('hidden',     tab !== 'locations');
+    document.getElementById('wh-tabbtn-replen')?.classList.toggle('active',    tab === 'replenishment');
+    document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',      tab === 'walkthrough');
+    document.getElementById('wh-tabbtn-locations')?.classList.toggle('active', tab === 'locations');
     if (tab === 'replenishment' && window._FPUserSettings && window._FPUserSettings.replen) {
       if (window.applyReplenDefaults) applyReplenDefaults(window._FPUserSettings.replen);
     }
     if (tab === 'walkthrough') wtRender();
+    if (tab === 'locations') locInit();
   }, 0);
 };
 
@@ -2502,3 +2503,346 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     }, 500);
   });
 })();
+
+// =============================================================
+// LOCATIONS MODULE
+// Product search + shelf map view
+// =============================================================
+
+const LocState = {
+  loaded:      false,
+  loading:     false,
+  products:    [],     // { sku, name, upc, artist, catalog, onHand, locations: [{name, qty}], hasPO }
+  locMap:      {},     // locationName -> [{sku, name, qty, artist, catalog, upc}]
+  view:        'product', // 'product' | 'shelf'
+  searchQuery: '',
+  jumpToLoc:   null,
+};
+
+// ── INIT ───────────────────────────────────────────────────────
+window.locInit = async function() {
+  if (LocState.loading) return;
+  if (LocState.loaded) { locRender(); return; }
+  LocState.loading = true;
+  const status = document.getElementById('loc-status');
+  const area   = document.getElementById('loc-content-area');
+  if (status) status.textContent = 'Loading…';
+  if (area) area.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;">Fetching location data from Packiyo…</div>';
+
+  try {
+    // Fetch products with locations
+    const result = await whFetchAll('/products?include=location_products.location', 100,
+      (p, t) => { if (status) status.textContent = `Loading products: page ${p}/${t}…`; }
+    );
+
+    // Build location name map
+    const locNameById = {};
+    for (const inc of result.allIncluded) {
+      if (inc.type === 'locations') locNameById[inc.id] = inc.attributes?.name || inc.id;
+    }
+    const lpById = {};
+    for (const inc of result.allIncluded) {
+      if (inc.type === 'location-products') {
+        lpById[inc.id] = {
+          qty:        parseInt(inc.attributes?.quantity_on_hand ?? 0),
+          locationId: inc.relationships?.location?.data?.id || null,
+        };
+      }
+    }
+
+    // Build open PO set from State.packiyoPOs if available
+    const poSkus = new Set();
+    if (typeof State !== 'undefined' && State.packiyoPOs) {
+      for (const [sku, po] of Object.entries(State.packiyoPOs)) {
+        if (po && po.qty > 0) poSkus.add(sku);
+      }
+    }
+
+    // Build catalog lookup for artist name
+    const catBySku = {};
+    if (typeof State !== 'undefined' && State.merged) {
+      State.merged.forEach(p => { if (p.packiyo_sku || p.catalog) catBySku[(p.packiyo_sku||p.catalog).toLowerCase()] = p; });
+    }
+
+    LocState.products = [];
+    LocState.locMap   = {};
+
+    for (const item of result.allData) {
+      const a   = item.attributes || {};
+      const sku = a.sku || '';
+      if (!sku) continue;
+      const upc     = a.barcode || '';
+      const name    = a.name || '';
+      const onHand  = parseInt(a.quantity_on_hand ?? 0);
+      const cat     = catBySku[sku.toLowerCase()] || null;
+      const artist  = cat?.artist || '';
+      const catalog = cat?.catalog || sku;
+
+      const locations = [];
+      for (const ref of (item.relationships?.location_products?.data || [])) {
+        const lp = lpById[ref.id];
+        if (!lp || !lp.locationId) continue;
+        const locName = locNameById[lp.locationId] || lp.locationId;
+        if (lp.qty > 0) {
+          locations.push({ name: locName, qty: lp.qty });
+          // Build locMap
+          if (!LocState.locMap[locName]) LocState.locMap[locName] = [];
+          LocState.locMap[locName].push({ sku, name, artist, catalog, upc, qty: lp.qty });
+        }
+      }
+      locations.sort((a, b) => {
+        const ka = whLocSortKey(a.name), kb = whLocSortKey(b.name);
+        for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+        return 0;
+      });
+
+      if (locations.length > 0) {
+        LocState.products.push({ sku, name, upc, artist, catalog, onHand, locations, hasPO: poSkus.has(sku) });
+      }
+    }
+
+    // Sort locMap entries by name within each location
+    for (const loc of Object.keys(LocState.locMap)) {
+      LocState.locMap[loc].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    LocState.loaded  = true;
+    LocState.loading = false;
+    if (status) status.textContent = `${LocState.products.length} products · ${Object.keys(LocState.locMap).length} locations`;
+    locRender();
+
+  } catch(e) {
+    LocState.loading = false;
+    if (area) area.innerHTML = `<div style="text-align:center;padding:60px;color:var(--red);font-size:13px;">Error loading locations: ${e.message}</div>`;
+    console.error('Locations load error:', e);
+  }
+};
+
+// ── SWITCH VIEW ────────────────────────────────────────────────
+window.locSwitchView = function(view) {
+  LocState.view = view;
+  document.getElementById('loc-view-product-btn')?.classList.toggle('active', view === 'product');
+  document.getElementById('loc-view-shelf-btn')?.classList.toggle('active',   view === 'shelf');
+  locRender();
+};
+
+window.locSearch = function(q) {
+  LocState.searchQuery = q;
+  locRender();
+};
+
+function locRender() {
+  if (!LocState.loaded) return;
+  if (LocState.view === 'product') locRenderProduct();
+  else locRenderShelf();
+}
+
+// ── PRODUCT SEARCH VIEW ────────────────────────────────────────
+function locRenderProduct() {
+  const area  = document.getElementById('loc-content-area');
+  if (!area) return;
+  const q = (LocState.searchQuery || '').toLowerCase().trim();
+
+  const results = q.length < 1
+    ? []
+    : LocState.products.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.artist.toLowerCase().includes(q) ||
+        p.catalog.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.upc.includes(q)
+      ).slice(0, 50);
+
+  if (!q) {
+    area.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;">Type to search by artist, title, catalog #, or UPC.</div>';
+    return;
+  }
+  if (!results.length) {
+    area.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">No products found matching "' + locEsc(q) + '"</div>';
+    return;
+  }
+
+  const cards = results.map(p => {
+    const locBadges = p.locations.map(l => {
+      const isNow  = whIsNowLoc(l.name);
+      const bg     = isNow ? 'var(--yellow)' : 'var(--accent)';
+      const color  = isNow ? '#111' : '#fff';
+      return `<span onclick="locJumpToLocation('${locEsc(l.name)}')"
+        style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;background:${bg};color:${color};
+        padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;
+        margin:2px;transition:opacity 0.15s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1"
+        title="View on shelf map">
+        ${locEsc(l.name)} <span style="opacity:0.7;font-size:10px;">${l.qty}</span>
+        ${isNow ? '<span style="font-size:9px;opacity:0.6;">NOW</span>' : ''}
+      </span>`;
+    }).join('');
+
+    const poBadge = p.hasPO
+      ? '<span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px;">📦 PO Inbound</span>'
+      : '';
+
+    const upcDisplay = p.upc ? p.upc.replace(/\D/g,'').padStart(12,'0') : '';
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin:12px 16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);">${locEsc(p.artist ? p.artist + ' — ' + p.name : p.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">
+            <span style="font-family:'DM Mono',monospace;">${locEsc(p.catalog)}</span>
+            ${upcDisplay ? `<span style="font-family:'DM Mono',monospace;font-size:10px;">${upcDisplay}</span>` : ''}
+            <span>On hand: <strong>${p.onHand}</strong></span>
+            ${poBadge}
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.8px;margin-bottom:6px;">Locations</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;">${locBadges}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  area.innerHTML = `<div style="padding:8px 0;">
+    <div style="font-size:11px;color:var(--text-muted);padding:4px 16px;">${results.length} result${results.length !== 1 ? 's' : ''}${results.length === 50 ? ' (showing first 50)' : ''}</div>
+    ${cards}
+  </div>`;
+}
+
+// ── SHELF MAP VIEW ─────────────────────────────────────────────
+function locRenderShelf() {
+  const area = document.getElementById('loc-content-area');
+  if (!area) return;
+
+  const q = (LocState.searchQuery || '').toLowerCase().trim();
+  const jumpTo = LocState.jumpToLoc;
+  LocState.jumpToLoc = null;
+
+  // Group locations by aisle
+  const mainLocs = {}, nowLocs = {};
+  for (const locName of Object.keys(LocState.locMap)) {
+    if (whIsNowLoc(locName)) nowLocs[locName] = LocState.locMap[locName];
+    else mainLocs[locName] = LocState.locMap[locName];
+  }
+
+  function buildSection(locsObj, sectionLabel, sectionId) {
+    // Group by aisle
+    const aisleMap = {};
+    for (const locName of Object.keys(locsObj)) {
+      const key = whLocSortKey(locName);
+      const aisle = key[0] || 'Other';
+      if (!aisleMap[aisle]) aisleMap[aisle] = [];
+      aisleMap[aisle].push(locName);
+    }
+    // Sort locations within each aisle
+    for (const aisle of Object.keys(aisleMap)) {
+      aisleMap[aisle].sort((a, b) => {
+        const ka = whLocSortKey(a), kb = whLocSortKey(b);
+        for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+        return 0;
+      });
+    }
+
+    const aisles = Object.keys(aisleMap).sort();
+    const aisleHtml = aisles.map(aisle => {
+      const locs = aisleMap[aisle];
+      const cells = locs.map(locName => {
+        const items = locsObj[locName];
+        const totalQty = items.reduce((s, i) => s + i.qty, 0);
+        const isJump   = locName === jumpTo;
+        const hasMatch = q && items.some(i =>
+          i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
+          i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.upc.includes(q)
+        );
+        const bg = isJump ? 'var(--accent)' : hasMatch ? '#fef3c7' : 'var(--surface2)';
+        const border = isJump ? '2px solid var(--accent)' : hasMatch ? '2px solid #f59e0b' : '1px solid var(--border)';
+        const textColor = isJump ? '#fff' : 'var(--text)';
+        return `<div id="loc-cell-${locEsc(locName).replace(/[^a-z0-9]/gi,'-')}"
+          onclick="locToggleCell('${locEsc(locName)}')"
+          style="cursor:pointer;background:${bg};border:${border};border-radius:6px;padding:8px 10px;
+          min-width:90px;text-align:center;transition:all 0.15s;"
+          onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+          <div style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${textColor};">${locEsc(locName)}</div>
+          <div style="font-size:10px;color:${isJump ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)'};">${items.length} SKU${items.length !== 1 ? 's' : ''} · ${totalQty} units</div>
+        </div>
+        <div id="loc-expand-${locEsc(locName).replace(/[^a-z0-9]/gi,'-')}" style="display:${isJump?'block':'none'};grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin:4px 0;">
+          ${locBuildExpandedCell(locName, items, q)}
+        </div>`;
+      }).join('');
+
+      return `<div style="margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border);">Aisle ${aisle}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;align-items:start;">${cells}</div>
+      </div>`;
+    }).join('');
+
+    return `<div style="margin-bottom:32px;">
+      <h3 style="font-size:14px;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid var(--border2);" id="${sectionId}">${sectionLabel}</h3>
+      ${aisleHtml || '<div style="color:var(--text-muted);font-size:12px;">No locations</div>'}
+    </div>`;
+  }
+
+  const mainSection = buildSection(mainLocs, '📦 Main Warehouse', 'loc-section-main');
+  const nowSection  = Object.keys(nowLocs).length
+    ? buildSection(nowLocs, '🏭 North Warehouse (NOW)', 'loc-section-now')
+    : '';
+
+  area.innerHTML = `<div style="padding:16px 24px;">
+    ${mainSection}
+    ${nowSection}
+  </div>`;
+
+  // Scroll to jump target
+  if (jumpTo) {
+    const id = 'loc-cell-' + jumpTo.replace(/[^a-z0-9]/gi,'-');
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  }
+}
+
+function locBuildExpandedCell(locName, items, q) {
+  const rows = items.map(i => {
+    const upcDisplay = i.upc ? i.upc.replace(/\D/g,'').padStart(12,'0') : '';
+    const highlight = q && (i.name.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q) ||
+      i.catalog.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
+    return `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);${highlight?'background:#fef3c7;margin:0 -8px;padding:6px 8px;border-radius:4px;':''}">
+      <span style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--accent);min-width:40px;text-align:right;">${i.qty}</span>
+      <div style="flex:1;">
+        <div style="font-size:12px;font-weight:600;">${locEsc(i.artist ? i.artist + ' — ' + i.name : i.name)}</div>
+        <div style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">${locEsc(i.catalog)}${upcDisplay ? ' · ' + upcDisplay : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">📍 ${locEsc(locName)}</div>${rows}`;
+}
+
+// Toggle expand/collapse a shelf cell
+window.locToggleCell = function(locName) {
+  const safeId = locName.replace(/[^a-z0-9]/gi,'-');
+  const expandEl = document.getElementById('loc-expand-' + safeId);
+  if (!expandEl) return;
+  const isOpen = expandEl.style.display !== 'none';
+  expandEl.style.display = isOpen ? 'none' : 'block';
+  const cellEl = document.getElementById('loc-cell-' + safeId);
+  if (cellEl) {
+    cellEl.style.background = isOpen ? 'var(--surface2)' : 'var(--accent)';
+    cellEl.style.border     = isOpen ? '1px solid var(--border)' : '2px solid var(--accent)';
+    cellEl.querySelectorAll('div').forEach(d => d.style.color = isOpen ? '' : '#fff');
+  }
+};
+
+// Jump from product search to shelf map
+window.locJumpToLocation = function(locName) {
+  LocState.jumpToLoc = locName;
+  LocState.view = 'shelf';
+  document.getElementById('loc-view-product-btn')?.classList.remove('active');
+  document.getElementById('loc-view-shelf-btn')?.classList.add('active');
+  locRenderShelf();
+};
+
+function locEsc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// END LOCATIONS MODULE
