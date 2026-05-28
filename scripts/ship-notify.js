@@ -29,7 +29,11 @@ async function packiyoFetch(path) {
   let delay = 1000;
   for (let attempt = 0; attempt < 5; attempt++) {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${PACKIYO_TOKEN}`, Accept: 'application/json' },
+      headers: {
+        Authorization: `Bearer ${PACKIYO_TOKEN}`,
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+      },
     });
     if (res.status === 429) {
       console.log(`  Rate limited, retrying in ${delay}ms…`);
