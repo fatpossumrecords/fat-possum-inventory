@@ -228,7 +228,12 @@ window.runReplenishment = async function() {
     for (const order of openResult.allData) {
       for (const ref of (order.relationships?.order_items?.data || [])) openItemToOrder[ref.id] = order;
     }
+    // Full allocation (all orders)
     const liveCustomerAllocBySku = {}, livePOAllocBySku = {};
+    // Outlier-filtered allocation (excludes single orders >= outlier threshold)
+    const liveCustomerAllocNormalBySku = {}, livePOAllocNormalBySku = {};
+    // Per-order qty for outlier detection: { orderId: { sku: qty } }
+    const orderSkuQtyOpen = {};
     for (const item of openItems) {
       const order = openItemToOrder[item.id];
       if (!order) continue;
@@ -238,8 +243,23 @@ window.runReplenishment = async function() {
       const sku = a.sku || a.product_sku || a.variant_sku || a.item_sku || '';
       const qty = parseInt(a.quantity || a.quantity_ordered || a.qty || 0);
       if (!sku || qty <= 0) continue;
-      if (/^PO#\s*/i.test(String(orderNum))) { livePOAllocBySku[sku] = (livePOAllocBySku[sku] || 0) + qty; }
+      const isPO = /^PO#\s*/i.test(String(orderNum));
+      if (isPO) { livePOAllocBySku[sku] = (livePOAllocBySku[sku] || 0) + qty; }
       else { liveCustomerAllocBySku[sku] = (liveCustomerAllocBySku[sku] || 0) + qty; }
+      // Track per-order for outlier filtering
+      if (!isPO) {
+        const oid = order.id || orderNum;
+        if (!orderSkuQtyOpen[oid]) orderSkuQtyOpen[oid] = {};
+        orderSkuQtyOpen[oid][sku] = (orderSkuQtyOpen[oid][sku] || 0) + qty;
+      }
+    }
+    // Build normal (non-outlier) customer allocations
+    for (const skuMap of Object.values(orderSkuQtyOpen)) {
+      for (const [sku, qty] of Object.entries(skuMap)) {
+        if (qty < c.outlier) {
+          liveCustomerAllocNormalBySku[sku] = (liveCustomerAllocNormalBySku[sku] || 0) + qty;
+        }
+      }
     }
 
     whSetProgress(55, 'Building velocity map   ');
@@ -283,7 +303,7 @@ window.runReplenishment = async function() {
     }
 
     whSetStatus('Building report   ');
-    WHState.allRows = whBuildRows(prodResult.allData, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, c);
+    WHState.allRows = whBuildRows(prodResult.allData, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, liveCustomerAllocNormalBySku, c);
     window._whDebug = { pickQtyBySku, allRows: WHState.allRows };
 
     whSetProgress(100, WHState.allRows.length + ' SKUs    ' + WHState.allRows.filter(r => r.suggest > 0).length + ' need replenishment');
@@ -323,7 +343,7 @@ function whBuildVelocityMap(orderItems, c) {
 }
 
 // ------ BUILD ROWS ------------------------------------------------------------------------------------------------------------------------------------------------
-function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, c) {
+function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku, livePOAllocBySku, liveCustomerAllocNormalBySku, c) {
   return products.map(item => {
     const a = item.attributes || item;
     const name = a.name || 'Unknown', sku = a.sku || '', upc = a.barcode || '';
@@ -331,6 +351,8 @@ function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku
     const customerAllocated = liveCustomerAllocBySku[sku] || 0;
     const poAllocated       = livePOAllocBySku[sku]       || 0;
     const allocated         = customerAllocated + poAllocated;
+    // Normal allocations exclude bulk outlier orders — used for pick bin target
+    const customerAllocatedNormal = liveCustomerAllocNormalBySku[sku] || 0;
     const locData = pickQtyBySku[sku] || { pickQty:0, bulkQty:0, bulkLocs:[], pickLocs:[], emptyPickLocs:[] };
     const { pickQty, bulkQty, bulkLocs=[], pickLocs=[], emptyPickLocs=[] } = locData;
     const freePickQty = Math.max(0, pickQty - customerAllocated);
@@ -339,7 +361,8 @@ function whBuildRows(products, pickQtyBySku, velocityMap, liveCustomerAllocBySku
     const orderCount = vm ? vm.orderCount : 0;
     let velocityTarget = velocity > 0 ? Math.ceil(velocity * c.daysSupply) : 0;
     if (freePickQty === 0 && orderCount > 0) velocityTarget = Math.max(velocityTarget, c.minUnits);
-    const postPickTarget = Math.min(velocityTarget + customerAllocated, c.maxUnits);
+    // Use normal (non-outlier) allocations for pick bin target to avoid bulk orders driving refills
+    const postPickTarget = Math.min(velocityTarget + customerAllocatedNormal, c.maxUnits);
     let netSuggest = Math.max(0, postPickTarget - pickQty);
     if (netSuggest > 0 && netSuggest < c.minUnits) netSuggest = c.minUnits;
     const pickLocsFallback = pickLocs.length === 0 && emptyPickLocs.length > 0;
@@ -3257,9 +3280,14 @@ function locEsc(s) {
 
 // On first load, ensure Locations tab state is correct (title, config hidden, prompt shown)
 document.addEventListener('DOMContentLoaded', function() {
-  // Use a short delay so app.js finishes its own init first
   setTimeout(function() {
-    if (typeof switchWHTab === 'function') switchWHTab('locations');
+    if (typeof switchWHTab === 'function') {
+      // On mobile/tablet, auto-navigate to Locations
+      if (window.innerWidth <= 1024) {
+        if (typeof switchView === 'function') switchView('replenishment');
+      }
+      switchWHTab('locations');
+    }
   }, 200);
 });
 // END LOCATIONS MODULE
