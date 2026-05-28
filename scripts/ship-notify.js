@@ -323,11 +323,14 @@ async function main() {
       const trackings  = (res.included || []).filter(i => i.type === 'shipment-trackings');
       const firstTrack = trackings[0]?.attributes || {};
       const shipAttr   = shipments[0].attributes || {};
+      console.log(`  Shipment attrs:`, JSON.stringify(shipAttr).slice(0,200));
+      console.log(`  Tracking attrs:`, JSON.stringify(firstTrack).slice(0,200));
 
       const tracking = {
         shippedAt:      shipAttr.created_at || shipAttr.shipped_at || new Date().toISOString(),
-        carrier:        firstTrack.carrier_name || shipAttr.carrier_name || '',
-        trackingNumber: firstTrack.tracking_number || '',
+        carrier:        firstTrack.carrier_name || firstTrack.carrier || firstTrack.shipping_carrier
+                        || shipAttr.carrier_name || shipAttr.carrier || shipAttr.shipping_method_name || '',
+        trackingNumber: firstTrack.tracking_number || firstTrack.tracking_code || '',
         trackingUrl:    firstTrack.tracking_url || '',
       };
 
