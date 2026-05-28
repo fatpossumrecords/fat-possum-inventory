@@ -323,14 +323,22 @@ async function main() {
       const trackings  = (res.included || []).filter(i => i.type === 'shipment-trackings');
       const firstTrack = trackings[0]?.attributes || {};
       const shipAttr   = shipments[0].attributes || {};
-      console.log(`  Shipment attrs:`, JSON.stringify(shipAttr).slice(0,200));
-      console.log(`  Tracking attrs:`, JSON.stringify(firstTrack).slice(0,200));
 
+      // Packiyo doesn't return carrier name — derive from tracking number pattern
+      function detectCarrier(tn) {
+        if (!tn) return '';
+        if (/^(94|93|92|94|95)\d{18,20}$/.test(tn)) return 'USPS';
+        if (/^1Z[A-Z0-9]{16}$/.test(tn)) return 'UPS';
+        if (/^\d{12}$|^\d{15}$|^\d{20}$/.test(tn)) return 'FedEx';
+        if (/^[0-9]{10,11}$/.test(tn)) return 'DHL';
+        return '';
+      }
+
+      const trackingNumber = firstTrack.tracking_number || firstTrack.tracking_code || '';
       const tracking = {
         shippedAt:      shipAttr.created_at || shipAttr.shipped_at || new Date().toISOString(),
-        carrier:        firstTrack.carrier_name || firstTrack.carrier || firstTrack.shipping_carrier
-                        || shipAttr.carrier_name || shipAttr.carrier || shipAttr.shipping_method_name || '',
-        trackingNumber: firstTrack.tracking_number || firstTrack.tracking_code || '',
+        carrier:        detectCarrier(trackingNumber),
+        trackingNumber,
         trackingUrl:    firstTrack.tracking_url || '',
       };
 
