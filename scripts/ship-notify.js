@@ -94,7 +94,7 @@ function buildPackingSlipPDF(inv, tracking) {
     doc.fontSize(18).fillColor(BK).font('Helvetica-Bold')
        .text('Packing Slip', 50, 50, { align: 'right' });
     doc.fontSize(9).fillColor(G).font('Helvetica')
-       .text(inv.invoiceNumber || '', 50, 74, { align: 'right' });
+       .text(inv.invoiceNumber || inv.packiyoOrderNum || inv.id || '', 50, 74, { align: 'right' });
 
     // Divider
     doc.moveTo(50, 95).lineTo(50 + W, 95).strokeColor('#dddddd').lineWidth(1).stroke();
@@ -124,25 +124,31 @@ function buildPackingSlipPDF(inv, tracking) {
     addrBlock('BILL TO', inv.billTo, col2, addrY);
 
     // ── Order info ─────────────────────────────────────────────
+    // Two rows: basic info top, tracking below spanning full width
     const infoY = 195;
-    const fields = [
-      ['Invoice #',   inv.invoiceNumber || '—'],
+    const basicFields = [
+      ['Invoice #',   inv.invoiceNumber || inv.packiyoOrderNum || inv.id || '—'],
       ['Order Date',  inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'],
       ['PO #',        inv.poNumber || '—'],
+      ['Ship Date',   tracking.shippedAt ? new Date(tracking.shippedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'],
+      ['Carrier',     tracking.carrier || '—'],
     ];
-    if (tracking.carrier)        fields.push(['Carrier',   tracking.carrier]);
-    if (tracking.trackingNumber) fields.push(['Tracking #', tracking.trackingNumber]);
-    if (tracking.shippedAt)      fields.push(['Ship Date',  new Date(tracking.shippedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})]);
 
     let ix = 50;
-    fields.forEach(([label, val]) => {
+    basicFields.forEach(([label, val]) => {
       doc.fontSize(8).fillColor(G).font('Helvetica-Bold').text(label, ix, infoY);
       doc.fontSize(9).fillColor(BK).font('Helvetica').text(val, ix, infoY + 12);
-      ix += 90;
+      ix += 95;
     });
 
+    // Tracking # on its own full-width row
+    if (tracking.trackingNumber) {
+      doc.fontSize(8).fillColor(G).font('Helvetica-Bold').text('Tracking #', 50, infoY + 30);
+      doc.fontSize(9).fillColor(BK).font('Helvetica').text(tracking.trackingNumber, 50, infoY + 42, { width: W });
+    }
+
     // ── Table ──────────────────────────────────────────────────
-    const tableY = infoY + 42;
+    const tableY = infoY + 62;
     const cols   = [
       { label: 'Artist / Title',    x: 50,  w: 170 },
       { label: 'Catalog #',         x: 225, w: 75  },
@@ -194,11 +200,6 @@ function buildPackingSlipPDF(inv, tracking) {
     doc.fontSize(8).fillColor(G).font('Helvetica')
        .text('Thank you for your order! Questions? Contact your Fat Possum sales rep.',
              50, footY, { align: 'center', width: W });
-    if (tracking.trackingUrl) {
-      doc.fontSize(8).fillColor('#2563eb').font('Helvetica')
-         .text('Track your shipment: ' + tracking.trackingUrl, 50, footY + 14,
-               { align: 'center', width: W, link: tracking.trackingUrl });
-    }
 
     doc.end();
   });
@@ -212,7 +213,7 @@ async function sendShipEmail(inv, tracking, pdfBuffer) {
   if (!toEmail) throw new Error('No ship-to email on invoice ' + (inv.invoiceNumber || inv.id));
 
   const toName   = shipTo.company || shipTo.name || toEmail;
-  const invNum   = inv.invoiceNumber || inv.id;
+  const invNum   = inv.invoiceNumber || inv.packiyoOrderNum || inv.id;
   const trackTxt = tracking.trackingNumber
     ? `\n\nTracking: ${tracking.carrier ? tracking.carrier + ' — ' : ''}${tracking.trackingNumber}${tracking.trackingUrl ? '\n' + tracking.trackingUrl : ''}`
     : '';
@@ -298,7 +299,7 @@ async function main() {
   let sent = 0, skipped = 0, errors = 0;
 
   for (const inv of invoices) {
-    const invNum = inv.invoiceNumber || inv.id;
+    const invNum = inv.invoiceNumber || inv.packiyoOrderNum || inv.id;
     if (notifyLog.notified[invNum]) { skipped++; continue; }
 
     try {
