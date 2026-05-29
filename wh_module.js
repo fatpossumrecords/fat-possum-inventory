@@ -86,8 +86,13 @@ window.switchWHTab = function(tab) {
     document.getElementById('wh-tab-walkthrough')?.classList.toggle('hidden',   tab !== 'walkthrough');
     document.getElementById('wh-tab-locations')?.classList.toggle('hidden',     tab !== 'locations');
     document.getElementById('wh-tabbtn-replen')?.classList.toggle('active',    tab === 'replenishment');
-    document.getElementById('wh-tabbtn-walk')?.classList.toggle('active',      tab === 'walkthrough');
     document.getElementById('wh-tabbtn-locations')?.classList.toggle('active', tab === 'locations');
+    // Warehouse View button is not a tab — just highlight when active
+    const walkBtn = document.getElementById('wh-tabbtn-walk');
+    if (walkBtn) {
+      walkBtn.style.background = tab === 'walkthrough' ? 'var(--accent)' : '';
+      walkBtn.style.color      = tab === 'walkthrough' ? '#fff' : '';
+    }
 
     // Update title + subtitle + config visibility per tab
     const title  = document.getElementById('wh-main-title');
