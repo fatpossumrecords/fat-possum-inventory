@@ -482,11 +482,12 @@ function applyConfigData(parsed) {
   if (parsed.fpVelocity && Object.keys(parsed.fpVelocity).length) {
     State.fp_velocity = parsed.fpVelocity;
   }
-  if (parsed.fpVelocityTs) {
+ if (parsed.fpVelocityTs) {
     State.fp_velocity_ts = parsed.fpVelocityTs;
     const btn = document.getElementById('update-sales-btn');
     if (btn) btn.title = 'Last updated: ' + new Date(parsed.fpVelocityTs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   }
+  if (parsed.workflowToken) CONFIG.WORKFLOW_TOKEN = parsed.workflowToken;
 }
 
 function slimOrchardData(rows) {
