@@ -142,6 +142,9 @@ window.openSettings = function() {
   _settingsSetVal('s-replen-min',          s.replen.minUnits);
   _settingsSetCheck('s-po-autorefresh',    s.poAutoRefresh);
 
+  // Show admin section if user is admin
+  if (window.adminInitSettings) adminInitSettings();
+
   modal.style.display = 'flex';
 };
 
@@ -291,7 +294,7 @@ function _settingsGetVal(id)        { const el = document.getElementById(id); re
 (function() {
   const GIST_LIMIT_KB = 10240;
 
-  function updateGistStatus() {
+  function _fpUpdateGistSizes() {
     let gistId, token;
     try { gistId = CONFIG.GIST_ID; token = CONFIG.GIST_TOKEN; } catch(e) {}
     if (!gistId) {
@@ -316,13 +319,13 @@ function _settingsGetVal(id)        { const el = document.getElementById(id); re
       const bar  = document.getElementById('gist-bar');
 
       if (dot)  dot.className = 'status-dot ok';
-      if (text) text.textContent = totalKb.toFixed(0) + 'kb · largest ' + largestKb.toFixed(0) + 'kb';
+      if (text) text.textContent = totalKb.toFixed(0) + 'kb total · largest ' + largestKb.toFixed(0) + 'kb / 10MB';
       if (bar)  { bar.style.width = pct + '%'; bar.style.background = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--yellow)' : 'var(--green)'; }
     }).catch(function() {});
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(updateGistStatus, 3000);
+    setTimeout(_fpUpdateGistSizes, 4000);
   });
 })();
 
@@ -364,46 +367,23 @@ document.addEventListener('DOMContentLoaded', function() {
       productionRuns: 'production runs',
       mfgPredictions: 'mfg predictions',
       stockoutClock:  'stockout clock',
+      preOrders:      'open pre-orders',
     };
-    // Build a style that hides cards by ID where possible, otherwise use MutationObserver
-    // Since cards are dynamic, store hidden list and apply via observer
     window._fpHiddenCards = Object.entries(cardMap)
-      .filter(([key]) => s.dashCards && s.dashCards[key] === false)
-      .map(([, label]) => label);
+      .filter(function(entry) { return s.dashCards && s.dashCards[entry[0]] === false; })
+      .map(function(entry) { return entry[1]; });
 
-    function applyCardVisibility() {
-      document.querySelectorAll('.dash-card').forEach(card => {
+    // Expose as global so wh_module.js can call after every grid rebuild
+    window._fpApplyCardVisibility = function() {
+      document.querySelectorAll('.dash-card').forEach(function(card) {
         const lbl = card.querySelector('.dash-label');
         if (!lbl) return;
         const text = lbl.textContent.toLowerCase();
-        const shouldHide = (window._fpHiddenCards || []).some(h => text.includes(h));
+        const shouldHide = (window._fpHiddenCards || []).some(function(h) { return text.includes(h); });
         card.style.display = shouldHide ? 'none' : '';
       });
-    }
-    applyCardVisibility();
-    // Re-apply whenever dashboard re-renders
-    // Re-apply whenever dashboard view becomes active
-    const _origSwitchView = window.switchView;
-    if (_origSwitchView && !window._fpSwitchViewPatched) {
-      window._fpSwitchViewPatched = true;
-      window.switchView = function(viewName) {
-        _origSwitchView(viewName);
-        if (viewName === 'dashboard') {
-          setTimeout(applyCardVisibility, 150);
-        }
-      };
-    }
-
-    if (!window._fpCardObserver) {
-      const dashBody = document.getElementById('dashboard-body');
-      if (dashBody) {
-        window._fpCardObserver = new MutationObserver(() => {
-          clearTimeout(window._fpCardTimer);
-          window._fpCardTimer = setTimeout(applyCardVisibility, 100);
-        });
-        window._fpCardObserver.observe(dashBody, { childList: true, subtree: true });
-      }
-    }
+    };
+    window._fpApplyCardVisibility();
 
     // Default warehouse filter
     if (s.defaultWarehouse) {
@@ -413,3 +393,169 @@ document.addEventListener('DOMContentLoaded', function() {
 
   }, 2000);
 });
+
+// ── ADMIN: USER MANAGEMENT ────────────────────────────────────────
+
+const ADMIN_EMAIL    = 'patrick@fatpossum.com';
+const USERS_GIST_FILE = 'fp_users.json';
+
+// Roles: 'admin' | 'full' | 'warehouse'
+// warehouse = Locations, Replenishment, Pre-Orders only
+const ROLE_LABELS = {
+  admin:     'Admin (Full Access)',
+  full:      'Full Access',
+  warehouse: 'Locations / Replenishment / Pre-Orders',
+};
+
+// Called from openSettings — show admin section only to admin
+window.adminInitSettings = function() {
+  const user = State.user;
+  if (!user) return;
+  const isAdmin = user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+    || (State.userRole && State.userRole === 'admin');
+  const section = document.getElementById('s-admin-section');
+  if (section) section.style.display = isAdmin ? 'block' : 'none';
+  if (isAdmin) {
+    adminRenderUsers();
+    adminRenderLog();
+  }
+};
+
+async function adminLoadUsers() {
+  try {
+    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    const content = data.files?.[USERS_GIST_FILE]?.content;
+    return content ? JSON.parse(content) : { users: [], log: [] };
+  } catch(e) {
+    return { users: [], log: [] };
+  }
+}
+
+async function adminSaveUsers(data) {
+  await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+    method: 'PATCH',
+    headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(data, null, 2) } } }),
+  });
+}
+
+async function adminRenderUsers() {
+  const data  = await adminLoadUsers();
+  const users = data.users || [];
+  const el    = document.getElementById('s-users-list');
+  if (!el) return;
+
+  if (!users.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No users added yet.</div>';
+    return;
+  }
+
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+    + '<thead><tr>'
+    + '<th style="text-align:left;padding:4px 8px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);">Email</th>'
+    + '<th style="text-align:left;padding:4px 8px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);">Role</th>'
+    + '<th style="text-align:left;padding:4px 8px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);">Last Sign-in</th>'
+    + '<th style="padding:4px 8px;border-bottom:1px solid var(--border);"></th>'
+    + '</tr></thead><tbody>'
+    + users.map((u, i) => {
+        const isMe = u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        const lastSeen = u.lastSignIn ? new Date(u.lastSignIn).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+        return '<tr style="border-bottom:1px solid var(--border);">'
+          + '<td style="padding:6px 8px;">' + u.email + (isMe ? ' <span style="font-size:9px;background:var(--accent);color:#fff;border-radius:3px;padding:1px 5px;">you</span>' : '') + '</td>'
+          + '<td style="padding:6px 8px;">'
+          + '<select onchange="adminChangeRole(' + i + ',this.value)" style="font-size:11px;padding:2px 6px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);"' + (isMe ? ' disabled' : '') + '>'
+          + Object.entries(ROLE_LABELS).map(([k,v]) => '<option value="'+k+'"'+(u.role===k?' selected':'')+'>'+v+'</option>').join('')
+          + '</select>'
+          + '</td>'
+          + '<td style="padding:6px 8px;color:var(--text-muted);">' + lastSeen + '</td>'
+          + '<td style="padding:6px 8px;text-align:right;">'
+          + (isMe ? '' : '<button onclick="adminRemoveUser('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;" title="Remove">✕</button>')
+          + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table>';
+}
+
+async function adminRenderLog() {
+  const data = await adminLoadUsers();
+  const log  = (data.log || []).slice(-50).reverse();
+  const el   = document.getElementById('s-access-log');
+  if (!el) return;
+  if (!log.length) { el.textContent = 'No sign-ins recorded yet.'; return; }
+  el.innerHTML = log.map(e =>
+    '<div style="padding:2px 0;border-bottom:1px solid var(--border);">'
+    + '<span style="color:var(--text);">' + e.email + '</span>'
+    + ' <span style="color:var(--text-dim);">·</span> '
+    + new Date(e.at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})
+    + '</div>'
+  ).join('');
+}
+
+window.adminAddUser = async function() {
+  const emailEl = document.getElementById('s-new-user-email');
+  const roleEl  = document.getElementById('s-new-user-role');
+  const email   = (emailEl?.value || '').trim().toLowerCase();
+  const role    = roleEl?.value || 'full';
+  if (!email || !email.includes('@')) { alert('Enter a valid email.'); return; }
+
+  const data  = await adminLoadUsers();
+  const users = data.users || [];
+  if (users.find(u => u.email.toLowerCase() === email)) {
+    alert(email + ' is already in the list.'); return;
+  }
+  users.push({ email, role, addedAt: new Date().toISOString(), addedBy: State.user?.email });
+  data.users = users;
+  await adminSaveUsers(data);
+  if (emailEl) emailEl.value = '';
+  adminRenderUsers();
+  if (window.toast) toast('User added: ' + email, 'success');
+};
+
+window.adminRemoveUser = async function(idx) {
+  const data  = await adminLoadUsers();
+  const users = data.users || [];
+  const user  = users[idx];
+  if (!user) return;
+  if (!confirm('Remove ' + user.email + '?')) return;
+  users.splice(idx, 1);
+  data.users = users;
+  await adminSaveUsers(data);
+  adminRenderUsers();
+  if (window.toast) toast('User removed: ' + user.email, 'success');
+};
+
+window.adminChangeRole = async function(idx, newRole) {
+  const data  = await adminLoadUsers();
+  const users = data.users || [];
+  if (!users[idx]) return;
+  users[idx].role = newRole;
+  data.users = users;
+  await adminSaveUsers(data);
+  if (window.toast) toast('Role updated', 'success');
+};
+
+// Called from app.js after login — looks up user role and applies nav restrictions
+window.applyUserRole = function(role) {
+  State.userRole = role;
+  if (role === 'admin' || role === 'full') return; // full access — nothing to hide
+
+  // warehouse role: hide everything except Locations, Replenishment, Pre-Orders
+  const hideViews = ['dashboard','inventory','movements','manufacturing','alerts','invoices','reports'];
+  hideViews.forEach(v => {
+    const el = document.querySelector('.nav-item[data-view="' + v + '"]');
+    if (el) el.style.display = 'none';
+  });
+  // Hide nav sub-sections
+  ['#inv-nav-sub','#mfg-nav-sub'].forEach(sel => {
+    const el = document.querySelector(sel);
+    if (el) el.style.display = 'none';
+  });
+  // If current view is one of the hidden ones, redirect to replenishment
+  if (hideViews.includes(State.currentView || 'dashboard')) {
+    if (typeof switchView === 'function') switchView('replenishment');
+  }
+};
