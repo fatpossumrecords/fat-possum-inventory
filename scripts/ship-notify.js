@@ -387,6 +387,94 @@ async function main() {
 
   console.log(`\n=== Done: ${sent} sent, ${skipped} skipped, ${errors} errors ===\n`);
   if (errors > 0) process.exit(1);
+
+  // Also process any pending cycle count emails
+  await processCycleCountEmails();
 }
 
 main().catch(e => { console.error('Fatal:', e); process.exit(1); });
+
+// ── CYCLE COUNT PENDING EMAILS ────────────────────────────────
+async function processCycleCountEmails() {
+  console.log('\nChecking for pending cycle count emails…');
+  let counts;
+  try {
+    const res  = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: { Authorization: `Bearer ${GIST_TOKEN}`, Accept: 'application/vnd.github+json' },
+    });
+    const data = await res.json();
+    const content = data.files?.['fp_cycle_counts.json']?.content;
+    counts = content ? JSON.parse(content) : [];
+  } catch(e) { console.log('  No cycle counts file found'); return; }
+
+  const pending = counts.filter(c => c.complete && c.pendingEmails?.length);
+  if (!pending.length) { console.log('  No pending cycle count emails'); return; }
+
+  for (const count of pending) {
+    try {
+      const discrepant = (count.discrepancies || []).length;
+      const passed     = (count.items || []).filter(i => i.status === 'pass').length;
+      const skipped    = (count.items || []).filter(i => i.status === 'skipped').length;
+      const dateStr    = new Date(count.submittedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+      const discRows = (count.discrepancies || []).map(d =>
+        `<tr><td style="padding:6px 10px;border:1px solid #ddd;">${d.locName}</td>` +
+        `<td style="padding:6px 10px;border:1px solid #ddd;">${d.artist ? d.artist + ' — ' + d.name : d.name}</td>` +
+        `<td style="padding:6px 10px;border:1px solid #ddd;font-family:monospace;">${d.catalog}</td>` +
+        `<td style="padding:6px 10px;border:1px solid #ddd;text-align:center;">${d.expected}</td>` +
+        `<td style="padding:6px 10px;border:1px solid #ddd;text-align:center;">${d.actual}</td>` +
+        `<td style="padding:6px 10px;border:1px solid #ddd;text-align:center;font-weight:700;color:${d.variance > 0 ? 'green' : 'red'};">${d.variance > 0 ? '+' : ''}${d.variance}</td></tr>`
+      ).join('');
+
+      const html =
+        `<h2 style="font-family:sans-serif;">Fat Possum — Cycle Count Report</h2>` +
+        `<p style="font-family:sans-serif;color:#555;">Zone: <strong>${count.subZone}</strong> &nbsp;·&nbsp; Date: ${dateStr} &nbsp;·&nbsp; Counted by: ${count.countedBy}</p>` +
+        `<table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;margin-bottom:20px;">` +
+        `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Total Products</td><td style="padding:8px 16px;">${(count.items||[]).length}</td></tr>` +
+        `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Matched</td><td style="padding:8px 16px;color:green;">${passed}</td></tr>` +
+        `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Discrepancies</td><td style="padding:8px 16px;color:${discrepant > 0 ? 'red' : 'green'};">${discrepant}</td></tr>` +
+        `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Skipped</td><td style="padding:8px 16px;">${skipped}</td></tr></table>` +
+        (discrepant > 0
+          ? `<h3 style="font-family:sans-serif;">Discrepancies — Adjust in Packiyo</h3>` +
+            `<table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%;">` +
+            `<thead><tr style="background:#f3f3f3;">` +
+            `<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Location</th>` +
+            `<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Product</th>` +
+            `<th style="padding:8px 10px;border:1px solid #ddd;text-align:left;">Catalog #</th>` +
+            `<th style="padding:8px 10px;border:1px solid #ddd;">Expected</th>` +
+            `<th style="padding:8px 10px;border:1px solid #ddd;">Actual</th>` +
+            `<th style="padding:8px 10px;border:1px solid #ddd;">Variance</th></tr></thead>` +
+            `<tbody>${discRows}</tbody></table>`
+          : `<p style="font-family:sans-serif;color:green;font-weight:700;">✓ No discrepancies — all counts matched.</p>`);
+
+      const subject = `Fat Possum Cycle Count — ${count.subZone} — ${dateStr}${discrepant > 0 ? ` (${discrepant} discrepanc${discrepant > 1 ? 'ies' : 'y'})` : ' ✓ Clean'}`;
+
+      if (!DRY_RUN) {
+        const emailRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Fat Possum Inventory <inventory@fatpossum.com>',
+            to:   count.pendingEmails,
+            subject,
+            html,
+          }),
+        });
+        if (!emailRes.ok) throw new Error(`Resend ${emailRes.status}`);
+        console.log(`  ✓ Cycle count email sent for ${count.subZone} → ${count.pendingEmails.join(', ')}`);
+      } else {
+        console.log(`  [DRY RUN] Would email cycle count for ${count.subZone} → ${count.pendingEmails.join(', ')}`);
+      }
+
+      // Clear pending emails flag
+      count.pendingEmails = [];
+    } catch(e) {
+      console.error(`  ERROR sending cycle count email for ${count.subZone}:`, e.message);
+    }
+  }
+
+  // Save updated counts back to Gist
+  if (!DRY_RUN) {
+    await gistSet('fp_cycle_counts.json', counts);
+  }
+}
