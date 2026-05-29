@@ -79,6 +79,10 @@ window.ccInit = async function() {
   }
   ccRenderHome();
   if (!CCState.historyLoaded) await ccLoadHistory();
+  // Auto-load location data if not already loaded — needed for bin selector
+  if (!LocState.loaded && !LocState.loading) {
+    locInit(true);
+  }
 };
 
 // ── GIST ─────────────────────────────────────────────────────
@@ -295,19 +299,27 @@ window.ccUpdateBinSelect = function() {
   binSel.innerHTML = '<option value="">— Entire section —</option>';
   if (!zoneId) return;
 
-  // Get all bins in this zone from LocState if loaded
-  if (LocState.loaded) {
-    const bins = Object.keys(LocState.locMap)
-      .filter(loc => ccLocBelongsToZone(loc, zoneId))
-      .sort((a, b) => {
-        const ka = whLocSortKey(a), kb = whLocSortKey(b);
-        for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
-        return 0;
-      });
-    bins.forEach(bin => {
-      binSel.innerHTML += '<option value="' + ccEsc(bin) + '">' + ccEsc(bin) + '</option>';
-    });
+  if (!LocState.loaded) {
+    binSel.innerHTML = '<option value="">— Loading location data… —</option>';
+    // Retry once locations finish loading
+    const check = setInterval(function() {
+      if (LocState.loaded) {
+        clearInterval(check);
+        window.ccUpdateBinSelect();
+      }
+    }, 500);
+    return;
   }
+  const bins = Object.keys(LocState.locMap)
+    .filter(loc => ccLocBelongsToZone(loc, zoneId))
+    .sort((a, b) => {
+      const ka = whLocSortKey(a), kb = whLocSortKey(b);
+      for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+      return 0;
+    });
+  bins.forEach(bin => {
+    binSel.innerHTML += '<option value="' + ccEsc(bin) + '">' + ccEsc(bin) + '</option>';
+  });
 };
 
 // Check if a location belongs to a top-level zone
