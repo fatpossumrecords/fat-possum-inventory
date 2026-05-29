@@ -1184,5 +1184,54 @@
 <script src="invoice_module.js"></script>
 <script src="reports_module.js"></script>
 <script src="settings_module.js"></script>
+<script>
+// Mobile sub-menu toggle — pop up above bottom bar
+(function() {
+  function isMobile() { return window.innerWidth <= 768; }
+
+  function closeAllMobSubMenus() {
+    document.getElementById('inv-nav-sub')?.classList.remove('mob-open');
+    document.getElementById('wh-nav-sub')?.classList.remove('mob-open');
+  }
+
+  // Close sub-menus when tapping outside
+  document.addEventListener('click', function(e) {
+    if (!isMobile()) return;
+    const inNav = e.target.closest('#sidebar');
+    if (!inNav) closeAllMobSubMenus();
+  });
+
+  // Inventory nav tap
+  document.addEventListener('click', function(e) {
+    if (!isMobile()) return;
+    const item = e.target.closest('.nav-item[data-view="inventory"]');
+    if (!item) return;
+    e.preventDefault();
+    const sub = document.getElementById('inv-nav-sub');
+    if (!sub) return;
+    const isOpen = sub.classList.contains('mob-open');
+    closeAllMobSubMenus();
+    if (!isOpen) sub.classList.add('mob-open');
+  });
+
+  // FP Oxford nav tap (no data-view, not a sub-item)
+  document.addEventListener('click', function(e) {
+    if (!isMobile()) return;
+    const item = e.target.closest('.nav-item:not([data-view]):not(.nav-sub-item):not(#mobile-settings-btn):not(#mobile-loc-btn):not(#mobile-replen-btn)');
+    if (!item || !item.closest('#sidebar')) return;
+    const sub = document.getElementById('wh-nav-sub');
+    if (!sub) return;
+    const isOpen = sub.classList.contains('mob-open');
+    closeAllMobSubMenus();
+    if (!isOpen) sub.classList.add('mob-open');
+  });
+
+  // Close sub-menus when a sub-item is tapped
+  document.addEventListener('click', function(e) {
+    if (!isMobile()) return;
+    if (e.target.closest('.nav-sub-item')) closeAllMobSubMenus();
+  });
+})();
+</script>
 </body>
 </html>
