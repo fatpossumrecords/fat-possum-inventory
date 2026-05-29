@@ -396,9 +396,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ── ADMIN: USER MANAGEMENT ────────────────────────────────────────
 
-const ADMIN_EMAIL    = 'patrick@fatpossum.com';
-const USERS_GIST_FILE = 'fp_users.json';
-
 // Roles: 'admin' | 'full' | 'warehouse'
 // warehouse = Locations, Replenishment, Pre-Orders only
 const ROLE_LABELS = {
