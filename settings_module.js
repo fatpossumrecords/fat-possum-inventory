@@ -540,7 +540,7 @@ window.applyUserRole = function(role) {
   State.userRole = role;
   if (role === 'admin' || role === 'full') return; // full access — nothing to hide
 
-  // warehouse role: hide everything except Locations, Replenishment, Pre-Orders
+  // warehouse role: hide everything except Locations, Replenishment, Pre-Orders, Cycle Count
   const hideViews = ['dashboard','inventory','movements','manufacturing','alerts','invoices','reports'];
   hideViews.forEach(v => {
     const el = document.querySelector('.nav-item[data-view="' + v + '"]');
