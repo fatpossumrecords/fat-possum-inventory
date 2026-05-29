@@ -439,9 +439,9 @@ function ccRenderCountScreen() {
     '<div style="flex:1;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Expected Qty</div>' +
     '<div id="cc-expected-qty" style="font-size:36px;font-weight:900;font-family:monospace;color:var(--text);">' + item.expected + '</div></div>' +
     '<div style="flex:1;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Actual Qty</div>' +
-    '<input id="cc-actual-input" type="number" min="0" inputmode="numeric" pattern="[0-9]*" placeholder="0"' +
+    '<input id="cc-actual-input" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="0"' +
     ' style="width:100%;font-size:36px;font-weight:900;font-family:monospace;padding:8px 12px;border:2px solid var(--border2);border-radius:6px;background:var(--surface2);color:var(--text);text-align:center;"' +
-    ' onkeydown="if(event.key===\'Enter\') ccSubmitCount()" autofocus />' +
+    ' onkeydown="if(event.key===\'Enter\') ccSubmitCount()" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')" autofocus />' +
     '</div></div>' +
     '<div id="cc-recount-warn" style="display:' + (item.attempts===1?'block':'none') + ';background:#fee2e2;border:1px solid var(--red);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:600;color:var(--red);margin-bottom:12px;">⚠ Qty doesn\'t match. Please recount and enter again.</div>' +
     '<div style="display:flex;gap:8px;">' +
