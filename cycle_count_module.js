@@ -339,8 +339,8 @@ window.ccStartSession = async function(subZoneId) {
 function ccRenderCountScreen() {
   const area = document.getElementById('cc-content-area');
   if (!area || !CCState.session) return;
-  const s   = CCState.session;
-  const idx = s.currentIdx;
+  const s    = CCState.session;
+  const idx  = s.currentIdx;
   const item = s.items[idx];
 
   if (!item) { ccRenderComplete(); return; }
@@ -350,59 +350,73 @@ function ccRenderCountScreen() {
   const progress = Math.round((done / total) * 100);
   const locGroup = ccItemsInSameLoc(s.items, idx);
   const isNewLoc = idx === 0 || s.items[idx-1].locName !== item.locName;
-
-  // Check if we just finished a slot (MW) or column (P1)
   const slotDoneMsg = ccGetSlotCompleteMsg(s, idx);
 
+  // If shell already exists, update in place to keep keyboard alive on iOS
+  const existingInput = document.getElementById('cc-actual-input');
+  if (existingInput) {
+    // Update only the parts that change
+    const prog = document.getElementById('cc-progress-bar');
+    const progText = document.getElementById('cc-progress-text');
+    const slotMsg = document.getElementById('cc-slot-msg');
+    const locHeader = document.getElementById('cc-loc-header');
+    const productTitle = document.getElementById('cc-product-title');
+    const productMeta = document.getElementById('cc-product-meta');
+    const expectedQty = document.getElementById('cc-expected-qty');
+    const recountWarn = document.getElementById('cc-recount-warn');
+
+    if (prog) prog.style.width = progress + '%';
+    if (progText) progText.textContent = done + ' of ' + total + ' products';
+    if (slotMsg) { slotMsg.textContent = slotDoneMsg || ''; slotMsg.style.display = slotDoneMsg ? 'block' : 'none'; }
+    if (locHeader) { locHeader.textContent = isNewLoc ? ('📍 ' + item.locName + ' (' + locGroup + ' product' + (locGroup!==1?'s':'') + ' in this bin)') : ''; locHeader.style.display = isNewLoc ? 'block' : 'none'; }
+    if (productTitle) productTitle.textContent = item.artist ? item.artist + ' — ' + item.name : item.name;
+    if (productMeta) productMeta.innerHTML = '<span style="font-family:monospace;font-size:12px;color:var(--text-muted);">' + ccEsc(item.catalog) + '</span>'
+      + (item.upc ? ' &nbsp;·&nbsp; <span style="font-family:monospace;font-size:12px;color:var(--text-dim);">' + item.upc + '</span>' : '')
+      + ' &nbsp;·&nbsp; <span style="font-size:12px;color:var(--text-muted);">📍 ' + ccEsc(item.locName) + '</span>';
+    if (expectedQty) expectedQty.textContent = item.expected;
+    if (recountWarn) { recountWarn.style.display = item.attempts === 1 ? 'block' : 'none'; }
+    // Clear input value for next item
+    existingInput.value = '';
+    existingInput.focus();
+    return;
+  }
+
+  // First render — build the full shell
   area.innerHTML =
     '<div style="max-width:540px;margin:0 auto;padding:24px;">' +
-
-    // Progress bar
     '<div style="margin-bottom:20px;">' +
     '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:6px;">' +
-    '<span>' + ccEsc(s.subZone) + '</span><span>' + done + ' of ' + total + ' products</span>' +
+    '<span>' + ccEsc(s.subZone) + '</span><span id="cc-progress-text">' + done + ' of ' + total + ' products</span>' +
     '</div>' +
     '<div style="background:var(--border);border-radius:4px;height:6px;">' +
-    '<div style="background:var(--accent);width:' + progress + '%;height:6px;border-radius:4px;transition:width 0.3s;"></div>' +
+    '<div id="cc-progress-bar" style="background:var(--accent);width:' + progress + '%;height:6px;border-radius:4px;transition:width 0.3s;"></div>' +
     '</div></div>' +
-
-    // Slot complete notification
-    (slotDoneMsg ? '<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#92400e;">' + ccEsc(slotDoneMsg) + '</div>' : '') +
-
-    // Location header (show when location changes)
-    (isNewLoc ? '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">📍 ' + ccEsc(item.locName) + ' <span style="font-weight:400;color:var(--text-dim);">(' + locGroup + ' product' + (locGroup !== 1 ? 's' : '') + ' in this bin)</span></div>' : '') +
-
-    // Product card
+    '<div id="cc-slot-msg" style="display:' + (slotDoneMsg?'block':'none') + ';background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#92400e;">' + ccEsc(slotDoneMsg||'') + '</div>' +
+    '<div id="cc-loc-header" style="display:' + (isNewLoc?'block':'none') + ';font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">' + (isNewLoc ? '📍 ' + ccEsc(item.locName) + ' (' + locGroup + ' product' + (locGroup!==1?'s':'') + ' in this bin)' : '') + '</div>' +
     '<div style="background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:24px;margin-bottom:20px;">' +
-    '<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3;">' + ccEsc(item.artist ? item.artist + ' — ' + item.name : item.name) + '</div>' +
-    '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">' +
+    '<div id="cc-product-title" style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3;">' + ccEsc(item.artist ? item.artist + ' — ' + item.name : item.name) + '</div>' +
+    '<div id="cc-product-meta" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">' +
     '<span style="font-family:monospace;font-size:12px;color:var(--text-muted);">' + ccEsc(item.catalog) + '</span>' +
     (item.upc ? '<span style="font-family:monospace;font-size:12px;color:var(--text-dim);">' + item.upc + '</span>' : '') +
     '<span style="font-size:12px;color:var(--text-muted);">📍 ' + ccEsc(item.locName) + '</span>' +
     '</div>' +
     '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">' +
-    '<div style="flex:1;">' +
-    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Expected Qty</div>' +
-    '<div style="font-size:36px;font-weight:900;font-family:monospace;color:var(--text);">' + item.expected + '</div>' +
-    '</div>' +
-    '<div style="flex:1;">' +
-    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Actual Qty</div>' +
+    '<div style="flex:1;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Expected Qty</div>' +
+    '<div id="cc-expected-qty" style="font-size:36px;font-weight:900;font-family:monospace;color:var(--text);">' + item.expected + '</div></div>' +
+    '<div style="flex:1;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Actual Qty</div>' +
     '<input id="cc-actual-input" type="number" min="0" inputmode="numeric" pattern="[0-9]*" placeholder="0"' +
     ' style="width:100%;font-size:36px;font-weight:900;font-family:monospace;padding:8px 12px;border:2px solid var(--border2);border-radius:6px;background:var(--surface2);color:var(--text);text-align:center;"' +
     ' onkeydown="if(event.key===\'Enter\') ccSubmitCount()" autofocus />' +
     '</div></div>' +
-    (item.attempts === 1 ? '<div style="background:#fee2e2;border:1px solid var(--red);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:600;color:var(--red);margin-bottom:12px;">⚠ Qty doesn\'t match. Please recount and enter again.</div>' : '') +
+    '<div id="cc-recount-warn" style="display:' + (item.attempts===1?'block':'none') + ';background:#fee2e2;border:1px solid var(--red);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:600;color:var(--red);margin-bottom:12px;">⚠ Qty doesn\'t match. Please recount and enter again.</div>' +
     '<div style="display:flex;gap:8px;">' +
     '<button onclick="ccSubmitCount()" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;">✓ Confirm Count</button>' +
     '<button onclick="ccSkipItem()" style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);border-radius:8px;padding:14px 18px;font-size:14px;cursor:pointer;" title="Skip this product">⟶</button>' +
     '</div></div>' +
-
-    // Abandon session
     '<div style="text-align:center;margin-top:12px;">' +
     '<button onclick="ccAbandonSession()" style="background:none;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;text-decoration:underline;">Abandon session</button>' +
     '</div></div>';
 
-  // Focus input
   setTimeout(() => document.getElementById('cc-actual-input')?.focus(), 100);
 }
 
@@ -508,11 +522,6 @@ async function ccAdvance() {
     ccRenderSectionPrompt(prevSlot, currSlot);
   } else {
     ccRenderCountScreen();
-    // Re-focus input immediately to keep keyboard up on mobile
-    setTimeout(() => {
-      const inp = document.getElementById('cc-actual-input');
-      if (inp) { inp.focus(); inp.select(); }
-    }, 50);
   }
 }
 
@@ -692,28 +701,13 @@ window.ccEmailReport = async function() {
         '<tbody>' + discRows + '</tbody></table>'
       : '<p style="font-family:sans-serif;color:green;font-weight:700;">✓ No discrepancies — all counts matched.</p>');
 
-  // Save pendingEmails to Gist then trigger workflow immediately
+  // Save pendingEmails to Gist — picked up by ship-notify cron
   CCState.session.pendingEmails = recipients;
   await ccSaveSession();
 
-  // Trigger ship-notify workflow immediately rather than waiting for cron
-  try {
-    const wfRes = await fetch('https://api.github.com/repos/fatpossumrecords/fat-possum-inventory/actions/workflows/ship-notify.yml/dispatches', {
-      method: 'POST',
-      headers: { Authorization: 'token ' + CONFIG.WORKFLOW_TOKEN, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
-      body: JSON.stringify({ ref: 'main' }),
-    });
-    if (wfRes.ok) {
-      console.log('Workflow triggered OK:', wfRes.status);
-    } else {
-      const err = await wfRes.text();
-      console.error('Workflow trigger failed:', wfRes.status, err);
-    }
-  } catch(e) { console.error('Workflow trigger error:', e.message); }
-
   if (statusEl) {
     if (CCState.history.find(h => h.id === CCState.session.id)) {
-      statusEl.innerHTML = '<span style="color:var(--green);">✓ Report sent — you should receive it within a minute.</span>';
+      statusEl.innerHTML = '<span style="color:var(--green);">✓ Queued — will be emailed within 30 min.</span>';
     } else {
       statusEl.innerHTML = '<span style="color:var(--red);">⚠ Save failed — check console for errors.</span>';
     }
