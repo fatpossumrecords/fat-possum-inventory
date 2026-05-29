@@ -425,36 +425,29 @@ td { overflow: hidden; }
      MOBILE — focused on Replenish Walk + Inventory
      ════════════════════════════════════════════ */
 
-  /* ── Bottom nav: 4 items only ── */
+  /* ── Bottom nav: Inventory + FP Oxford + Settings ── */
   #sidebar {
     position: fixed; bottom: 0; left: 0; right: 0;
     width: 100% !important; min-width: 100% !important;
     height: 62px; flex-direction: row;
     border-right: none; border-top: 2px solid var(--border);
-    z-index: 100; overflow: hidden;
+    z-index: 100; overflow: visible;
     background: var(--surface);
     box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
   }
   .sidebar-header, .sidebar-footer,
   .status-row, #orchard-last-upload { display: none !important; }
 
-  nav { display: flex; flex-direction: row; padding: 0; flex: 1; }
+  nav { display: flex; flex-direction: row; padding: 0; flex: 1; overflow: visible; position: relative; }
 
-  /* Hide all nav items by default on mobile */
+  /* Hide all nav items by default */
   nav .nav-item { display: none !important; }
 
-  /* Show only: Dashboard, Inventory, Alerts, FP WH Action */
-  nav .nav-item[data-view="dashboard"],
-  nav .nav-item[data-view="inventory"],
-  nav .nav-item[data-view="alerts"],
-  nav .nav-item:not([data-view]):not(.nav-sub-item) { display: flex !important; }
-
-  /* WH Action toggle (no data-view, uses onclick) */
-  #sidebar > nav + div,
-  #sidebar .nav-item:nth-child(5) { display: flex !important; }
-
-  /* Settings button — always visible on mobile */
+  /* Show only: Inventory, FP Oxford parent (no data-view, not a sub-item), Settings */
+  nav .nav-item[data-view="inventory"] { display: flex !important; }
   #mobile-settings-btn { display: flex !important; }
+  /* FP Oxford parent — no data-view, not a sub-item, not a mobile-btn */
+  nav .nav-item:not([data-view]):not(.nav-sub-item):not(#mobile-settings-btn):not(#mobile-loc-btn):not(#mobile-replen-btn) { display: flex !important; }
 
   .nav-item {
     flex-direction: column; gap: 2px;
@@ -465,7 +458,35 @@ td { overflow: hidden; }
   }
   .nav-item.active { border-top-color: var(--accent); color: var(--accent); }
   .nav-item svg { width: 18px; height: 18px; }
-  #wh-nav-sub { display: none !important; }
+
+  /* Sub-menus: pop up above the bottom bar */
+  #inv-nav-sub,
+  #wh-nav-sub {
+    display: none;
+    position: fixed !important;
+    bottom: 62px !important;
+    left: 0; right: 0;
+    background: var(--surface) !important;
+    border-top: 2px solid var(--accent) !important;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important;
+    z-index: 101 !important;
+    padding: 8px 0 !important;
+    margin: 0 !important;
+    border-left: none !important;
+  }
+  #inv-nav-sub.mob-open,
+  #wh-nav-sub.mob-open { display: block !important; }
+
+  #inv-nav-sub .nav-sub-item,
+  #wh-nav-sub .nav-sub-item {
+    display: flex !important;
+    padding: 14px 24px !important;
+    font-size: 14px !important;
+    border-bottom: 1px solid var(--border) !important;
+    font-weight: 600 !important;
+  }
+  #inv-nav-sub .nav-sub-item:last-child,
+  #wh-nav-sub .nav-sub-item:last-child { border-bottom: none !important; }
 
   /* ── Layout ── */
   #app { flex-direction: column; }
@@ -671,6 +692,17 @@ td { overflow: hidden; }
   #mfg-nav-sub, .wh-nav-sub { display: none !important; }
   .dash-section { padding: 10px 12px; }
   .dash-table { font-size: 11px; }
+}
+
+/* ── TABLET (769px–1024px): sidebar visible, Inventory + FP Oxford only ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  nav .nav-item[data-view="dashboard"],
+  nav .nav-item[data-view="movements"],
+  nav .nav-item[data-view="manufacturing"],
+  nav .nav-item[data-view="alerts"] { display: none !important; }
+  #mfg-nav-sub { display: none !important; }
+  #inv-nav-sub, #wh-nav-sub { display: block !important; }
+  #mobile-loc-btn, #mobile-replen-btn, #mobile-settings-btn { display: none !important; }
 }
 
 /* ── MFG TABS ── */
