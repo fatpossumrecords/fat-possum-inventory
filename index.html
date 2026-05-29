@@ -208,6 +208,15 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Settings
       </div>
+      <!-- Mobile/tablet-only quick nav buttons -->
+      <div id="mobile-loc-btn" class="nav-item" style="display:none;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('locations')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Locations
+      </div>
+      <div id="mobile-replen-btn" class="nav-item" style="display:none;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        Replenishment
+      </div>
       <div id="wh-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('locations')">Locations</div>
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">Replenishment</div>
@@ -1118,6 +1127,33 @@
           Auto-refresh orders when opening Pre-Order view
         </label>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">When off, use the Refresh Orders button manually to avoid rate limiting.</div>
+      </div>
+
+      <!-- ADMIN: USER MANAGEMENT — only shown to admin role -->
+      <div id="s-admin-section" style="display:none;">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);border-top:2px solid var(--accent);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">Admin — User Management</div>
+          <div id="s-users-list" style="margin-bottom:12px;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+              <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Email</label>
+              <input type="email" id="s-new-user-email" placeholder="name@fatpossum.com"
+                style="padding:6px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);width:210px;" />
+            </div>
+            <div>
+              <label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Role</label>
+              <select id="s-new-user-role" style="padding:6px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">
+                <option value="full">Full Access</option>
+                <option value="warehouse">Locations / Replenishment / Pre-Orders</option>
+              </select>
+            </div>
+            <button onclick="adminAddUser()" class="btn-primary btn-sm">Add User</button>
+          </div>
+        </div>
+        <div style="padding:16px 20px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Access Log</div>
+          <div id="s-access-log" style="font-size:11px;font-family:monospace;color:var(--text-muted);max-height:180px;overflow-y:auto;"></div>
+        </div>
       </div>
 
     </div>
