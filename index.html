@@ -321,6 +321,10 @@
 
     <!-- Top bar — aligned with sidebar header height -->
     <div id="top-bar" style="height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 16px;gap:8px;border-bottom:1px solid var(--border);background:var(--surface);">
+      <!-- Hamburger — mobile only -->
+      <button id="mob-hamburger" onclick="mobToggleNav()" style="display:none;background:none;border:none;cursor:pointer;padding:4px;color:var(--text);margin-right:auto;" aria-label="Menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
       <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;width:280px;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="search-input" placeholder="Search… ( / )" autocomplete="off"
@@ -1185,55 +1189,108 @@
 <script src="reports_module.js"></script>
 <script src="settings_module.js"></script>
 <script>
-// Mobile sub-menu toggle — pop up above bottom bar
 (function() {
+  // ── MOBILE HAMBURGER NAV ─────────────────────────────────
   function isMobile() { return window.innerWidth <= 768; }
 
-  function closeAllMobSubMenus() {
-    document.getElementById('inv-nav-sub')?.classList.remove('mob-open');
-    document.getElementById('wh-nav-sub')?.classList.remove('mob-open');
+  window.mobToggleNav = function() {
+    const overlay = document.getElementById('mob-nav-overlay');
+    const drawer  = document.getElementById('mob-nav-drawer');
+    if (!overlay || !drawer) return;
+    const isOpen = drawer.style.display === 'flex';
+    overlay.style.display = isOpen ? 'none' : 'block';
+    drawer.style.display  = isOpen ? 'none' : 'flex';
+  };
+
+  window.mobCloseNav = function() {
+    document.getElementById('mob-nav-overlay').style.display = 'none';
+    document.getElementById('mob-nav-drawer').style.display  = 'none';
+  };
+
+  window.mobNavToggleSub = function(subId, e) {
+    e.preventDefault();
+    const sub   = document.getElementById(subId);
+    if (!sub) return;
+    const isOpen = sub.style.display === 'block';
+    // Close all subs first
+    ['mob-inv-sub','mob-wh-sub'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    document.getElementById('mob-inv-arrow').textContent = '▸';
+    document.getElementById('mob-wh-arrow').textContent  = '▸';
+    if (!isOpen) {
+      sub.style.display = 'block';
+      const arrow = subId === 'mob-inv-sub' ? 'mob-inv-arrow' : 'mob-wh-arrow';
+      document.getElementById(arrow).textContent = '▾';
+    }
+  };
+
+  window.mobNav = function(view) {
+    mobCloseNav();
+    if (typeof switchView === 'function') switchView(view);
+    return false;
+  };
+
+  window.mobNavWH = function(tab) {
+    mobCloseNav();
+    if (typeof switchView === 'function') switchView('replenishment');
+    setTimeout(() => { if (typeof switchWHTab === 'function') switchWHTab(tab); }, 50);
+    return false;
+  };
+
+  // Show hamburger on mobile, hide bottom nav stuff
+  function applyMobileNav() {
+    const hamburger = document.getElementById('mob-hamburger');
+    if (hamburger) hamburger.style.display = isMobile() ? 'flex' : 'none';
   }
 
-  // Close sub-menus when tapping outside
-  document.addEventListener('click', function(e) {
-    if (!isMobile()) return;
-    const inNav = e.target.closest('#sidebar');
-    if (!inNav) closeAllMobSubMenus();
-  });
-
-  // Inventory nav tap
-  document.addEventListener('click', function(e) {
-    if (!isMobile()) return;
-    const item = e.target.closest('.nav-item[data-view="inventory"]');
-    if (!item) return;
-    e.preventDefault();
-    const sub = document.getElementById('inv-nav-sub');
-    if (!sub) return;
-    const isOpen = sub.classList.contains('mob-open');
-    closeAllMobSubMenus();
-    if (!isOpen) sub.classList.add('mob-open');
-  });
-
-  // FP Oxford nav tap (no data-view, not a sub-item)
-  document.addEventListener('click', function(e) {
-    if (!isMobile()) return;
-    const item = e.target.closest('.nav-item:not([data-view]):not(.nav-sub-item):not(#mobile-settings-btn):not(#mobile-loc-btn):not(#mobile-replen-btn)');
-    if (!item || !item.closest('#sidebar')) return;
-    const sub = document.getElementById('wh-nav-sub');
-    if (!sub) return;
-    const isOpen = sub.classList.contains('mob-open');
-    closeAllMobSubMenus();
-    if (!isOpen) sub.classList.add('mob-open');
-  });
-
-  // Close sub-menus when a sub-item is tapped — delay so navigation fires first
-  document.addEventListener('click', function(e) {
-    if (!isMobile()) return;
-    if (e.target.closest('.nav-sub-item')) {
-      setTimeout(closeAllMobSubMenus, 150);
-    }
-  });
+  window.addEventListener('resize', applyMobileNav);
+  document.addEventListener('DOMContentLoaded', applyMobileNav);
 })();
 </script>
+<!-- MOBILE NAV OVERLAY -->
+<div id="mob-nav-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.5);" onclick="mobCloseNav()"></div>
+<div id="mob-nav-drawer" style="display:none;position:fixed;top:0;left:0;bottom:0;width:280px;z-index:201;background:var(--surface);box-shadow:4px 0 20px rgba(0,0,0,0.2);overflow-y:auto;flex-direction:column;">
+  <!-- Drawer header -->
+  <div style="height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <img src="FP-Logo_Submark-Black.jpg" alt="FP" style="width:28px;height:28px;object-fit:contain;" />
+      <span style="font-size:13px;font-weight:700;">Inventory</span>
+    </div>
+    <button onclick="mobCloseNav()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:20px;line-height:1;">✕</button>
+  </div>
+  <!-- Nav items -->
+  <nav id="mob-nav-items" style="padding:8px 0;flex:1;">
+    <a href="#" onclick="mobNav('dashboard')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;font-size:14px;font-weight:600;color:var(--text);text-decoration:none;border-left:3px solid transparent;" id="mob-nav-dashboard">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 4l3 3 5-5"/></svg>Dashboard
+    </a>
+    <a href="#" onclick="mobNavToggleSub('mob-inv-sub', event)" style="display:flex;align-items:center;gap:12px;padding:14px 20px;font-size:14px;font-weight:600;color:var(--text);text-decoration:none;border-left:3px solid transparent;" id="mob-nav-inventory">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"/></svg>Inventory
+      <span id="mob-inv-arrow" style="margin-left:auto;font-size:11px;">▸</span>
+    </a>
+    <div id="mob-inv-sub" style="display:none;background:var(--surface2);border-left:3px solid var(--accent);">
+      <a href="#" onclick="mobNav('inventory')" style="display:block;padding:12px 20px 12px 36px;font-size:13px;color:var(--text);text-decoration:none;">Global Inventory</a>
+      <a href="#" onclick="mobNav('suppressed')" style="display:block;padding:12px 20px 12px 36px;font-size:13px;color:var(--text);text-decoration:none;">Suppressed</a>
+    </div>
+    <a href="#" onclick="mobNavToggleSub('mob-wh-sub', event)" style="display:flex;align-items:center;gap:12px;padding:14px 20px;font-size:14px;font-weight:600;color:var(--text);text-decoration:none;border-left:3px solid transparent;" id="mob-nav-replenishment">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>FP Oxford
+      <span id="mob-wh-arrow" style="margin-left:auto;font-size:11px;">▸</span>
+    </a>
+    <div id="mob-wh-sub" style="display:none;background:var(--surface2);border-left:3px solid var(--accent);">
+      <a href="#" onclick="mobNavWH('locations')" style="display:block;padding:12px 20px 12px 36px;font-size:13px;color:var(--text);text-decoration:none;">📍 Locations</a>
+      <a href="#" onclick="mobNavWH('replenishment')" style="display:block;padding:12px 20px 12px 36px;font-size:13px;color:var(--text);text-decoration:none;">📋 Replenishment</a>
+      <a href="#" onclick="mobNavWH('cycle')" style="display:block;padding:12px 20px 12px 36px;font-size:13px;color:var(--text);text-decoration:none;">🔢 Cycle Count</a>
+    </div>
+    <a href="#" onclick="mobNav('preorders')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;font-size:14px;font-weight:600;color:var(--text);text-decoration:none;border-left:3px solid transparent;" id="mob-nav-preorders">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>Pre-Orders
+    </a>
+    <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
+    <a href="#" onclick="openSettings();mobCloseNav();" style="display:flex;align-items:center;gap:12px;padding:14px 20px;font-size:14px;font-weight:600;color:var(--text);text-decoration:none;border-left:3px solid transparent;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings
+    </a>
+  </nav>
+</div>
+
 </body>
 </html>
