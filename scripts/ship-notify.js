@@ -290,6 +290,9 @@ async function main() {
   );
   console.log(`  ${invoices.length} invoices eligible for shipment check`);
 
+  // Always process cycle count emails regardless of invoice count
+  await processCycleCountEmails();
+
   if (!invoices.length) { console.log('Nothing to check.'); return; }
 
   // Load notification log
@@ -387,9 +390,6 @@ async function main() {
 
   console.log(`\n=== Done: ${sent} sent, ${skipped} skipped, ${errors} errors ===\n`);
   if (errors > 0) process.exit(1);
-
-  // Also process any pending cycle count emails
-  await processCycleCountEmails();
 }
 
 main().catch(e => { console.error('Fatal:', e); process.exit(1); });
