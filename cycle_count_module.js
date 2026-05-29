@@ -615,16 +615,16 @@ async function ccRenderComplete() {
     // Email section
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;">' +
     '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Email Report</div>' +
-    '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">' +
-    '<div style="flex:1;min-width:200px;">' +
-    '<label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Recipients</label>' +
-    '<select id="cc-email-select" multiple style="width:100%;height:80px;padding:6px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">' +
-    emailOpts + '</select>' +
-    '<div style="font-size:10px;color:var(--text-dim);margin-top:3px;">Hold Ctrl/Cmd to select multiple</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">' +
+    users.map(u =>
+      '<button onclick="ccToggleRecipient(this)" data-email="' + ccEsc(u.email) + '"' +
+      ' style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;' +
+      'background:var(--surface2);color:var(--text-muted);border:1.5px solid var(--border2);transition:all 0.15s;">' +
+      ccEsc(u.email) + '</button>'
+    ).join('') +
     '</div>' +
-    '<button onclick="ccEmailReport()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">✉ Send Report</button>' +
-    '</div>' +
-    '<div id="cc-email-status" style="font-size:11px;color:var(--text-muted);margin-top:8px;"></div>' +
+    '<button onclick="ccEmailReport()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;width:100%;">✉ Send Report</button>' +
+    '<div id="cc-email-status" style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center;"></div>' +
     '</div>' +
     '</div>';
 }
@@ -638,13 +638,23 @@ function ccStatCard(val, label, color) {
 
 // ── EMAIL REPORT ─────────────────────────────────────────────
 
-window.ccEmailReport = async function() {
-  const sel       = document.getElementById('cc-email-select');
-  const statusEl  = document.getElementById('cc-email-status');
-  const recipients = sel ? [...sel.selectedOptions].map(o => o.value) : [];
-  if (!recipients.length) { if (statusEl) statusEl.textContent = 'Please select at least one recipient.'; return; }
+window.ccToggleRecipient = function(btn) {
+  const active = btn.dataset.active === 'true';
+  btn.dataset.active = active ? 'false' : 'true';
+  btn.style.background  = active ? 'var(--surface2)' : 'var(--accent)';
+  btn.style.color       = active ? 'var(--text-muted)' : '#fff';
+  btn.style.borderColor = active ? 'var(--border2)' : 'var(--accent)';
+};
 
-  if (statusEl) statusEl.textContent = 'Sending…';
+window.ccEmailReport = async function() {
+  const statusEl   = document.getElementById('cc-email-status');
+  const recipients = [...document.querySelectorAll('[data-email][data-active="true"]')]
+    .map(b => b.dataset.email);
+  if (!recipients.length) {
+    if (statusEl) statusEl.textContent = 'Please select at least one recipient.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'Saving…';
   const s = CCState.session;
 
   const discRows = s.discrepancies.map(d =>
