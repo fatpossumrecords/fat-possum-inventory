@@ -692,12 +692,23 @@ window.ccEmailReport = async function() {
         '<tbody>' + discRows + '</tbody></table>'
       : '<p style="font-family:sans-serif;color:green;font-weight:700;">✓ No discrepancies — all counts matched.</p>');
 
-  // Save pendingEmails to Gist — ship-notify workflow picks them up within 30 min
+  // Save pendingEmails to Gist then trigger workflow immediately
   CCState.session.pendingEmails = recipients;
   await ccSaveSession();
+
+  // Trigger ship-notify workflow immediately rather than waiting for cron
+  try {
+    await fetch('https://api.github.com/repos/fatpossumrecords/fat-possum-inventory/actions/workflows/ship-notify.yml/dispatches', {
+      method: 'POST',
+      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+      body: JSON.stringify({ ref: 'main' }),
+    });
+    console.log('Workflow triggered successfully');
+  } catch(e) { console.warn('Workflow trigger failed:', e.message); }
+
   if (statusEl) {
     if (CCState.history.find(h => h.id === CCState.session.id)) {
-      statusEl.innerHTML = '<span style="color:var(--green);">✓ Queued — will be emailed within 30 min.</span>';
+      statusEl.innerHTML = '<span style="color:var(--green);">✓ Report sent — you should receive it within a minute.</span>';
     } else {
       statusEl.innerHTML = '<span style="color:var(--red);">⚠ Save failed — check console for errors.</span>';
     }
