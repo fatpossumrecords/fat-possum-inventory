@@ -85,15 +85,16 @@ window.switchWHTab = function(tab) {
     document.getElementById('wh-tab-replenishment')?.classList.toggle('hidden', tab !== 'replenishment');
     document.getElementById('wh-tab-walkthrough')?.classList.toggle('hidden',   tab !== 'walkthrough');
     document.getElementById('wh-tab-locations')?.classList.toggle('hidden',     tab !== 'locations');
+    document.getElementById('wh-tab-cycle')?.classList.toggle('hidden',         tab !== 'cycle');
     document.getElementById('wh-tabbtn-replen')?.classList.toggle('active',    tab === 'replenishment');
     document.getElementById('wh-tabbtn-locations')?.classList.toggle('active', tab === 'locations');
+    document.getElementById('wh-tabbtn-cycle')?.classList.toggle('active',     tab === 'cycle');
     // Warehouse View button is not a tab — just highlight when active
     const walkBtn = document.getElementById('wh-tabbtn-walk');
     if (walkBtn) {
       walkBtn.style.background = tab === 'walkthrough' ? 'var(--accent)' : '';
       walkBtn.style.color      = tab === 'walkthrough' ? '#fff' : '';
     }
-
     // Update title + subtitle + config visibility per tab
     const title  = document.getElementById('wh-main-title');
     const sub    = document.getElementById('wh-main-sub');
@@ -110,13 +111,17 @@ window.switchWHTab = function(tab) {
       if (title)  title.textContent = 'Warehouse View';
       if (sub)    sub.textContent   = 'Visual bin layout — run replenishment first';
       if (config) config.style.display = 'none';
+    } else if (tab === 'cycle') {
+      if (title)  title.textContent = 'Cycle Count';
+      if (sub)    sub.textContent   = 'Count inventory and log discrepancies';
+      if (config) config.style.display = 'none';
     }
-
     if (tab === 'replenishment' && window._FPUserSettings && window._FPUserSettings.replen) {
       if (window.applyReplenDefaults) applyReplenDefaults(window._FPUserSettings.replen);
     }
     if (tab === 'walkthrough') wtRender();
-    if (tab === 'locations') locInit();
+    if (tab === 'locations')   locInit();
+    if (tab === 'cycle')       ccInit();
   }, 0);
 };
 
