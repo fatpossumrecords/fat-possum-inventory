@@ -691,7 +691,6 @@
         <div class="view-actions">
           <button id="wh-tabbtn-locations" class="tab-btn active" onclick="switchWHTab('locations')">📍 Locations</button>
           <button id="wh-tabbtn-replen" class="tab-btn" onclick="switchWHTab('replenishment')">📋 Replenishment</button>
-          <button id="wh-tabbtn-walk" class="tab-btn" onclick="switchWHTab('walkthrough')">🗺 Warehouse View</button>
         </div>
       </div>
 
@@ -718,8 +717,9 @@
             <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Min Units</label>
             <input type="number" id="wh-min-units" value="5" min="1" style="width:80px;" oninput="whSaveSettings()" />
           </div>
-          <div style="align-self:flex-end;">
+          <div style="align-self:flex-end;display:flex;gap:8px;">
             <button id="wh-run-btn" onclick="runReplenishment()" class="btn-primary">⟳ Run Report</button>
+            <button id="wh-tabbtn-walk" class="btn-secondary" onclick="switchWHTab('walkthrough')">🗺 Warehouse View</button>
           </div>
         </div>
       </div>
