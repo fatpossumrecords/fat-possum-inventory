@@ -698,13 +698,18 @@ window.ccEmailReport = async function() {
 
   // Trigger ship-notify workflow immediately rather than waiting for cron
   try {
-    await fetch('https://api.github.com/repos/fatpossumrecords/fat-possum-inventory/actions/workflows/ship-notify.yml/dispatches', {
+    const wfRes = await fetch('https://api.github.com/repos/fatpossumrecords/fat-possum-inventory/actions/workflows/ship-notify.yml/dispatches', {
       method: 'POST',
-      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+      headers: { Authorization: 'token ' + CONFIG.WORKFLOW_TOKEN, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
       body: JSON.stringify({ ref: 'main' }),
     });
-    console.log('Workflow triggered successfully');
-  } catch(e) { console.warn('Workflow trigger failed:', e.message); }
+    if (wfRes.ok) {
+      console.log('Workflow triggered OK:', wfRes.status);
+    } else {
+      const err = await wfRes.text();
+      console.error('Workflow trigger failed:', wfRes.status, err);
+    }
+  } catch(e) { console.error('Workflow trigger error:', e.message); }
 
   if (statusEl) {
     if (CCState.history.find(h => h.id === CCState.session.id)) {
