@@ -53,18 +53,18 @@ function ccGetSubZones(zone) {
 }
 
 const CC_ZONES = [
-  { id: 'P1',    label: 'P1 — Pick Aisle',        type: 'p' },
-  { id: 'P2',    label: 'P2 — Pick Aisle',        type: 'p' },
-  { id: 'P3',    label: 'P3 — Apparel',           type: 'p' },
-  { id: 'P4',    label: 'P4 — Books',             type: 'p' },
-  { id: 'P5',    label: 'P5 — 7" Records',        type: 'p' },
-  { id: 'MW-01', label: 'MW-01 — Bulk Aisle 1',   type: 'mw' },
-  { id: 'MW-02', label: 'MW-02 — Bulk Aisle 2',   type: 'mw' },
-  { id: 'MW-03', label: 'MW-03 — Bulk Aisle 3',   type: 'mw' },
-  { id: 'MW-04', label: 'MW-04 — Bulk Aisle 4',   type: 'mw' },
-  { id: 'MW-05', label: 'MW-05 — Bulk Aisle 5',   type: 'mw' },
-  { id: 'MW-06', label: 'MW-06 — Bulk Aisle 6',   type: 'mw' },
-  { id: 'NOW',   label: 'NOW — North Warehouse',  type: 'now', manualOnly: true },
+  { id: 'P1',    label: 'P1 — LPs',                type: 'p' },
+  { id: 'P2',    label: 'P2 — CDs',                type: 'p' },
+  { id: 'P3',    label: 'P3 — Apparel',            type: 'p' },
+  { id: 'P4',    label: 'P4 — Books',              type: 'p' },
+  { id: 'P5',    label: 'P5 — 7" Records',         type: 'p' },
+  { id: 'MW-01', label: 'MW-01 — Bulk Aisle 1',    type: 'mw' },
+  { id: 'MW-02', label: 'MW-02 — Bulk Aisle 2',    type: 'mw' },
+  { id: 'MW-03', label: 'MW-03 — Bulk Aisle 3',    type: 'mw' },
+  { id: 'MW-04', label: 'MW-04 — Bulk Aisle 4',    type: 'mw' },
+  { id: 'MW-05', label: 'MW-05 — Bulk Aisle 5',    type: 'mw' },
+  { id: 'MW-06', label: 'MW-06 — Bulk Aisle 6',    type: 'mw' },
+  { id: 'NOW',   label: 'NOW — North Warehouse',   type: 'now', manualOnly: true },
 ];
 
 // ── INIT ─────────────────────────────────────────────────────
@@ -259,22 +259,17 @@ function ccRenderHome() {
 
     // Manual zone select
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:24px;">' +
-    '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Count a Specific Zone</div>' +
+    '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Count a Specific Area</div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">' +
     '<div style="flex:1;min-width:160px;">' +
-    '<label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Zone</label>' +
-    '<select id="cc-zone-select" onchange="ccUpdateSubZoneSelect()" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">' +
+    '<label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Section</label>' +
+    '<select id="cc-zone-select" onchange="ccUpdateBinSelect()" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">' +
     '<option value="">— Select —</option>' + zoneOpts +
     '</select></div>' +
     '<div style="flex:1;min-width:160px;">' +
-    '<label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Sub-section</label>' +
-    '<select id="cc-subzone-select" onchange="ccUpdateBinSelect()" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">' +
-    '<option value="">— Select zone first —</option>' +
-    '</select></div>' +
-    '<div style="flex:1;min-width:160px;" id="cc-bin-wrap">' +
-    '<label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Specific Bin <span style="font-weight:400;opacity:0.6;">(optional)</span></label>' +
+    '<label style="display:block;font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Bin <span style="font-weight:400;opacity:0.6;">(optional — leave blank for whole section)</span></label>' +
     '<select id="cc-bin-select" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">' +
-    '<option value="">— All bins —</option>' +
+    '<option value="">— Entire section —</option>' +
     '</select></div>' +
     '</div>' +
     '<div style="margin-top:10px;text-align:right;">' +
@@ -291,50 +286,47 @@ function ccRenderHome() {
   ccUpdateHistoryPanel();
 }
 
-window.ccUpdateSubZoneSelect = function() {
-  const zone = document.getElementById('cc-zone-select')?.value;
-  const sel  = document.getElementById('cc-subzone-select');
-  if (!sel) return;
-  if (!zone) { sel.innerHTML = '<option value="">— Select zone first —</option>'; return; }
-  const subs = ccGetSubZones(zone);
-  if (!subs.length) {
-    sel.innerHTML = '<option value="' + zone + '">All of ' + zone + '</option>';
-  } else {
-    sel.innerHTML = '<option value="">— All sub-sections —</option>' + subs.map(s => '<option value="' + s.id + '">' + s.label + '</option>').join('');
-  }
-  ccUpdateBinSelect();
-};
+window.ccUpdateSubZoneSelect = function() {}; // kept for compatibility
 
 window.ccUpdateBinSelect = function() {
-  const subZoneId = document.getElementById('cc-subzone-select')?.value;
-  const binSel    = document.getElementById('cc-bin-select');
+  const zoneId = document.getElementById('cc-zone-select')?.value;
+  const binSel = document.getElementById('cc-bin-select');
   if (!binSel) return;
-  binSel.innerHTML = '<option value="">— All bins —</option>';
-  if (!subZoneId || !LocState.loaded) return;
-  // Get all locations that belong to this sub-zone
-  const bins = Object.keys(LocState.locMap)
-    .filter(loc => ccLocBelongsToSubZone(loc, subZoneId))
-    .sort((a, b) => {
-      const ka = whLocSortKey(a), kb = whLocSortKey(b);
-      for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
-      return 0;
-    });
-  if (bins.length) {
+  binSel.innerHTML = '<option value="">— Entire section —</option>';
+  if (!zoneId) return;
+
+  // Get all bins in this zone from LocState if loaded
+  if (LocState.loaded) {
+    const bins = Object.keys(LocState.locMap)
+      .filter(loc => ccLocBelongsToZone(loc, zoneId))
+      .sort((a, b) => {
+        const ka = whLocSortKey(a), kb = whLocSortKey(b);
+        for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
+        return 0;
+      });
     bins.forEach(bin => {
       binSel.innerHTML += '<option value="' + ccEsc(bin) + '">' + ccEsc(bin) + '</option>';
     });
   }
 };
 
+// Check if a location belongs to a top-level zone
+function ccLocBelongsToZone(locName, zoneId) {
+  if (zoneId === 'NOW') return whIsNowLoc(locName);
+  if (zoneId.startsWith('MW-')) return locName.startsWith(zoneId + '-');
+  if (zoneId === 'P1') return locName.startsWith('P1-');
+  if (zoneId === 'P2') return locName.startsWith('P2-');
+  if (zoneId === 'P3') return locName.startsWith('P3-');
+  if (zoneId === 'P4') return locName.startsWith('P4-');
+  if (zoneId === 'P5') return locName.startsWith('P5-');
+  return false;
+}
+
 window.ccStartManual = function() {
-  const subZoneEl = document.getElementById('cc-subzone-select');
-  const binEl     = document.getElementById('cc-bin-select');
-  const zone      = document.getElementById('cc-zone-select')?.value;
-  const subZoneId = subZoneEl?.value || zone;
-  const binId     = binEl?.value;
-  if (!subZoneId) { alert('Please select a zone.'); return; }
-  // If a specific bin is selected, use it as the target
-  ccStartSession(binId || subZoneId);
+  const zoneId = document.getElementById('cc-zone-select')?.value;
+  const binId  = document.getElementById('cc-bin-select')?.value;
+  if (!zoneId) { alert('Please select a section.'); return; }
+  ccStartSession(binId || zoneId);
 };
 
 // ── START SESSION ─────────────────────────────────────────────
