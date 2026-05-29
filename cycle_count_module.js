@@ -312,11 +312,7 @@ window.ccUpdateBinSelect = function() {
   }
   const bins = Object.keys(LocState.locMap)
     .filter(loc => ccLocBelongsToZone(loc, zoneId))
-    .sort((a, b) => {
-      const ka = whLocSortKey(a), kb = whLocSortKey(b);
-      for (let i = 0; i < ka.length; i++) { if (ka[i] < kb[i]) return -1; if (ka[i] > kb[i]) return 1; }
-      return 0;
-    });
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   bins.forEach(bin => {
     binSel.innerHTML += '<option value="' + ccEsc(bin) + '">' + ccEsc(bin) + '</option>';
   });
