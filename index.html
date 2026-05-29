@@ -220,6 +220,7 @@
       <div id="wh-nav-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border2);margin-left:16px;margin-bottom:2px;">
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('locations')">Locations</div>
         <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('replenishment')">Replenishment</div>
+        <div class="nav-item nav-sub-item" style="font-size:11px;padding:6px 12px;cursor:pointer;" onclick="switchView('replenishment');switchWHTab('cycle')">Cycle Count</div>
       </div>
     <div class="sidebar-footer">
 
@@ -691,6 +692,7 @@
         <div class="view-actions">
           <button id="wh-tabbtn-locations" class="tab-btn active" onclick="switchWHTab('locations')">📍 Locations</button>
           <button id="wh-tabbtn-replen" class="tab-btn" onclick="switchWHTab('replenishment')">📋 Replenishment</button>
+          <button id="wh-tabbtn-cycle" class="tab-btn" onclick="switchWHTab('cycle')">🔢 Cycle Count</button>
         </div>
       </div>
 
@@ -848,6 +850,11 @@
           <div id="loc-status" style="font-size:11px;color:var(--text-muted);margin-left:auto;"></div>
         </div>
         <div style="flex:1;overflow:auto;min-height:0;" id="loc-content-area"></div>
+      </div>
+
+      <!-- CYCLE COUNT TAB -->
+      <div id="wh-tab-cycle" class="hidden" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+        <div style="flex:1;overflow:auto;min-height:0;" id="cc-content-area"></div>
       </div>
 
     </div>
@@ -1171,6 +1178,7 @@
 </div>
 
 <script src="wh_module.js"></script>
+<script src="cycle_count_module.js"></script>
 <script src="app.js"></script>
 <script src="preorder_module.js?v=16"></script>
 <script src="invoice_module.js"></script>
