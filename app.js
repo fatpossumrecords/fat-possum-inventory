@@ -207,25 +207,75 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── GOOGLE AUTH ───────────────────────────────────────────────
-window.handleGoogleLogin = function(response) {
+const ADMIN_EMAIL     = 'patrick@fatpossum.com';
+const USERS_GIST_FILE = 'fp_users.json';
+
+window.handleGoogleLogin = async function(response) {
   const payload = parseJwt(response.credential);
+
+  // Domain check — must be @fatpossum.com
   if (CONFIG.ALLOWED_DOMAIN && !payload.email.endsWith('@' + CONFIG.ALLOWED_DOMAIN)) {
     document.getElementById('login-error').classList.remove('hidden');
     return;
   }
-  State.user = { name: payload.name, email: payload.email, picture: payload.picture };
-  sessionStorage.setItem('fp_user', JSON.stringify(State.user));
+
+  const email = payload.email.toLowerCase();
+  let role = null;
+
+  if (email === ADMIN_EMAIL.toLowerCase()) {
+    role = 'admin';
+  } else {
+    try {
+      const res  = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+        headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
+        cache: 'no-store',
+      });
+      const data    = await res.json();
+      const content = data.files?.[USERS_GIST_FILE]?.content;
+      const users   = content ? JSON.parse(content) : { users: [], log: [] };
+      const found   = (users.users || []).find(u => u.email.toLowerCase() === email);
+      if (!found) {
+        document.getElementById('login-error').classList.remove('hidden');
+        document.getElementById('login-error').textContent =
+          'Access denied. Contact Patrick to request access.';
+        return;
+      }
+      role = found.role || 'full';
+      found.lastSignIn = new Date().toISOString();
+      if (!users.log) users.log = [];
+      users.log.push({ email, at: new Date().toISOString(), role });
+      if (users.log.length > 200) users.log = users.log.slice(-200);
+      fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+        method: 'PATCH',
+        headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(users, null, 2) } } }),
+      }).catch(() => {});
+    } catch(e) {
+      console.warn('Could not load user list — allowing access for @fatpossum.com domain member');
+      role = 'full';
+    }
+  }
+
+  State.user     = { name: payload.name, email: payload.email, picture: payload.picture };
+  State.userRole = role;
+  sessionStorage.setItem('fp_user',     JSON.stringify(State.user));
+  sessionStorage.setItem('fp_userRole', role);
   bootApp();
 };
+
 function parseJwt(token) {
   return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
 }
+
 function logout() {
   sessionStorage.removeItem('fp_user');
-  State.user = null;
+  sessionStorage.removeItem('fp_userRole');
+  State.user     = null;
+  State.userRole = null;
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
 }
+
 function bootApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
@@ -235,37 +285,31 @@ function bootApp() {
     const display = firstName.charAt(0).toUpperCase() + firstName.slice(1);
     ur.textContent = 'Hi ' + display;
   }
+  // Apply role-based nav restrictions
+  const storedRole = sessionStorage.getItem('fp_userRole') || State.userRole || 'full';
+  if (storedRole && window.applyUserRole) applyUserRole(storedRole);
   loadColumnLayout();
-   if (window.whLoadSettings) whLoadSettings();
+  if (window.whLoadSettings) whLoadSettings();
   // Restore hidden mfg items from localStorage
   try {
     const hidden = JSON.parse(localStorage.getItem('fp_hidden_mfg') || '[]');
     State.hiddenMfgItems = new Set(hidden);
   } catch(e) {}
   updateMfgQueueBadge();
-  // Load Gist FIRST (suppressed titles, manual artists, shopify vendors)
-  // then load Packiyo so mergeData has the suppression list ready
   // Restore cached Packiyo data instantly for immediate render
   try {
     const cachedProducts = localStorage.getItem('fp_packiyo_products');
-    const cachedPOs = localStorage.getItem('fp_packiyo_pos');
+    const cachedPOs      = localStorage.getItem('fp_packiyo_pos');
     const cachedVelocity = localStorage.getItem('fp_packiyo_velocity');
     if (cachedProducts) {
       State.packiyoProducts = JSON.parse(cachedProducts);
-      State.packiyoLoaded = true;
+      State.packiyoLoaded   = true;
       setStatus('packiyo', 'ok', State.packiyoProducts.length + ' items (cached)');
     }
-    if (cachedPOs) State.packiyoPOs = JSON.parse(cachedPOs);
-    if (cachedVelocity) {
-      State.fp_velocity = JSON.parse(cachedVelocity);
-      // Pre-apply velocity to products for immediate render
-      for (const p of State.packiyoProducts) {
-        const vel = State.fp_velocity;
-        // Will be applied properly in mergeData via applyShopifyVendors
-      }
-    }
+    if (cachedPOs)      State.packiyoPOs  = JSON.parse(cachedPOs);
+    if (cachedVelocity) State.fp_velocity = JSON.parse(cachedVelocity);
   } catch(e) {}
-
+   
   // Load Gist FIRST — has orchard data, suppressions, manual artists, movements
   // Poll until banner has candidates and dashboard is active — wait for POs too
   let _bannerInterval = setInterval(() => {
