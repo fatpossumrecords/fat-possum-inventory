@@ -101,13 +101,21 @@ async function ccLoadHistory() {
 
 async function ccSaveHistory() {
   try {
-    await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
       method: 'PATCH',
       headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: { [CC_GIST_FILE]: { content: JSON.stringify(CCState.history) } } }),
     });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('Cycle count Gist save failed:', res.status, err.slice(0,200));
+      if (window.toast) toast('⚠ Cycle count save failed (' + res.status + ')', 'error');
+    } else {
+      console.log('Cycle count saved to Gist OK, entries:', CCState.history.length);
+    }
   } catch(e) {
-    console.warn('Cycle count save failed:', e.message);
+    console.error('Cycle count Gist save error:', e.message);
+    if (window.toast) toast('⚠ Cycle count save failed: ' + e.message, 'error');
   }
 }
 
@@ -669,26 +677,15 @@ window.ccEmailReport = async function() {
         '<tbody>' + discRows + '</tbody></table>'
       : '<p style="font-family:sans-serif;color:green;font-weight:700;">✓ No discrepancies — all counts matched.</p>');
 
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 100,
-        system: 'You are an email sending assistant. Use the Resend API to send this email. Reply with just "sent" when done.',
-        messages: [{ role: 'user', content: 'Send this cycle count report via Resend API' }],
-      }),
-    });
-    // Actually send via a simple fetch to the same pattern as ship-notify
-    // Since we don't have server-side here, we'll use the Anthropic API to trigger
-    throw new Error('client-side');
-  } catch(e) {
-    // Client-side can't call Resend directly (CORS) — save to Gist with email_pending flag
-    if (!CCState.session.pendingEmails) CCState.session.pendingEmails = [];
-    CCState.session.pendingEmails = recipients;
-    await ccSaveSession();
-    if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✓ Report queued — will be emailed next time the GitHub Action runs (within 30 min).</span>';
+  // Save pendingEmails to Gist — ship-notify workflow picks them up within 30 min
+  CCState.session.pendingEmails = recipients;
+  await ccSaveSession();
+  if (statusEl) {
+    if (CCState.history.find(h => h.id === CCState.session.id)) {
+      statusEl.innerHTML = '<span style="color:var(--green);">✓ Queued — will be emailed within 30 min.</span>';
+    } else {
+      statusEl.innerHTML = '<span style="color:var(--red);">⚠ Save failed — check console for errors.</span>';
+    }
   }
 };
 
