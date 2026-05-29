@@ -508,6 +508,11 @@ async function ccAdvance() {
     ccRenderSectionPrompt(prevSlot, currSlot);
   } else {
     ccRenderCountScreen();
+    // Re-focus input immediately to keep keyboard up on mobile
+    setTimeout(() => {
+      const inp = document.getElementById('cc-actual-input');
+      if (inp) { inp.focus(); inp.select(); }
+    }, 50);
   }
 }
 
