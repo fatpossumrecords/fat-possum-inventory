@@ -17,6 +17,7 @@ const CONFIG = {
   GIST_TOKEN: (()=>'github_pat_11CDQQ5RA0yhSrJMafd3Fy_SuJsZtHRLaCo'+'J2KPwApkIdS76CaxEo9xLuHEo96bkTiZ7D546A7KzhWglV5')(),
   GIST_FILE:  'fp_data.json',
   GIST_CONFIG_FILE: 'fp_config.json',
+  ORCHARD_SHEET_ID: '1L9r-24Grf_vH17YKJF-D705VnMMvroKNBQD9YUCQVZg',
 };
 
 const State = {
@@ -335,6 +336,30 @@ function bootApp() {
     if (State.movements.length) renderMovementsTable();
     scheduleAutoRefresh();
     setTimeout(takeStockSnapshot, 5000); // take snapshot 5s after boot
+    // Silently request a Google Sheets token (no prompt if user already consented)
+    // This enables auto-sync of the Orchard Google Sheet on every load
+    setTimeout(() => {
+      try {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: CONFIG.GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+          callback: (resp) => {
+            if (resp.access_token) {
+              State.sheetsToken = resp.access_token;
+              console.log('Sheets token refreshed (auto)');
+              syncToSheets();
+              loadOrchardFromSheets();
+            }
+          },
+          error_callback: (err) => {
+            console.log('Sheets silent auth skipped:', err.type);
+          }
+        });
+        client.requestAccessToken({ prompt: '' }); // '' = silent, no popup unless needed
+      } catch(e) {
+        console.log('Sheets auto-auth unavailable:', e.message);
+      }
+    }, 2000); // 2s delay so GIS library has time to load
     // Auto-push any unsynced local changes
     if (window._hasPendingLocalChanges) {
       window._hasPendingLocalChanges = false;
@@ -366,7 +391,7 @@ function updateOrchardStatus() {
   const label = 'Updated ' + formatRelativeDate(new Date(ts));
   setStatus('orchard', state, label);
   if (el) {
-    el.textContent = 'Last upload: ' + new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    el.textContent = 'Last sync: ' + new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
     el.style.color = color || 'var(--text-dim)';
     if (days >= 10) el.textContent += ' ⚠ ' + days + 'd ago';
   }
@@ -1087,6 +1112,55 @@ function loadOrchardCSV(file) {
   reader.readAsText(file);
 }
 
+// ── ORCHARD AUTO-SYNC FROM GOOGLE SHEETS ──────────────────────
+async function loadOrchardFromSheets() {
+  // Silently skip if we haven't authenticated with Google yet
+  if (!State.sheetsToken) return;
+  setStatus('orchard', 'loading', 'Fetching from Google Sheets…');
+  try {
+    // Export the Orchard sheet as CSV via Sheets API
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.ORCHARD_SHEET_ID}/values/A1:AZ?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+    const res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + State.sheetsToken }
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn('Orchard Sheets fetch failed:', res.status, err);
+      setStatus('orchard', 'error', 'Sheets fetch failed (' + res.status + ')');
+      return;
+    }
+    const data = await res.json();
+    const rows = data.values || [];
+    if (rows.length < 2) {
+      setStatus('orchard', 'error', 'Empty sheet response');
+      return;
+    }
+    // Convert rows array to CSV text so we can reuse the existing parseCSV pipeline
+    const csvText = rows.map(row =>
+      row.map(cell => {
+        const s = String(cell ?? '');
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',')
+    ).join('\n');
+    State.orchardData = deduplicateOrchard(parseCSV(csvText));
+    State.orchardLoaded = true;
+    const ts = new Date().toISOString();
+    localStorage.setItem('fp_orchard_ts', ts);
+    localStorage.setItem('fp_orchard_uploads', JSON.stringify(getUploadHistory()));
+    updateOrchardStatus();
+    mergeData();
+    // Persist to Gist so all users get the fresh data
+    setStatus('orchard', 'loading', 'Saving to cloud…');
+    await saveOrchardToGist();
+    updateOrchardStatus();
+    console.log('Orchard auto-synced from Google Sheets:', State.orchardData.length, 'products');
+    toast(`Orchard synced from Google Sheets: ${State.orchardData.length} products`, 'success');
+  } catch(err) {
+    console.warn('Orchard Sheets sync error:', err.message);
+    setStatus('orchard', 'error', 'Sheets sync error');
+  }
+}
+
 function loadShopifyCSV(file) {
   if (!window.Papa) {
     const script = document.createElement('script');
@@ -1225,6 +1299,8 @@ window.initSheetsAuth = function() {
         State.sheetsToken = resp.access_token;
         console.log('Sheets auth OK');
         syncToSheets();
+        // Auto-sync Orchard data whenever we get/refresh a token
+        loadOrchardFromSheets();
       }
     },
   });
