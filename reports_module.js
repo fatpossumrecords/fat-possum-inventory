@@ -317,12 +317,32 @@ function rptRenderConfig(body) {
 
     + '</div>';
 
-  // Load saved schedule values
-  setTimeout(function() {
-    const s = rptGetSchedule();
+  // Load saved schedule values — prefer Gist, fall back to localStorage
+  setTimeout(async function() {
+    let s = rptGetSchedule(); // localStorage first for instant display
     if (s.emails) { const el = document.getElementById('rpt-schedule-emails'); if (el) el.value = s.emails; }
     if (s.period) { const el = document.getElementById('rpt-schedule-period'); if (el) el.value = s.period; }
-    const saved = s.day || 1;
+
+    // Then fetch from Gist to get latest
+    try {
+      const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
+      if (creds) {
+        const res  = await fetch('https://api.github.com/gists/' + creds.gistId, {
+          headers: { Authorization: 'token ' + creds.token }, cache: 'no-store',
+        });
+        const data    = await res.json();
+        const content = data.files?.['fp_report_schedule.json']?.content;
+        if (content) {
+          const gs = JSON.parse(content);
+          localStorage.setItem('fp_rpt_schedule', JSON.stringify(gs));
+          if (gs.emails) { const el = document.getElementById('rpt-schedule-emails'); if (el) el.value = gs.emails; }
+          if (gs.period) { const el = document.getElementById('rpt-schedule-period'); if (el) el.value = gs.period; }
+          s = gs;
+        }
+      }
+    } catch(e) { console.warn('Could not load schedule from Gist:', e.message); }
+
+    const saved   = s.day || 1;
     const statusEl = document.getElementById('rpt-schedule-status');
     if (statusEl && s.day) {
       const s2 = saved % 100; const suffix = (s2 >= 11 && s2 <= 13) ? 'th' : (saved % 10 === 1) ? 'st' : (saved % 10 === 2) ? 'nd' : (saved % 10 === 3) ? 'rd' : 'th';
