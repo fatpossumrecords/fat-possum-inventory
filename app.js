@@ -24,6 +24,7 @@ const State = {
   user: null,
   packiyoProducts: [],
   orchardData: [],
+  orchardSyncSource: null, // 'sheets' | 'manual' | 'gist' | null
   merged: [],
   movements: [],
   packiyoLoaded: false,
@@ -361,8 +362,10 @@ function bootApp() {
             }
           },
           error_callback: (err) => {
-            // 'user_logged_out' or 'consent_required' = needs manual click on Sync Sheet
+            // 'popup_closed' / 'consent_required' = user needs to click Sync Sheet once
             console.log('Sheets auto-auth needs manual trigger:', err.type);
+            // Update sidebar to show we're using cached/Gist data, not live sheet
+            updateOrchardStatus();
           }
         });
         // prompt:'none' = truly silent, never shows any popup
@@ -393,20 +396,46 @@ function bootApp() {
 function updateOrchardStatus() {
   const ts = localStorage.getItem('fp_orchard_ts');
   const el = document.getElementById('orchard-last-upload');
-  if (!ts) {
-    setStatus('orchard', 'error', 'No data');
-    if (el) el.textContent = '';
+  const src = State.orchardSyncSource; // 'sheets' | 'manual' | 'gist' | null
+
+  if (!ts || !State.orchardLoaded) {
+    setStatus('orchard', 'error', 'No data — upload CSV or click Sync Sheet');
+    if (el) { el.textContent = 'No Orchard data loaded'; el.style.color = 'var(--red)'; }
     return;
   }
+
   const days = Math.floor((Date.now() - new Date(ts)) / 86400000);
-  const state = days >= 20 ? 'error' : days >= 15 ? 'error' : days >= 10 ? 'loading' : 'ok';
-  const color = days >= 20 ? 'var(--red)' : days >= 15 ? 'var(--orange)' : days >= 10 ? 'var(--yellow)' : '';
-  const label = 'Updated ' + formatRelativeDate(new Date(ts));
-  setStatus('orchard', state, label);
+  const dateStr = new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+
+  // Dot color: red if stale, yellow if aging, green if fresh
+  const dotState = days >= 15 ? 'error' : days >= 7 ? 'loading' : 'ok';
+
+  // Status badge next to "Orchard CSV" in the header bar
+  let badge;
+  if (src === 'sheets') {
+    badge = 'Synced ' + formatRelativeDate(new Date(ts));
+  } else if (src === 'manual') {
+    badge = 'Uploaded ' + formatRelativeDate(new Date(ts));
+  } else {
+    // gist or unknown — loaded from cloud cache, sheet not yet fetched this session
+    badge = days === 0 ? 'Cached (today)' : 'Cached — ' + days + 'd ago';
+  }
+  setStatus('orchard', dotState, badge);
+
+  // Sub-line below the upload button in the sidebar
   if (el) {
-    el.textContent = 'Last sync: ' + new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-    el.style.color = color || 'var(--text-dim)';
-    if (days >= 10) el.textContent += ' ⚠ ' + days + 'd ago';
+    if (src === 'sheets') {
+      el.textContent = '✓ Live from Google Sheet · ' + dateStr;
+      el.style.color = days >= 7 ? 'var(--yellow)' : 'var(--green, #4caf50)';
+    } else if (src === 'manual') {
+      el.textContent = 'Manually uploaded · ' + dateStr;
+      el.style.color = days >= 7 ? 'var(--yellow)' : 'var(--text-dim)';
+    } else {
+      // Using Gist cache — auto-sync hasn't run yet this session
+      el.textContent = '⚠ Using cached data · Click "Sync Sheet" to refresh';
+      el.style.color = days >= 7 ? 'var(--red)' : 'var(--yellow)';
+    }
+    if (days >= 15) el.textContent += ' (' + days + 'd old)';
   }
 }
 
@@ -473,6 +502,7 @@ async function loadGistData() {
           State.orchardData = sample && sample.u !== undefined
             ? parsed.orchardData.map(expandOrchardRow) : parsed.orchardData;
           State.orchardLoaded = true;
+          State.orchardSyncSource = 'gist';
           console.log('Orchard loaded:', State.orchardData.length, 'products');
         }
         if (parsed.orchardTs) localStorage.setItem('fp_orchard_ts', parsed.orchardTs);
@@ -1109,6 +1139,7 @@ function loadOrchardCSV(file) {
     try {
       State.orchardData = deduplicateOrchard(parseCSV(e.target.result));
       State.orchardLoaded = true;
+      State.orchardSyncSource = 'manual';
       localStorage.setItem('fp_orchard_ts', new Date().toISOString()); localStorage.setItem('fp_orchard_uploads', JSON.stringify(getUploadHistory()));
       updateOrchardStatus();
       mergeData();
@@ -1157,6 +1188,7 @@ async function loadOrchardFromSheets() {
     ).join('\n');
     State.orchardData = deduplicateOrchard(parseCSV(csvText));
     State.orchardLoaded = true;
+    State.orchardSyncSource = 'sheets';
     const ts = new Date().toISOString();
     localStorage.setItem('fp_orchard_ts', ts);
     localStorage.setItem('fp_orchard_uploads', JSON.stringify(getUploadHistory()));
