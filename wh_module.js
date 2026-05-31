@@ -29,6 +29,7 @@ window.toggleInvoiceNav = function(e) {
   const open = sub.style.display === 'block';
   sub.style.display = open ? 'none' : 'block';
   if (arrow) arrow.textContent = open ? '▸' : '▾';
+  if (!open && typeof switchToInvoices === 'function') switchToInvoices('pending');
 };
 
 window.toggleInventoryNav = function(e) {
