@@ -336,9 +336,18 @@ function bootApp() {
     if (State.movements.length) renderMovementsTable();
     scheduleAutoRefresh();
     setTimeout(takeStockSnapshot, 5000); // take snapshot 5s after boot
-    // Silently request a Google Sheets token (no prompt if user already consented)
-    // This enables auto-sync of the Orchard Google Sheet on every load
-    setTimeout(() => {
+    // Auto-sync Orchard from Google Sheet on first user interaction.
+    // Browsers block popups from timers, but allow them from user gestures.
+    // We listen for the first click/keydown after boot, then silently request
+    // a token (prompt:'none' = never shows UI, just fails if no prior consent).
+    // If the user has consented before, we get a token instantly and sync.
+    // If not, the existing "Sync Sheet" button in the header handles it.
+    window._orchardSheetsSyncDone = false;
+    function _tryOrchardSheetsSync() {
+      if (window._orchardSheetsSyncDone) return;
+      window._orchardSheetsSyncDone = true;
+      document.removeEventListener('click', _tryOrchardSheetsSync);
+      document.removeEventListener('keydown', _tryOrchardSheetsSync);
       try {
         const client = google.accounts.oauth2.initTokenClient({
           client_id: CONFIG.GOOGLE_CLIENT_ID,
@@ -352,14 +361,18 @@ function bootApp() {
             }
           },
           error_callback: (err) => {
-            console.log('Sheets silent auth skipped:', err.type);
+            // 'user_logged_out' or 'consent_required' = needs manual click on Sync Sheet
+            console.log('Sheets auto-auth needs manual trigger:', err.type);
           }
         });
-        client.requestAccessToken({ prompt: '' }); // '' = silent, no popup unless needed
+        // prompt:'none' = truly silent, never shows any popup
+        client.requestAccessToken({ prompt: 'none' });
       } catch(e) {
         console.log('Sheets auto-auth unavailable:', e.message);
       }
-    }, 2000); // 2s delay so GIS library has time to load
+    }
+    document.addEventListener('click', _tryOrchardSheetsSync);
+    document.addEventListener('keydown', _tryOrchardSheetsSync);
     // Auto-push any unsynced local changes
     if (window._hasPendingLocalChanges) {
       window._hasPendingLocalChanges = false;
