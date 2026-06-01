@@ -428,8 +428,8 @@ function ccRenderCountScreen() {
     '</div></div>' +
     '<div id="cc-slot-msg" style="display:' + (slotDoneMsg?'block':'none') + ';background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;font-weight:600;color:#92400e;">' + ccEsc(slotDoneMsg||'') + '</div>' +
     '<div id="cc-loc-header" style="display:' + (isNewLoc?'block':'none') + ';font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px;">' + (isNewLoc ? '📍 ' + ccEsc(item.locName) + ' (' + locGroup + ' product' + (locGroup!==1?'s':'') + ' in this bin)' : '') + '</div>' +
-    '<div style="background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:24px;margin-bottom:20px;">' +
-    '<div id="cc-product-title" style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3;">' + ccEsc(item.artist ? item.artist + ' — ' + item.name : item.name) + '</div>' +
+    '<div style="background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:24px;margin-bottom:20px;min-height:260px;display:flex;flex-direction:column;justify-content:space-between;">' +
+    '<div id="cc-product-title" style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3;min-height:2.6em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + ccEsc(item.artist ? item.artist + ' — ' + item.name : item.name) + '</div>' +
     '<div id="cc-product-meta" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">' +
     '<span style="font-family:monospace;font-size:12px;color:var(--text-muted);">' + ccEsc(item.catalog) + '</span>' +
     (item.upc ? '<span style="font-family:monospace;font-size:12px;color:var(--text-dim);">' + item.upc + '</span>' : '') +
@@ -588,14 +588,45 @@ function ccRenderSectionPrompt(doneSlot, nextSlot) {
 // If the completed subZone was a specific bin (e.g. "P1-A"), we find
 // the parent zone first, then advance to the next zone.
 function ccNextZoneButton(subZoneId) {
-  // Find which top-level zone this subZone belongs to
-  const parentIdx = CC_ZONES.findIndex(z =>
-    subZoneId === z.id ||
-    subZoneId.startsWith(z.id + '-')
+  // Determine if this was a specific bin (e.g. "P2-H-01") or a whole zone (e.g. "P2").
+  // A bin has more segments than its parent zone id — find parent by prefix match.
+  const parentZone = CC_ZONES.find(z =>
+    subZoneId === z.id || subZoneId.startsWith(z.id + '-')
   );
-  if (parentIdx === -1) return ''; // unknown zone — skip
+  if (!parentZone) return ''; // unknown — skip
+
+  const isBin = subZoneId !== parentZone.id; // true if e.g. "P2-H-01", false if "P2"
+
+  if (isBin) {
+    // Find the next bin alphanumerically within the same parent zone.
+    // All known bins in this zone come from LocState (already loaded at this point).
+    const allBinsInZone = Object.keys(LocState.locMap || {})
+      .filter(loc => ccLocBelongsToZone(loc, parentZone.id))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    const curBinIdx = allBinsInZone.indexOf(subZoneId);
+    const nextBin = curBinIdx >= 0 ? allBinsInZone[curBinIdx + 1] : null;
+
+    if (nextBin) {
+      // Next bin in same zone
+      return '<button onclick="ccStartSession(\'' + ccEsc(nextBin) + '\')" ' +
+        'style="background:var(--accent);color:#fff;border:none;border-radius:6px;' +
+        'padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">' +
+        'Continue → ' + ccEsc(nextBin) + '</button>';
+    }
+    // No more bins in this zone — offer the next whole zone
+    const parentIdx = CC_ZONES.indexOf(parentZone);
+    const nextZone = CC_ZONES[parentIdx + 1];
+    if (!nextZone) return ''; // was last zone
+    return '<button onclick="ccStartSession(\'' + ccEsc(nextZone.id) + '\')" ' +
+      'style="background:var(--accent);color:#fff;border:none;border-radius:6px;' +
+      'padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">' +
+      'Continue → ' + ccEsc(nextZone.label) + ' (next section)</button>';
+  }
+
+  // Whole-zone count — advance to the next zone in the list
+  const parentIdx = CC_ZONES.indexOf(parentZone);
   const nextZone = CC_ZONES[parentIdx + 1];
-  if (!nextZone) return ''; // was the last zone — no next
+  if (!nextZone) return '';
   return '<button onclick="ccStartSession(\'' + ccEsc(nextZone.id) + '\')" ' +
     'style="background:var(--accent);color:#fff;border:none;border-radius:6px;' +
     'padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">' +
