@@ -582,6 +582,26 @@ function ccRenderSectionPrompt(doneSlot, nextSlot) {
 
 // ── COMPLETE SCREEN ───────────────────────────────────────────
 
+// ── NEXT ZONE HELPER ──────────────────────────────────────────
+// Returns a "Continue Counting →" button HTML pointing at the next
+// zone in CC_ZONES after the one that was just completed.
+// If the completed subZone was a specific bin (e.g. "P1-A"), we find
+// the parent zone first, then advance to the next zone.
+function ccNextZoneButton(subZoneId) {
+  // Find which top-level zone this subZone belongs to
+  const parentIdx = CC_ZONES.findIndex(z =>
+    subZoneId === z.id ||
+    subZoneId.startsWith(z.id + '-')
+  );
+  if (parentIdx === -1) return ''; // unknown zone — skip
+  const nextZone = CC_ZONES[parentIdx + 1];
+  if (!nextZone) return ''; // was the last zone — no next
+  return '<button onclick="ccStartSession(\'' + ccEsc(nextZone.id) + '\')" ' +
+    'style="background:var(--accent);color:#fff;border:none;border-radius:6px;' +
+    'padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">' +
+    'Continue → ' + ccEsc(nextZone.label) + '</button>';
+}
+
 async function ccRenderComplete() {
   const area = document.getElementById('cc-content-area');
   if (!area || !CCState.session) return;
@@ -635,7 +655,7 @@ async function ccRenderComplete() {
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">' +
     '<div><div style="font-size:20px;font-weight:700;">Count Complete — ' + ccEsc(s.subZone) + '</div>' +
     '<div style="font-size:12px;color:var(--text-muted);">' + new Date(s.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) + ' · ' + ccEsc(s.countedBy) + '</div></div>' +
-    '<button onclick="ccRenderHome()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer;">← New Count</button>' +
+    '<div style="display:flex;gap:8px;">' +'<button onclick="ccRenderHome()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer;">← New Count</button>' +ccNextZoneButton(s.subZone) +'</div>' +
     '</div>' +
 
     // Summary stats
