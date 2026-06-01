@@ -273,7 +273,7 @@ function invRenderAddrBook(body) {
   body.innerHTML =
     '<div style="max-width:760px;margin:0 auto;padding:24px 16px;">'
     + '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">'
-    + '<button onclick="InvState.view='log';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">← Invoices</button>'
+    + '<button onclick="InvState.view=\'log\';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">← Invoices</button>'
     + '<div style="font-size:20px;font-weight:700;">Address Book</div>'
     + '<div style="font-size:12px;color:var(--text-muted);margin-left:auto;">' + customers.length + ' saved address' + (customers.length !== 1 ? 'es' : '') + '</div>'
     + '</div>'
@@ -414,7 +414,7 @@ function invRenderLog(body) {
     + '</div></div>'
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="invShowPriceImport()" class="btn-secondary btn-sm">&#8593; Import Prices</button>'
-    + '<button onclick="invNewInvoice()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Invoice</button><button onclick="InvState.view='addrbook';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:8px 14px;font-size:13px;cursor:pointer;margin-left:8px;">📋 Address Book</button>'
+    + '<button onclick="invNewInvoice()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Invoice</button><button onclick="InvState.view=\'addrbook\';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:8px 14px;font-size:13px;cursor:pointer;margin-left:8px;">📋 Address Book</button>'
     + '</div></div>'
     + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">'
     + tabBtn('All', 'all') + tabBtn('Pending', 'pending') + tabBtn('Past', 'past')
