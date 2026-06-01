@@ -499,13 +499,18 @@ function invRenderItemsTable(items) {
   }
   const th = 'padding:7px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);';
   const rows = items.map(function(item, idx) {
-    return '<tr style="border-bottom:1px solid var(--border);">'
+    const zeroStock = item.onHand !== undefined && item.onHand === 0;
+    const rowBg = zeroStock ? 'background:rgba(255,160,0,0.08);border-left:3px solid var(--orange,#ff9800);' : '';
+    const onHandCell = zeroStock
+      ? '<span style="color:var(--orange,#ff9800);font-weight:700;">0</span>&nbsp;<span style="font-size:9px;background:var(--orange,#ff9800);color:#fff;border-radius:3px;padding:1px 4px;font-weight:700;">NO STOCK</span>'
+      : (item.onHand !== undefined ? item.onHand : '—');
+    return '<tr style="border-bottom:1px solid var(--border);' + rowBg + '">'
       + '<td style="padding:8px 10px;font-size:11px;color:var(--text-muted);">' + invEsc(item.artist) + '</td>'
       + '<td style="padding:8px 10px;font-size:12px;font-weight:600;">' + invEsc(item.title) + '</td>'
       + '<td style="padding:8px 10px;font-size:11px;font-family:monospace;">' + invEsc(item.catalog) + '</td>'
       + '<td style="padding:8px 10px;font-size:11px;font-family:monospace;color:var(--text-muted);">' + invEsc(item.upc) + '</td>'
       + '<td style="padding:8px 10px;font-size:11px;">' + invEsc(item.format || '') + '</td>'
-      + '<td style="padding:8px 10px;font-size:11px;color:var(--text-muted);text-align:center;">' + (item.onHand !== undefined ? item.onHand : '—') + '</td>'
+      + '<td style="padding:8px 10px;font-size:11px;text-align:center;">' + onHandCell + '</td>'
       + '<td style="padding:8px 10px;">'
       + '<input type="number" min="1" value="' + (item.qty || 1) + '" '
       + 'style="width:60px;padding:4px 6px;font-size:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:var(--text);text-align:center;" '
@@ -873,6 +878,27 @@ window.invCancelEdit = function() {
 
 window.invReview = function() {
   if (InvState.view === 'edit') invCollectForm();
+  const inv = InvState.draft;
+  const zeroItems = (inv && inv.items || []).filter(function(i) { return i.onHand !== undefined && i.onHand === 0; });
+  if (zeroItems.length > 0) {
+    const names = zeroItems.map(function(i) {
+      return '<li style="margin:4px 0;">' + invEsc(i.catalog) + ' — ' + invEsc(i.artist) + ' <em>' + invEsc(i.title) + '</em></li>';
+    }).join('');
+    const modal = document.createElement('div');
+    modal.id = 'inv-zero-stock-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = '<div style="background:var(--surface);border-radius:12px;padding:28px 32px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.3);">'
+      + '<div style="font-size:22px;margin-bottom:8px;">⚠️ No Stock on Hand</div>'
+      + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">The following ' + zeroItems.length + ' item' + (zeroItems.length > 1 ? 's have' : ' has') + ' zero stock at FP warehouse:</div>'
+      + '<ul style="font-size:12px;margin:0 0 20px 16px;padding:0;line-height:1.8;">' + names + '</ul>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">You can go back to edit the invoice, or continue to review with these items included.</div>'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end;">'
+      + '<button onclick="document.getElementById(\'inv-zero-stock-modal\').remove()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;">← Go Back</button>'
+      + '<button onclick="document.getElementById(\'inv-zero-stock-modal\').remove();InvState.view=\'detail\';invRender();" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">Continue Anyway →</button>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    return;
+  }
   InvState.view = 'detail';
   invRender();
 };
