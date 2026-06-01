@@ -1365,8 +1365,35 @@ window.invHandlePriceCSV = function(input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(e) {
-    const lines = e.target.result.split('\n');
-    const header = lines[0].split(',').map(function(h) { return h.replace(/"/g,'').trim().toLowerCase(); });
+    // Use a proper RFC-4180 CSV parser — Shopify exports have multi-line quoted
+    // fields (Body HTML with line breaks) that break naive split('\n') parsing.
+    function parseCSVFull(text) {
+      const rows = [];
+      let col = '', row = [], inQ = false, i = 0;
+      // Normalise line endings
+      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      while (i < text.length) {
+        const ch = text[i];
+        if (inQ) {
+          if (ch === '"' && text[i+1] === '"') { col += '"'; i += 2; continue; } // escaped quote
+          if (ch === '"') { inQ = false; i++; continue; }
+          col += ch;
+        } else {
+          if (ch === '"') { inQ = true; i++; continue; }
+          if (ch === ',') { row.push(col); col = ''; i++; continue; }
+          if (ch === '\n') { row.push(col); rows.push(row); row = []; col = ''; i++; continue; }
+          col += ch;
+        }
+        i++;
+      }
+      if (col || row.length) { row.push(col); rows.push(row); }
+      return rows;
+    }
+
+    const rows = parseCSVFull(e.target.result);
+    if (rows.length < 2) { if (window.toast) toast('CSV appears empty.', 'error'); return; }
+
+    const header = rows[0].map(function(h) { return h.trim().toLowerCase(); });
     const skuIdx   = header.findIndex(function(h) { return h.includes('variant sku') || h === 'sku'; });
     const priceIdx = header.findIndex(function(h) { return h.includes('variant price') || h === 'price'; });
 
@@ -1376,20 +1403,9 @@ window.invHandlePriceCSV = function(input) {
     }
 
     let imported = 0, skipped = 0;
-    lines.slice(1).forEach(function(line) {
-      if (!line.trim()) return;
-      // Handle CSV with quoted fields
-      const cols = [];
-      let cur = '', inQ = false;
-      for (let i = 0; i < line.length; i++) {
-        if (line[i] === '"') { inQ = !inQ; }
-        else if (line[i] === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-        else { cur += line[i]; }
-      }
-      cols.push(cur.trim());
-
-      const sku   = (cols[skuIdx]   || '').replace(/^"|"$/g,'').trim();
-      const price = parseFloat((cols[priceIdx] || '').replace(/^"|"$/g,'').trim());
+    rows.slice(1).forEach(function(cols) {
+      const sku   = (cols[skuIdx]   || '').trim();
+      const price = parseFloat((cols[priceIdx] || '').trim());
       if (sku && !isNaN(price) && price > 0) { InvState.priceCatalog[sku] = price; imported++; }
       else { skipped++; }
     });
