@@ -187,13 +187,108 @@ function invSaveLocal() {
   } catch(e) {}
 }
 
+
+// ── ADDRESS BOOK ───────────────────────────────────────────────
+window.invDeleteCustomer = function(idx) {
+  if (!confirm('Remove this address from the address book?')) return;
+  InvState.customers.splice(idx, 1);
+  invSaveLocal(); invSave();
+  invRender();
+};
+
+window.invSaveCustomerEdit = function(idx) {
+  const g = function(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  InvState.customers[idx] = {
+    name:     g('ab-name-'    + idx),
+    company:  g('ab-company-' + idx),
+    address:  g('ab-address-' + idx),
+    address2: g('ab-address2-'+ idx),
+    city:     g('ab-city-'    + idx),
+    state:    g('ab-state-'   + idx),
+    zip:      g('ab-zip-'     + idx),
+    email:    g('ab-email-'   + idx),
+    phone:    g('ab-phone-'   + idx),
+  };
+  invSaveLocal(); invSave();
+  if (window.toast) toast('Address updated.', 'success');
+  invRender();
+};
+
+window.invUseCustomer = function(idx) {
+  const c = InvState.customers[idx];
+  if (!c) return;
+  invNewInvoice();
+  setTimeout(function() {
+    if (InvState.draft) {
+      InvState.draft.billTo = Object.assign({}, c);
+      if (InvState.draft.shipSame) InvState.draft.shipTo = Object.assign({}, c);
+      invRenderEdit(document.getElementById('inv-body'));
+    }
+  }, 80);
+};
+
+function invRenderAddrBook(body) {
+  const customers = InvState.customers.slice().sort(function(a, b) {
+    return (a.company||a.name||'').localeCompare(b.company||b.name||'');
+  });
+
+  function abField(id, label, val, type) {
+    type = type || 'text';
+    return '<div style="display:flex;flex-direction:column;gap:3px;">'
+      + '<label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">' + label + '</label>'
+      + '<input id="' + id + '" type="' + type + '" value="' + invEsc(val||'') + '" '
+      + 'style="background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:5px 8px;font-size:12px;color:var(--text);width:100%;">'
+      + '</div>';
+  }
+
+  const rows = customers.length ? customers.map(function(c, i) {
+    const realIdx = InvState.customers.indexOf(c);
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:12px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+      + '<div style="font-size:15px;font-weight:700;">' + invEsc(c.company || c.name || 'Unnamed') + '</div>'
+      + '<div style="display:flex;gap:8px;">'
+      + '<button onclick="invUseCustomer(' + realIdx + ')" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;">Use →</button>'
+      + '<button onclick="invSaveCustomerEdit(' + realIdx + ')" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:5px;padding:5px 12px;font-size:12px;cursor:pointer;">Save</button>'
+      + '<button onclick="invDeleteCustomer(' + realIdx + ')" style="background:none;color:var(--red,#e53935);border:1px solid var(--red,#e53935);border-radius:5px;padding:5px 10px;font-size:12px;cursor:pointer;">✕</button>'
+      + '</div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+      + abField('ab-name-'+realIdx,    'Contact Name', c.name)
+      + abField('ab-company-'+realIdx, 'Company',      c.company)
+      + '</div>'
+      + abField('ab-address-'+realIdx,  'Address',   c.address)
+      + '<div style="margin-top:8px;">' + abField('ab-address2-'+realIdx, 'Address 2', c.address2) + '</div>'
+      + '<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:8px;">'
+      + abField('ab-city-'+realIdx,  'City',  c.city)
+      + abField('ab-state-'+realIdx, 'State', c.state)
+      + abField('ab-zip-'+realIdx,   'ZIP',   c.zip)
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">'
+      + abField('ab-email-'+realIdx, 'Email', c.email, 'email')
+      + abField('ab-phone-'+realIdx, 'Phone', c.phone, 'tel')
+      + '</div>'
+      + '</div>';
+  }).join('')
+  : '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:14px;">No saved addresses yet.<br>Addresses are saved automatically when you create invoices.</div>';
+
+  body.innerHTML =
+    '<div style="max-width:760px;margin:0 auto;padding:24px 16px;">'
+    + '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">'
+    + '<button onclick="InvState.view='log';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">← Invoices</button>'
+    + '<div style="font-size:20px;font-weight:700;">Address Book</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-left:auto;">' + customers.length + ' saved address' + (customers.length !== 1 ? 'es' : '') + '</div>'
+    + '</div>'
+    + rows
+    + '</div>';
+}
+
 // ── RENDER ROUTER ─────────────────────────────────────────────
 function invRender() {
   const body = document.getElementById('inv-body');
   if (!body) return;
-  if (InvState.view === 'log')    return invRenderLog(body);
-  if (InvState.view === 'edit')   return invRenderEdit(body);
-  if (InvState.view === 'detail') return invRenderDetail(body);
+  if (InvState.view === 'log')      return invRenderLog(body);
+  if (InvState.view === 'edit')     return invRenderEdit(body);
+  if (InvState.view === 'detail')   return invRenderDetail(body);
+  if (InvState.view === 'addrbook') return invRenderAddrBook(body);
 }
 
 window.switchToInvoices = function(mode) {
@@ -319,7 +414,7 @@ function invRenderLog(body) {
     + '</div></div>'
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="invShowPriceImport()" class="btn-secondary btn-sm">&#8593; Import Prices</button>'
-    + '<button onclick="invNewInvoice()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Invoice</button>'
+    + '<button onclick="invNewInvoice()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Invoice</button><button onclick="InvState.view='addrbook';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:8px 14px;font-size:13px;cursor:pointer;margin-left:8px;">📋 Address Book</button>'
     + '</div></div>'
     + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">'
     + tabBtn('All', 'all') + tabBtn('Pending', 'pending') + tabBtn('Past', 'past')
@@ -851,10 +946,15 @@ function invCollectForm() {
   inv.terms = g('inv-terms') || 'Net 30';
   inv.includeInReports = !!(document.getElementById('inv-include-reports') && document.getElementById('inv-include-reports').checked);
 
-  // Auto-save to address book
+  // Auto-save/update address book — upsert by company/name
   const company = inv.billTo.company || inv.billTo.name;
-  if (company && !InvState.customers.some(function(c) { return (c.company||c.name) === company; })) {
-    InvState.customers.push(Object.assign({}, inv.billTo));
+  if (company) {
+    const existingIdx = InvState.customers.findIndex(function(c) { return (c.company||c.name) === company; });
+    if (existingIdx >= 0) {
+      InvState.customers[existingIdx] = Object.assign({}, InvState.customers[existingIdx], inv.billTo);
+    } else {
+      InvState.customers.push(Object.assign({}, inv.billTo));
+    }
   }
 }
 
