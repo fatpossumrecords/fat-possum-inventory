@@ -2,7 +2,7 @@ name: Sales Report (Daily Check)
 
 on:
   schedule:
-    - cron: '0 14 * * *'  # 8:00 AM CDT / 9:00 AM CST daily
+    - cron: '0 10 * * *'  # 5:00 AM CDT / 4:00 AM CST daily
   workflow_dispatch:
     inputs:
       month_override:
