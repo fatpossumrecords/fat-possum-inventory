@@ -120,13 +120,50 @@ async function shouldRun() {
   if (MONTH_OVERRIDE) { console.log('Month override set'); return true; }
   let schedule = null;
   try { schedule = await gistFetch(SCHED_GIST_FILE); } catch(e) {}
-  if (!schedule?.day) { console.log('No schedule — defaulting to 1st'); schedule = { day: 1 }; }
-  const now      = new Date();
-  const todayDay = now.getUTCDate();
-  const scheduledDay = parseInt(schedule.day) || 1;
-  console.log(`Today: ${todayDay}, Scheduled: ${scheduledDay}`);
-  if (todayDay !== scheduledDay) { console.log('Not scheduled day — skipping'); return false; }
+  if (!schedule?.day) { console.log('No schedule — defaulting to 1st at 8 AM'); schedule = { day: 1, hour: 8 }; }
+
+  // Convert current UTC time to Central time (CDT = UTC-5, CST = UTC-6)
+  // We detect DST by comparing UTC offset: March 2nd Sunday - November 1st Sunday
+  const now = new Date();
+  const centralOffset = isCDT(now) ? -5 : -6;
+  const centralHour = (now.getUTCHours() + 24 + centralOffset) % 24;
+  const centralDate = new Date(now.getTime() + centralOffset * 3600000);
+  const centralDay  = centralDate.getUTCDate();
+
+  const scheduledDay  = parseInt(schedule.day)  || 1;
+  const scheduledHour = parseInt(schedule.hour) ?? 8;
+
+  console.log(`Central time: day=${centralDay} hour=${centralHour} | Scheduled: day=${scheduledDay} hour=${scheduledHour} | DST: ${isCDT(now)?'CDT':'CST'}`);
+
+  if (centralDay !== scheduledDay) {
+    console.log('Not scheduled day — skipping');
+    return false;
+  }
+  if (centralHour !== scheduledHour) {
+    console.log(`Not scheduled hour (now ${centralHour}, want ${scheduledHour}) — skipping`);
+    return false;
+  }
   return true;
+}
+
+// Returns true if the given UTC date falls within US CDT (second Sunday of March
+// through first Sunday of November).
+function isCDT(utcDate) {
+  const y = utcDate.getUTCFullYear();
+  // Second Sunday of March at 2 AM local (7 AM UTC during EST)
+  const marchStart = nthSundayUTC(y, 2, 2); // March = month 2 (0-indexed)
+  // First Sunday of November at 2 AM local (7 AM UTC during EDT)
+  const novEnd     = nthSundayUTC(y, 10, 1); // November = month 10
+  return utcDate >= marchStart && utcDate < novEnd;
+}
+
+function nthSundayUTC(year, month0, n) {
+  // Find the nth Sunday of month0 (0-indexed) at 07:00 UTC
+  const d = new Date(Date.UTC(year, month0, 1, 7, 0, 0));
+  const dow = d.getUTCDay(); // 0=Sun
+  const daysToSun = dow === 0 ? 0 : 7 - dow;
+  d.setUTCDate(1 + daysToSun + (n - 1) * 7);
+  return d;
 }
 
 // ── DATE RANGE ──────────────────────────────────────────────────
