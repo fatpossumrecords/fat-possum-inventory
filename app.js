@@ -1971,7 +1971,8 @@ if (col.id === 'upc')     return `<td class="${pinnedClass}" style="${style}"><c
         const alertWh = alertingWarehouses(p);
         const whKey = whMap[col.id];
         const alertStyle = whKey && alertWh[whKey] === 'critical' ? 'color:var(--orange);font-weight:600;' : whKey && alertWh[whKey] === 'low' ? 'color:var(--yellow);font-weight:600;' : '';
-        return `<td class="num${pinnedClass}" style="${style}${alertStyle}">${numCell(v)}</td>`;
+        const mobClass = whKey ? ` mob-${whKey}` : '';
+        return `<td class="num${mobClass}${pinnedClass}" style="${style}${alertStyle}">${numCell(v)}</td>`;
       }
       return `<td class="${pinnedClass}" style="${style}">${esc(v)}</td>`;
     }).join('') + `<td style="text-align:center;width:32px;border-left:1px solid var(--border);"><input type="checkbox" class="inv-row-check" data-upc="${p.upc}" data-artist="${esc(p.artist)}" data-title="${esc(p.title)}" onchange="updateInventorySelection()" /></td>` + '</tr>';
