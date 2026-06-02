@@ -161,6 +161,9 @@ nav { padding: 8px 0; flex: 1; }
 #inventory-table td.mob-total,
 #inventory-table td.mob-fp,
 #inventory-table td.mob-us,
+#inventory-table td.mob-ca,
+#inventory-table td.mob-uk,
+#inventory-table td.mob-eu,
 #inventory-table td.mob-status { display: table-cell; }
 
 .inv-body-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
@@ -554,13 +557,19 @@ td { overflow: hidden; }
   }
   /* Other warehouses — small inline row */
   #inventory-table td.mob-us,
+  #inventory-table td.mob-ca,
+  #inventory-table td.mob-uk,
+  #inventory-table td.mob-eu,
   #inventory-table td.mob-total {
-    display: inline-block; font-size: 11px;
-    color: var(--text-muted); margin-right: 10px;
+    display: inline-block; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); margin-right: 14px; margin-top: 6px;
     font-family: 'DM Mono', monospace;
   }
-  #inventory-table td.mob-us::before { content: 'US '; color: var(--text-dim); font-size: 9px; }
-  #inventory-table td.mob-total::before { content: 'Total '; color: var(--text-dim); font-size: 9px; }
+  #inventory-table td.mob-us::before  { content: 'US';  display: block; color: var(--text-dim); font-size: 9px; font-weight: 400; font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+  #inventory-table td.mob-ca::before  { content: 'CA';  display: block; color: var(--text-dim); font-size: 9px; font-weight: 400; font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+  #inventory-table td.mob-uk::before  { content: 'UK';  display: block; color: var(--text-dim); font-size: 9px; font-weight: 400; font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+  #inventory-table td.mob-eu::before  { content: 'EU';  display: block; color: var(--text-dim); font-size: 9px; font-weight: 400; font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+  #inventory-table td.mob-total::before { content: 'Total'; display: block; color: var(--text-dim); font-size: 9px; font-weight: 400; font-family: 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
 
   /* Inventory filter bar: warehouse pills instead of select */
   #filter-warehouse { display: none; }
