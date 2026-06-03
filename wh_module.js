@@ -117,6 +117,7 @@ window.switchWHTab = function(tab) {
       if (sub)    sub.textContent   = 'Count inventory and log discrepancies';
       if (config) config.style.display = 'none';
     }
+    if (tab === 'replenishment' && window.whInitReplenLog) { whInitReplenLog(); }
     if (tab === 'replenishment' && window._FPUserSettings && window._FPUserSettings.replen) {
       if (window.applyReplenDefaults) applyReplenDefaults(window._FPUserSettings.replen);
     }
@@ -181,6 +182,83 @@ function whShowError(msg) {
 function whHideError() { const el = document.getElementById('wh-error-area'); if (el) el.style.display = 'none'; }
 
 // ------ MAIN REPORT ---------------------------------------------------------------------------------------------------------------------------------------------
+
+// ── REPLENISHMENT LOG ──────────────────────────────────────────
+const WH_REPLEN_LOG_FILE = 'fp_replen_log.json';
+
+async function whSaveReplenLog(titles, units) {
+  if (!titles && !units) return;
+  try {
+    const creds = { gistId: CONFIG.GIST_ID, token: CONFIG.GIST_TOKEN };
+    // Load existing log
+    let log = [];
+    try {
+      const res = await fetch('https://api.github.com/gists/' + creds.gistId, {
+        headers: { Authorization: 'token ' + creds.token }, cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data.files?.[WH_REPLEN_LOG_FILE]?.content;
+        if (raw) log = JSON.parse(raw);
+      }
+    } catch(e) {}
+
+    const user = (typeof State !== 'undefined' && State.user?.email) || 'unknown';
+    const name = user.includes('@') ? user.split('@')[0] : user;
+    log.unshift({
+      ts:     new Date().toISOString(),
+      by:     user,
+      name:   name,
+      titles: titles,
+      units:  units,
+    });
+    if (log.length > 100) log = log.slice(0, 100);
+
+    await fetch('https://api.github.com/gists/' + creds.gistId, {
+      method: 'PATCH',
+      headers: { Authorization: 'token ' + creds.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { [WH_REPLEN_LOG_FILE]: { content: JSON.stringify(log, null, 2) } } })
+    });
+    console.log('Replen log saved:', titles, 'titles,', units, 'units');
+
+    // Refresh the log panel if visible
+    whRenderReplenLog();
+  } catch(e) {
+    console.warn('Replen log save failed:', e.message);
+  }
+}
+
+async function whRenderReplenLog() {
+  const el = document.getElementById('wh-replen-log');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Loading…</div>';
+  try {
+    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN }, cache: 'no-store'
+    });
+    if (!res.ok) throw new Error('Gist ' + res.status);
+    const data = await res.json();
+    const raw  = data.files?.[WH_REPLEN_LOG_FILE]?.content;
+    const log  = raw ? JSON.parse(raw) : [];
+
+    if (!log.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">No replenishment runs logged yet.</div>';
+      return;
+    }
+    el.innerHTML = log.map(function(entry) {
+      const d = new Date(entry.ts).toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'2-digit' });
+      const t = new Date(entry.ts).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+      return '<div style="display:flex;align-items:baseline;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">'        + '<span><span style="color:var(--text-muted);">' + d + ' ' + t + '</span>'        + ' <span style="font-weight:600;">' + whEsc(entry.name || entry.by) + '</span>'        + ' replenished '        + '<span style="font-weight:700;color:var(--accent);">' + entry.titles + '</span> titles / '        + '<span style="font-weight:700;color:var(--accent);">' + entry.units.toLocaleString() + '</span> units</span>'        + '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red);font-size:12px;">Could not load log: ' + e.message + '</div>';
+  }
+}
+
+window.whInitReplenLog = function() {
+  whRenderReplenLog();
+};
+
 window.runReplenishment = async function() {
   if (WHState.running) return;
   WHState.running = true;
@@ -1825,6 +1903,9 @@ function pickerRenderComplete() {
       + '<td style="padding:12px 16px;border-bottom:1px solid var(--border);text-align:center;">' + (c.skipped ? '<span style="color:var(--yellow);font-size:11px;font-weight:700;text-transform:uppercase;">Skipped</span>' : '<span style="color:var(--green);font-size:16px;">&#x2713;</span>') + '</td>'
       + '</tr>';
   }).join('');
+
+  // Save replen log entry to Gist
+  whSaveReplenLog(picked.length, totalUnits);
 
   overlay.innerHTML = `
     <div style="width:100%;max-width:800px;background:var(--surface);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.18);display:flex;flex-direction:column;max-height:92vh;overflow:hidden;">
