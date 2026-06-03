@@ -334,6 +334,7 @@ window.ccUpdateBinSelect = function() {
     }
   }
   bins.forEach(bin => {
+    // Only show last-counted if THIS exact bin was explicitly counted
     const lc = binLastCounted[bin];
     let suffix = '';
     if (lc && lc.ts) {
