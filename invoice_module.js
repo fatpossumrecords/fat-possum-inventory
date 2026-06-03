@@ -1270,14 +1270,6 @@ async function invCreatePackiyoOrder(inv) {
     if (window.toast) toast('Order #' + (orderNum||orderId) + ' created in Packiyo with ' + inv.items.length + ' items!', 'success');
     invRender();
 
-    // Trigger ship-notify workflow so it starts monitoring this order immediately
-    try {
-      fetch('https://api.github.com/repos/fatpossumrecords/fat-possum-inventory/actions/workflows/ship-notify.yml/dispatches', {
-        method: 'POST',
-        headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
-        body: JSON.stringify({ ref: 'main' }),
-      });
-    } catch(e) { console.warn('Workflow trigger failed:', e.message); }
 
   } catch(e) {
     // If number collision, retry without PO# as the order number
