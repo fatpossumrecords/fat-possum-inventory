@@ -78,7 +78,18 @@ window.ccInit = async function() {
     return;
   }
   ccRenderHome();
-  if (!CCState.historyLoaded) await ccLoadHistory();
+  if (!CCState.historyLoaded) {
+    await ccLoadHistory();
+    // Re-render suggestion card now that history is loaded
+    const sugCard = document.getElementById('cc-suggest-card');
+    if (sugCard) {
+      const suggested = ccSuggestSubZone();
+      const lbl = sugCard.querySelector('.cc-suggest-label');
+      const btn = sugCard.querySelector('.cc-suggest-btn');
+      if (lbl) lbl.textContent = suggested ? suggested.label : '—';
+      if (btn && suggested) btn.onclick = function() { ccStartSession(suggested.id); };
+    }
+  }
   // Auto-load location data if not already loaded — needed for bin selector
   if (!LocState.loaded && !LocState.loading) {
     locInit(true);
@@ -253,11 +264,11 @@ function ccRenderHome() {
     '<div style="max-width:600px;margin:0 auto;padding:32px 24px;">' +
 
     // Suggest card
-    '<div style="background:var(--accent);color:#fff;border-radius:10px;padding:24px;margin-bottom:24px;">' +
+    '<div id="cc-suggest-card" style="background:var(--accent);color:#fff;border-radius:10px;padding:24px;margin-bottom:24px;">' +
     '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;opacity:0.8;margin-bottom:8px;">Suggested Next Count</div>' +
-    '<div style="font-size:22px;font-weight:700;margin-bottom:16px;">' + ccEsc(suggestedLabel) + '</div>' +
+    '<div class="cc-suggest-label" style="font-size:22px;font-weight:700;margin-bottom:16px;">' + ccEsc(suggestedLabel) + '</div>' +
     (suggested
-      ? '<button onclick="ccStartSession(\'' + ccEsc(suggested.id) + '\')" style="background:#fff;color:var(--accent);border:none;border-radius:6px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;">▶ Start Count</button>'
+      ? '<button class="cc-suggest-btn" onclick="ccStartSession(\'' + ccEsc(suggested.id) + '\')" style="background:#fff;color:var(--accent);border:none;border-radius:6px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;">▶ Start Count</button>'
       : '<div style="font-size:13px;opacity:0.8;">No suggestions available</div>') +
     '</div>' +
 
