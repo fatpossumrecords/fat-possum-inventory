@@ -731,6 +731,7 @@
           </div>
           <div style="align-self:flex-end;display:flex;gap:8px;">
             <button id="wh-run-btn" onclick="runReplenishment()" class="btn-primary">⟳ Run Report</button>
+            <button onclick="startReplenishRun()" class="btn-primary" style="background:var(--green,#2e7d32);">▶ Start Run</button>
             <button id="wh-tabbtn-walk" class="btn-secondary" onclick="switchWHTab('walkthrough')">🗺 Warehouse View</button>
           </div>
         </div>
@@ -807,6 +808,11 @@
         </div>
         <div id="wh-empty-state" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;">
           Configure settings above and click <strong style="margin:0 4px;">⟳ Run Report</strong> to generate replenishment suggestions.
+        </div>
+        <!-- Replenishment Log -->
+        <div style="padding:16px 20px;border-top:1px solid var(--border);flex-shrink:0;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">Replenishment Log</div>
+          <div id="wh-replen-log" style="font-size:12px;color:var(--text-muted);max-height:180px;overflow-y:auto;">Loading…</div>
         </div>
       </div>
 
