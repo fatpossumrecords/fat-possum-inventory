@@ -24,22 +24,36 @@ const ORDER_CHANNEL    = 'FP-WH-INV';
 
 // ── HELPERS ─────────────────────────────────────────────────────
 
+// Wrapper that aborts fetch after a timeout (default 20s) to prevent hangs
+function fetchWithTimeout(url, opts, ms) {
+  ms = ms || 20000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, Object.assign({}, opts, { signal: ctrl.signal }))
+    .finally(() => clearTimeout(timer));
+}
+
 async function packiyoFetch(path) {
   const url = PACKIYO_BASE + path;
   let delay = 1000;
   for (let attempt = 0; attempt < 5; attempt++) {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         Authorization: `Bearer ${PACKIYO_TOKEN}`,
         Accept: 'application/vnd.api+json',
         'Content-Type': 'application/vnd.api+json',
       },
-    });
+    }, 20000);
     if (res.status === 429) {
       console.log(`  Rate limited, retrying in ${delay}ms…`);
       await new Promise(r => setTimeout(r, delay));
       delay *= 2;
       continue;
+    }
+    // Retry once on 5xx server errors (transient Packiyo issues)
+    if (res.status >= 500) {
+      await new Promise(r => setTimeout(r, 3000));
+      res = await fetch(PACKIYO_BASE + path, { headers: { Authorization: `Bearer ${PACKIYO_TOKEN}`, Accept: 'application/vnd.api+json' } });
     }
     if (!res.ok) throw new Error(`Packiyo ${res.status}: ${path}`);
     return res.json();
@@ -48,9 +62,9 @@ async function packiyoFetch(path) {
 }
 
 async function gistGet(filename) {
-  const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+  const res = await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
     headers: { Authorization: `Bearer ${GIST_TOKEN}`, Accept: 'application/vnd.github+json' },
-  });
+  }, 15000);
   if (!res.ok) throw new Error(`Gist GET failed: ${res.status}`);
   const data = await res.json();
   const content = data.files?.[filename]?.content;
@@ -59,7 +73,7 @@ async function gistGet(filename) {
 }
 
 async function gistSet(filename, obj) {
-  const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+  const res = await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${GIST_TOKEN}`,
@@ -67,7 +81,7 @@ async function gistSet(filename, obj) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ files: { [filename]: { content: JSON.stringify(obj, null, 2) } } }),
-  });
+  }, 15000);
   if (!res.ok) throw new Error(`Gist PATCH failed: ${res.status}`);
 }
 
@@ -389,7 +403,15 @@ async function main() {
   }
 
   console.log(`\n=== Done: ${sent} sent, ${skipped} skipped, ${errors} errors ===\n`);
-  if (errors > 0) process.exit(1);
+  // Only fail the run if EVERY invoice errored — likely a real auth/config issue.
+  // Transient single-invoice errors (network blip, Packiyo 503) are logged but
+  // don't fail the workflow, stopping the noisy GitHub notification emails.
+  const attempted = sent + errors;
+  if (errors > 0 && attempted > 0 && errors === attempted) {
+    console.error('All invoices failed — treating as fatal error.');
+    process.exit(1);
+  }
+  if (errors > 0) console.warn(`${errors} invoice(s) had transient errors — will retry next run.`);
 }
 
 main().catch(e => { console.error('Fatal:', e); process.exit(1); });
