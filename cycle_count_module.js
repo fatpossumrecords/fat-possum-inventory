@@ -78,17 +78,16 @@ window.ccInit = async function() {
     return;
   }
   ccRenderHome();
-  if (!CCState.historyLoaded) {
-    await ccLoadHistory();
-    // Re-render suggestion card now that history is loaded
-    const sugCard = document.getElementById('cc-suggest-card');
-    if (sugCard) {
-      const suggested = ccSuggestSubZone();
-      const lbl = sugCard.querySelector('.cc-suggest-label');
-      const btn = sugCard.querySelector('.cc-suggest-btn');
-      if (lbl) lbl.textContent = suggested ? suggested.label : '—';
-      if (btn && suggested) btn.onclick = function() { ccStartSession(suggested.id); };
-    }
+  // Always re-fetch history from Gist so all users see up-to-date counts
+  await ccLoadHistory();
+  // Update suggestion card with fresh history
+  const sugCard = document.getElementById('cc-suggest-card');
+  if (sugCard) {
+    const suggested = ccSuggestSubZone();
+    const lbl = sugCard.querySelector('.cc-suggest-label');
+    const btn = sugCard.querySelector('.cc-suggest-btn');
+    if (lbl) lbl.textContent = suggested ? suggested.label : '—';
+    if (btn && suggested) btn.onclick = function() { ccStartSession(suggested.id); };
   }
   // Auto-load location data if not already loaded — needed for bin selector
   if (!LocState.loaded && !LocState.loading) {
@@ -324,8 +323,25 @@ window.ccUpdateBinSelect = function() {
   const bins = Object.keys(LocState.locMap)
     .filter(loc => ccLocBelongsToZone(loc, zoneId))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  // Build last-counted map from history for the label
+  const binLastCounted = {};
+  for (const h of (CCState.history || [])) {
+    if (!h.complete) continue;
+    const ts = h.submittedAt || '';
+    const by = h.countedBy || '';
+    if (!binLastCounted[h.subZone] || ts > binLastCounted[h.subZone].ts) {
+      binLastCounted[h.subZone] = { ts, by };
+    }
+  }
   bins.forEach(bin => {
-    binSel.innerHTML += '<option value="' + ccEsc(bin) + '">' + ccEsc(bin) + '</option>';
+    const lc = binLastCounted[bin];
+    let suffix = '';
+    if (lc && lc.ts) {
+      const d = new Date(lc.ts).toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'2-digit' });
+      const name = lc.by.includes('@') ? lc.by.split('@')[0] : lc.by;
+      suffix = ' — last counted ' + d + ' by ' + name;
+    }
+    binSel.innerHTML += '<option value="' + ccEsc(bin) + '">' + ccEsc(bin) + suffix + '</option>';
   });
 };
 
@@ -816,7 +832,7 @@ window.ccEmailReport = async function() {
 function ccUpdateHistoryPanel() {
   const el = document.getElementById('cc-history-list');
   if (!el) return;
-  const history = CCState.history.filter(h => h.complete).slice(0, 10);
+  const history = CCState.history.filter(h => h.complete).slice(0, 20);
   if (!history.length) { el.textContent = 'No completed counts yet.'; return; }
   el.innerHTML = history.map(h => {
     const d = new Date(h.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
