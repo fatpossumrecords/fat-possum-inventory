@@ -61,8 +61,33 @@ async function packiyoFetch(path) {
   throw new Error(`Packiyo rate limit exceeded: ${path}`);
 }
 
+// Wrapper for GitHub API calls: disables gzip (works around a node-fetch v2 +
+// newer Node runtime bug that throws ERR_STREAM_PREMATURE_CLOSE while
+// decompressing gzip responses) and retries transient network/stream errors
+// with exponential backoff.
+async function githubFetch(url, opts, ms, maxRetries) {
+  ms = ms || 15000;
+  maxRetries = maxRetries == null ? 3 : maxRetries;
+  const headers = Object.assign({ 'Accept-Encoding': 'identity' }, (opts && opts.headers) || {});
+  const finalOpts = Object.assign({}, opts, { headers });
+
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchWithTimeout(url, finalOpts, ms);
+    } catch (e) {
+      lastErr = e;
+      if (attempt === maxRetries) break;
+      const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s…
+      console.log(`  GitHub API fetch failed (${e.code || e.message}), retrying in ${delay}ms… (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 async function gistGet(filename) {
-  const res = await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
+  const res = await githubFetch(`https://api.github.com/gists/${GIST_ID}`, {
     headers: { Authorization: `Bearer ${GIST_TOKEN}`, Accept: 'application/vnd.github+json' },
   }, 15000);
   if (!res.ok) throw new Error(`Gist GET failed: ${res.status}`);
@@ -73,7 +98,7 @@ async function gistGet(filename) {
 }
 
 async function gistSet(filename, obj) {
-  const res = await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
+  const res = await githubFetch(`https://api.github.com/gists/${GIST_ID}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${GIST_TOKEN}`,
@@ -421,9 +446,9 @@ async function processCycleCountEmails() {
   console.log('\nChecking for pending cycle count emails…');
   let counts;
   try {
-    const res  = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+    const res  = await githubFetch(`https://api.github.com/gists/${GIST_ID}`, {
       headers: { Authorization: `Bearer ${GIST_TOKEN}`, Accept: 'application/vnd.github+json' },
-    });
+    }, 15000);
     const data = await res.json();
     const content = data.files?.['fp_cycle_counts.json']?.content;
     counts = content ? JSON.parse(content) : [];
