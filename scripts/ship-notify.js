@@ -128,7 +128,7 @@ function buildPackingSlipPDF(inv, tracking) {
     doc.fontSize(20).fillColor(BK).font('Helvetica-Bold')
        .text('Fat Possum Records', 50, 50);
     doc.fontSize(9).fillColor(G).font('Helvetica')
-       .text('PO Box 1235 · Oxford, MS 38655 · info@fatpossum.com', 50, 74);
+       .text('PO Box 1923 · Oxford, MS 38655 · orders@fatpossum.com', 50, 74);
 
     doc.fontSize(18).fillColor(BK).font('Helvetica-Bold')
        .text('Packing Slip', 50, 50, { align: 'right' });
@@ -237,7 +237,7 @@ function buildPackingSlipPDF(inv, tracking) {
     // ── Footer ─────────────────────────────────────────────────
     const footY = doc.page.height - 60;
     doc.fontSize(8).fillColor(G).font('Helvetica')
-       .text('Thank you for your order! Questions? Contact your Fat Possum sales rep.',
+       .text('Thank you for your order! Questions? Contact orders@fatpossum.com',
              50, footY, { align: 'center', width: W });
 
     doc.end();
