@@ -6,7 +6,30 @@
    Appends rows to Google Sheets + logs run metadata
    ============================================================ */
 
-const fetch = require('node-fetch');
+const fetchBase = require('node-fetch');
+
+// Node 24 GitHub Actions runners have a known issue where node-fetch v2 streams
+// intermittently die mid-response ("Premature close" / ERR_STREAM_PREMATURE_CLOSE),
+// hitting GitHub, Google, and other APIs at random. Disabling gzip compression and
+// retrying with backoff resolves it without needing to move to ESM-only node-fetch v3.
+async function fetch(url, options = {}) {
+  const headers = { 'Accept-Encoding': 'identity', ...(options.headers || {}) };
+  const attempts = 3;
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fetchBase(url, { ...options, headers });
+    } catch (e) {
+      lastErr = e;
+      if (attempt < attempts) {
+        const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
+        console.warn(`  Fetch retry ${attempt}/${attempts - 1} for ${url.split('?')[0]} (${e.message}) — waiting ${delayMs}ms`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastErr;
+}
 
 const PACKIYO_BASE    = 'https://fatpossum.app.packiyo.com/api/v1';
 const PACKIYO_TOKEN   = process.env.PACKIYO_TOKEN;
