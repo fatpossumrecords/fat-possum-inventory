@@ -119,11 +119,14 @@ async function shouldRun() {
   if (FORCE_SEND) { console.log('Force send enabled'); return true; }
   if (MONTH_OVERRIDE) { console.log('Month override set'); return true; }
   let schedule = null;
-  try { schedule = await gistFetch(SCHED_GIST_FILE); } catch(e) {}
+  try {
+    schedule = await gistFetch(SCHED_GIST_FILE);
+  } catch(e) {
+    console.warn(`  Schedule fetch failed: ${e.message}`);
+  }
   if (!schedule?.day) { console.log('No schedule — defaulting to 1st at 8 AM'); schedule = { day: 1, hour: 8 }; }
 
   // Convert current UTC time to Central time (CDT = UTC-5, CST = UTC-6)
-  // We detect DST by comparing UTC offset: March 2nd Sunday - November 1st Sunday
   const now = new Date();
   const centralOffset = isCDT(now) ? -5 : -6;
   const centralHour = (now.getUTCHours() + 24 + centralOffset) % 24;
@@ -139,10 +142,31 @@ async function shouldRun() {
     console.log('Not scheduled day — skipping');
     return false;
   }
-  if (centralHour !== scheduledHour) {
-    console.log(`Not scheduled hour (now ${centralHour}, want ${scheduledHour}) — skipping`);
+
+  // Cron runs can be delayed by GitHub's scheduler (queue backlog, especially
+  // around common trigger times like 1st-of-month). Instead of requiring an
+  // exact hour match (which causes a delayed run to skip the whole day), we
+  // fire on the FIRST run at or after the scheduled hour, and use a
+  // "already sent this period" flag in the Gist to prevent duplicate sends
+  // from later runs the same day.
+  if (centralHour < scheduledHour) {
+    console.log(`Before scheduled hour (now ${centralHour}, want ${scheduledHour}) — skipping`);
     return false;
   }
+
+  const periodKey = `${centralDate.getUTCFullYear()}-${String(centralDate.getUTCMonth()+1).padStart(2,'0')}`;
+  let log = null;
+  try {
+    log = await gistFetch(LOG_GIST_FILE);
+  } catch(e) {
+    console.warn(`  Log fetch failed: ${e.message}`);
+  }
+  const alreadySent = (log?.runs || []).some(r => r.status === 'sent' && r.source === 'scheduled' && r.sentPeriodKey === periodKey);
+  if (alreadySent) {
+    console.log(`Already sent scheduled report for ${periodKey} — skipping`);
+    return false;
+  }
+
   return true;
 }
 
@@ -169,7 +193,12 @@ function nthSundayUTC(year, month0, n) {
 // ── DATE RANGE ──────────────────────────────────────────────────
 async function getDateRange() {
   let period = 'last_month';
-  try { const s = await gistFetch(SCHED_GIST_FILE); if (s?.period) period = s.period; } catch(e) {}
+  try {
+    const s = await gistFetch(SCHED_GIST_FILE);
+    if (s?.period) period = s.period;
+  } catch(e) {
+    console.warn(`  Schedule fetch failed (date range): ${e.message}`);
+  }
   if (MONTH_OVERRIDE && /^\d{4}-\d{2}$/.test(MONTH_OVERRIDE)) {
     const [year, month] = MONTH_OVERRIDE.split('-').map(Number);
     const pad    = n => String(n).padStart(2,'0');
@@ -261,6 +290,11 @@ async function main() {
   const pad = n => String(n).padStart(2,'0');
   console.log(`Period: ${from} → ${to} (${periodLabel})`);
 
+  const nowForKey = new Date();
+  const centralOffsetForKey = isCDT(nowForKey) ? -5 : -6;
+  const centralDateForKey = new Date(nowForKey.getTime() + centralOffsetForKey * 3600000);
+  const sentPeriodKey = `${centralDateForKey.getUTCFullYear()}-${String(centralDateForKey.getUTCMonth()+1).padStart(2,'0')}`;
+
   // Log entry — will update as we go
   const logEntry = {
     id:          `rpt-${Date.now()}`,
@@ -269,6 +303,7 @@ async function main() {
     dateFrom:    from,
     dateTo:      to,
     source:      FORCE_SEND || MONTH_OVERRIDE ? 'manual' : 'scheduled',
+    sentPeriodKey,
     status:      'running',
     rowCount:    0,
     b2bOrders:   0,
@@ -463,7 +498,9 @@ async function main() {
     try {
       const s = await gistFetch(SCHED_GIST_FILE);
       if (s?.emails) { const sr = s.emails.split(',').map(e=>e.trim()).filter(Boolean); if (sr.length) recipients = sr; }
-    } catch(e) {}
+    } catch(e) {
+      console.warn(`  Schedule fetch failed (recipients): ${e.message}`);
+    }
     logEntry.recipients = recipients;
 
     // Email CSV if recipients configured
