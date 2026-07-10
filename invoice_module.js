@@ -562,7 +562,12 @@ function invRenderEdit(body) {
     + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Shipping Cost ($)</label>'
     + '<input type="number" id="inv-ship-cost" min="0" step="0.01" value="' + (inv.shipping.cost || '') + '" placeholder="0.00" '
     + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" '
-    + 'onchange="invUpdateShippingCost(parseFloat(this.value)||0)" /></div></div>'
+    + 'onchange="invUpdateShippingCost(parseFloat(this.value)||0)" /></div>'
+    + '<div style="margin-top:10px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Discount %</label>'
+    + '<input type="number" id="inv-discount" min="0" max="100" step="0.5" value="' + (inv.discount||'') + '" placeholder="0" '
+    + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);" '
+    + 'oninput="invUpdateDiscount(parseFloat(this.value)||0)" /></div>'
+    + '</div>'
     + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;">'
     + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Notes & Terms</div>'
     + '<div style="margin-bottom:10px;"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">PO Number</label>'
@@ -611,10 +616,19 @@ function invRenderItemsTable(items) {
       + 'style="width:60px;padding:4px 6px;font-size:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:var(--text);text-align:center;" '
       + 'onchange="invUpdateItem(' + idx + ',\'qty\',parseInt(this.value)||1)" /></td>'
       + '<td style="padding:8px 10px;">'
-      + '<input type="number" min="0" step="0.01" value="' + parseFloat(item.price || 0).toFixed(2) + '" '
-      + 'style="width:80px;padding:4px 6px;font-size:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:var(--text);text-align:right;" '
-      + 'onchange="invUpdateItem(' + idx + ',\'price\',parseFloat(this.value)||0)" /></td>'
-      + '<td id="inv-line-total-' + idx + '" style="padding:8px 10px;font-family:monospace;font-weight:600;font-size:12px;text-align:right;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
+      + (function(){
+          var d=parseFloat((InvState.draft||{}).discount||0);
+          var m=d>0?(1-d/100):1;
+          var dp=Math.round((item.price||0)*m*100)/100;
+          var col=d>0?'var(--green,#2e7d32)':'var(--text)';
+          var wt=d>0?'700':'400';
+          var tip=d>0?' title="List: $'+parseFloat(item.price||0).toFixed(2)+' — '+d+'% discount"':'';
+          return '<input type="number" min="0" step="0.01" value="'+dp.toFixed(2)+'"'+tip
+            +' style="width:80px;padding:4px 6px;font-size:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:'+col+';text-align:right;font-weight:'+wt+';"'
+            +' onchange="invUpdateItem('+idx+',\'price\',parseFloat(this.value)||0)" />';
+        }())
+      + '</td>'
+      + '<td id="inv-line-total-' + idx + '" style="padding:8px 10px;font-family:monospace;font-weight:600;font-size:12px;text-align:right;">' + (function(){var d=parseFloat((InvState.draft||{}).discount||0);var m=d>0?(1-d/100):1;return invFmt((item.qty||1)*Math.round((item.price||0)*m*100)/100);}()) + '</td>'
       + '<td style="padding:8px 10px;text-align:center;">'
       + '<button onclick="invRemoveItem(' + idx + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&#x2715;</button></td>'
       + '</tr>';
@@ -635,10 +649,19 @@ function invRenderItemsTable(items) {
 }
 
 function invRenderTotals(inv) {
-  const subtotal = (inv.items || []).reduce(function(s, i) { return s + (i.qty||1)*(i.price||0); }, 0);
-  const shipping = parseFloat(inv.shipping.cost || 0);
-  const total    = subtotal + shipping;
+  const discPct   = parseFloat(inv.discount || 0);
+  const mult      = discPct > 0 ? (1 - discPct/100) : 1;
+  const subtotal  = (inv.items || []).reduce(function(s, i) { return s + (i.qty||1)*Math.round((i.price||0)*mult*100)/100; }, 0);
+  const fullSub   = (inv.items || []).reduce(function(s, i) { return s + (i.qty||1)*(i.price||0); }, 0);
+  const savings   = Math.round((fullSub - subtotal)*100)/100;
+  const shipping  = parseFloat(inv.shipping.cost || 0);
+  const total     = subtotal + shipping;
+  const savingsRow = discPct > 0
+    ? '<div style="font-size:11px;color:var(--green,#2e7d32);margin-bottom:10px;padding:6px 8px;background:rgba(46,125,50,0.08);border-radius:4px;">'
+      + '💚 ' + invFmt(savings) + ' saved (' + discPct + '% discount applied)</div>'
+    : '';
   return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">Order Total</div>'
+    + savingsRow
     + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;"><span>Subtotal</span><span style="font-family:monospace;">' + invFmt(subtotal) + '</span></div>'
     + '<div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:13px;"><span>Shipping</span><span style="font-family:monospace;">' + invFmt(shipping) + '</span></div>'
     + '<div style="display:flex;justify-content:space-between;padding-top:10px;border-top:2px solid var(--border);font-size:16px;font-weight:800;">'
@@ -646,7 +669,8 @@ function invRenderTotals(inv) {
 }
 
 function invCalcTotal(inv) {
-  const sub = (inv.items||[]).reduce(function(s,i) { return s+(i.qty||1)*(i.price||0); }, 0);
+  const mult = parseFloat(inv.discount||0) > 0 ? (1-parseFloat(inv.discount)/100) : 1;
+  const sub  = (inv.items||[]).reduce(function(s,i) { return s+(i.qty||1)*Math.round((i.price||0)*mult*100)/100; }, 0);
   return sub + parseFloat(inv.shipping.cost || 0);
 }
 
@@ -712,6 +736,14 @@ window.invAddItemByIdx = function(idx) {
   const tableEl = document.getElementById('inv-items-table');
   if (tableEl) tableEl.innerHTML = invRenderItemsTable(InvState.draft.items);
   const totalsEl = document.getElementById('inv-totals-box');
+  if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
+};
+
+window.invUpdateDiscount = function(val) {
+  InvState.draft.discount = (val > 0 && val <= 100) ? val : 0;
+  var itemsWrap = document.getElementById('inv-items-wrap');
+  if (itemsWrap) itemsWrap.innerHTML = invRenderItemsTable(InvState.draft.items);
+  var totalsEl = document.getElementById('inv-totals-box');
   if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
 };
 
@@ -943,7 +975,8 @@ function invCollectForm() {
   inv.poNumber = g('inv-po-number');
   inv.paymentHold = !!(document.getElementById('inv-payment-hold') && document.getElementById('inv-payment-hold').checked);
   inv.notes = g('inv-notes');
-  inv.terms = g('inv-terms') || 'Net 30';
+  inv.terms    = g('inv-terms') || 'Net 30';
+  inv.discount = parseFloat(g('inv-discount')) || 0;
   inv.includeInReports = !!(document.getElementById('inv-include-reports') && document.getElementById('inv-include-reports').checked);
 
   // Auto-save/update address book — upsert by company/name
@@ -1016,7 +1049,11 @@ function invRenderDetail(body) {
   const inv = InvState.draft;
   if (!inv) { InvState.view = 'log'; return invRender(); }
 
-  const subtotal = (inv.items||[]).reduce(function(s,i) { return s+(i.qty||1)*(i.price||0); }, 0);
+  const discPct  = parseFloat(inv.discount || 0);
+  const mult     = discPct > 0 ? (1-discPct/100) : 1;
+  const subtotal = (inv.items||[]).reduce(function(s,i){ return s+(i.qty||1)*Math.round((i.price||0)*mult*100)/100; }, 0);
+  const fullSub  = (inv.items||[]).reduce(function(s,i){ return s+(i.qty||1)*(i.price||0); }, 0);
+  const savings  = Math.round((fullSub-subtotal)*100)/100;
   const shipping = parseFloat(inv.shipping.cost || 0);
   const total    = subtotal + shipping;
   const isDraft  = inv.status === 'draft';
@@ -1042,8 +1079,8 @@ function invRenderDetail(body) {
       + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;color:#777;">' + invEsc(item.upc) + '</td>'
       + '<td style="padding:5px 4px;font-size:9px;text-align:center;color:#555;">' + invEsc(item.format||'') + '</td>'
       + '<td style="padding:5px 4px;font-size:9px;text-align:center;font-weight:700;">' + (item.qty||1) + '</td>'
-      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;text-align:right;">' + invFmt(item.price||0) + '</td>'
-      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;font-weight:700;text-align:right;">' + invFmt((item.qty||1)*(item.price||0)) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;text-align:right;color:' + (discPct>0?'#2e7d32':'inherit') + ';">' + invFmt(Math.round((item.price||0)*mult*100)/100) + '</td>'
+      + '<td style="padding:5px 6px;font-size:9px;font-family:monospace;font-weight:700;text-align:right;">' + invFmt((item.qty||1)*Math.round((item.price||0)*mult*100)/100) + '</td>'
       + '</tr>';
   }).join('');
 
@@ -1119,6 +1156,7 @@ function invRenderDetail(body) {
     + '<div class="inv-totals-block" style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
     + '<table style="width:220px;border-collapse:collapse;font-size:11px;">'
     + '<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;color:#555;">Subtotal</td><td style="padding:5px 8px;text-align:right;font-family:monospace;">' + invFmt(subtotal) + '</td></tr>'
+    + (discPct>0 ? '<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;color:#2e7d32;font-style:italic;font-size:10px;">' + discPct + '% discount — ' + invFmt(savings) + ' saved</td><td></td></tr>' : '')
     + '<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;color:#555;">Shipping' + (inv.shipping.methodName ? '<br><span style="font-size:9px;color:#aaa;">' + invEsc(inv.shipping.methodName) + '</span>' : '') + '</td><td style="padding:5px 8px;text-align:right;font-family:monospace;">' + invFmt(shipping) + '</td></tr>'
     + '<tr style="background:#111;color:white;"><td style="padding:8px 8px;font-weight:900;font-size:13px;">Total</td><td style="padding:8px 8px;text-align:right;font-family:monospace;font-weight:900;font-size:13px;">' + invFmt(total) + '</td></tr>'
     + '</table></div>'
