@@ -64,17 +64,26 @@ async function packiyoFetch(path) {
 // Wrapper for GitHub API calls: disables gzip (works around a node-fetch v2 +
 // newer Node runtime bug that throws ERR_STREAM_PREMATURE_CLOSE while
 // decompressing gzip responses) and retries transient network/stream errors
-// with exponential backoff.
+// and 5xx responses (api.github.com and the raw githubusercontent.com CDN both
+// occasionally 503) with exponential backoff.
 async function githubFetch(url, opts, ms, maxRetries) {
   ms = ms || 15000;
   maxRetries = maxRetries == null ? 3 : maxRetries;
   const headers = Object.assign({ 'Accept-Encoding': 'identity' }, (opts && opts.headers) || {});
   const finalOpts = Object.assign({}, opts, { headers });
 
-  let lastErr;
+  let lastErr, lastRes;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await fetchWithTimeout(url, finalOpts, ms);
+      const res = await fetchWithTimeout(url, finalOpts, ms);
+      if (res.status >= 500 && attempt < maxRetries) {
+        lastRes = res;
+        const delay = 1000 * Math.pow(2, attempt);
+        console.log(`  GitHub API returned ${res.status}, retrying in ${delay}ms… (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
     } catch (e) {
       lastErr = e;
       if (attempt === maxRetries) break;
@@ -83,18 +92,49 @@ async function githubFetch(url, opts, ms, maxRetries) {
       await new Promise(r => setTimeout(r, delay));
     }
   }
+  if (lastRes) return lastRes;
   throw lastErr;
 }
 
-async function gistGet(filename) {
+// Fetches one file's raw content from the gist. The combined GET /gists/:id
+// response has an internal size budget across ALL files in the gist — once the
+// gist's total payload crosses it, files later in the response get their inline
+// `content` truncated (or omitted) and marked `truncated: true`, regardless of
+// how small that individual file is. Fall back to the file's own raw_url, which
+// always returns the full, untruncated content.
+async function fetchGistFile(filename) {
   const res = await githubFetch(`https://api.github.com/gists/${GIST_ID}`, {
     headers: { Authorization: `Bearer ${GIST_TOKEN}`, Accept: 'application/vnd.github+json' },
   }, 15000);
   if (!res.ok) throw new Error(`Gist GET failed: ${res.status}`);
   const data = await res.json();
-  const content = data.files?.[filename]?.content;
+  const file = data.files?.[filename];
+  if (!file) return null;
+
+  let content = file.content;
+  if (file.truncated || content == null) {
+    const rawRes = await githubFetch(file.raw_url, {
+      headers: { Authorization: `Bearer ${GIST_TOKEN}` },
+    }, 15000);
+    if (!rawRes.ok) throw new Error(`Gist raw GET failed for ${filename}: ${rawRes.status}`);
+    content = await rawRes.text();
+  }
+  return content || null;
+}
+
+async function gistGet(filename) {
+  const content = await fetchGistFile(filename);
   if (!content) return null;
-  return JSON.parse(content);
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    const m = /position (\d+)/.exec(e.message);
+    const pos = m ? parseInt(m[1], 10) : content.length;
+    console.error(`  Gist file "${filename}" failed to parse as JSON: ${e.message}`);
+    console.error(`  Content length: ${content.length} chars; near position ${pos}: ${JSON.stringify(content.slice(Math.max(0, pos - 60), pos + 20))}`);
+    console.error(`  Content tail: ${JSON.stringify(content.slice(-200))}`);
+    throw e;
+  }
 }
 
 async function gistSet(filename, obj) {
@@ -446,13 +486,9 @@ async function processCycleCountEmails() {
   console.log('\nChecking for pending cycle count emails…');
   let counts;
   try {
-    const res  = await githubFetch(`https://api.github.com/gists/${GIST_ID}`, {
-      headers: { Authorization: `Bearer ${GIST_TOKEN}`, Accept: 'application/vnd.github+json' },
-    }, 15000);
-    const data = await res.json();
-    const content = data.files?.['fp_cycle_counts.json']?.content;
+    const content = await fetchGistFile('fp_cycle_counts.json');
     counts = content ? JSON.parse(content) : [];
-  } catch(e) { console.log('  No cycle counts file found'); return; }
+  } catch(e) { console.error('  Could not load fp_cycle_counts.json:', e.message); return; }
 
   const pending = counts.filter(c => c.complete && c.pendingEmails?.length);
   if (!pending.length) { console.log('  No pending cycle count emails'); return; }
