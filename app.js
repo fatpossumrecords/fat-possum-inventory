@@ -228,10 +228,13 @@ window.handleGoogleLogin = async function(response) {
     role = 'admin';
   } else {
     try {
-      const res  = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+      const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
         headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
         cache: 'no-store',
       });
+      if (!res.ok) {
+        throw new Error('Gist fetch failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
+      }
       const data    = await res.json();
       const content = data.files?.[USERS_GIST_FILE]?.content;
       const users   = content ? JSON.parse(content) : { users: [], log: [] };
@@ -253,7 +256,7 @@ window.handleGoogleLogin = async function(response) {
         body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(users, null, 2) } } }),
       }).catch(() => {});
     } catch(e) {
-      console.warn('Could not load user list — allowing access for @fatpossum.com domain member');
+      console.warn('Could not load user list (' + e.message + ') — allowing access for @fatpossum.com domain member as a fallback. Fix CONFIG.GIST_TOKEN so per-user roles/restrictions work again.');
       role = 'full';
     }
   }

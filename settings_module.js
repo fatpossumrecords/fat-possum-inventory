@@ -419,32 +419,42 @@ window.adminInitSettings = function() {
 };
 
 async function adminLoadUsers() {
-  try {
-    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
-      cache: 'no-store',
-    });
-    const data = await res.json();
-    const content = data.files?.[USERS_GIST_FILE]?.content;
-    return content ? JSON.parse(content) : { users: [], log: [] };
-  } catch(e) {
-    return { users: [], log: [] };
+  const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+    headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    throw new Error('Gist fetch failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
   }
+  const data = await res.json();
+  const content = data.files?.[USERS_GIST_FILE]?.content;
+  return content ? JSON.parse(content) : { users: [], log: [] };
 }
 
 async function adminSaveUsers(data) {
-  await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+  const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
     method: 'PATCH',
     headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(data, null, 2) } } }),
   });
+  if (!res.ok) {
+    throw new Error('Gist save failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
+  }
 }
 
 async function adminRenderUsers() {
-  const data  = await adminLoadUsers();
-  const users = data.users || [];
-  const el    = document.getElementById('s-users-list');
+  const el = document.getElementById('s-users-list');
   if (!el) return;
+
+  let data;
+  try {
+    data = await adminLoadUsers();
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--red);">⚠ Could not load user list: ' + e.message + '</div>';
+    return;
+  }
+
+  const users = data.users || [];
 
   if (!users.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No users added yet.</div>';
@@ -478,10 +488,18 @@ async function adminRenderUsers() {
 }
 
 async function adminRenderLog() {
-  const data = await adminLoadUsers();
-  const log  = (data.log || []).slice(-50).reverse();
-  const el   = document.getElementById('s-access-log');
+  const el = document.getElementById('s-access-log');
   if (!el) return;
+
+  let data;
+  try {
+    data = await adminLoadUsers();
+  } catch(e) {
+    el.textContent = 'Could not load sign-in log: ' + e.message;
+    return;
+  }
+
+  const log = (data.log || []).slice(-50).reverse();
   if (!log.length) { el.textContent = 'No sign-ins recorded yet.'; return; }
   el.innerHTML = log.map(e =>
     '<div style="padding:2px 0;border-bottom:1px solid var(--border);">'
@@ -499,40 +517,53 @@ window.adminAddUser = async function() {
   const role    = roleEl?.value || 'full';
   if (!email || !email.includes('@')) { alert('Enter a valid email.'); return; }
 
-  const data  = await adminLoadUsers();
-  const users = data.users || [];
-  if (users.find(u => u.email.toLowerCase() === email)) {
-    alert(email + ' is already in the list.'); return;
+  try {
+    const data  = await adminLoadUsers();
+    const users = data.users || [];
+    if (users.find(u => u.email.toLowerCase() === email)) {
+      alert(email + ' is already in the list.'); return;
+    }
+    users.push({ email, role, addedAt: new Date().toISOString(), addedBy: State.user?.email });
+    data.users = users;
+    await adminSaveUsers(data);
+    if (emailEl) emailEl.value = '';
+    adminRenderUsers();
+    if (window.toast) toast('User added: ' + email, 'success');
+  } catch(e) {
+    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck CONFIG.GIST_TOKEN in app.js.');
   }
-  users.push({ email, role, addedAt: new Date().toISOString(), addedBy: State.user?.email });
-  data.users = users;
-  await adminSaveUsers(data);
-  if (emailEl) emailEl.value = '';
-  adminRenderUsers();
-  if (window.toast) toast('User added: ' + email, 'success');
 };
 
 window.adminRemoveUser = async function(idx) {
-  const data  = await adminLoadUsers();
-  const users = data.users || [];
-  const user  = users[idx];
-  if (!user) return;
-  if (!confirm('Remove ' + user.email + '?')) return;
-  users.splice(idx, 1);
-  data.users = users;
-  await adminSaveUsers(data);
-  adminRenderUsers();
-  if (window.toast) toast('User removed: ' + user.email, 'success');
+  try {
+    const data  = await adminLoadUsers();
+    const users = data.users || [];
+    const user  = users[idx];
+    if (!user) return;
+    if (!confirm('Remove ' + user.email + '?')) return;
+    users.splice(idx, 1);
+    data.users = users;
+    await adminSaveUsers(data);
+    adminRenderUsers();
+    if (window.toast) toast('User removed: ' + user.email, 'success');
+  } catch(e) {
+    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck CONFIG.GIST_TOKEN in app.js.');
+  }
 };
 
 window.adminChangeRole = async function(idx, newRole) {
-  const data  = await adminLoadUsers();
-  const users = data.users || [];
-  if (!users[idx]) return;
-  users[idx].role = newRole;
-  data.users = users;
-  await adminSaveUsers(data);
-  if (window.toast) toast('Role updated', 'success');
+  try {
+    const data  = await adminLoadUsers();
+    const users = data.users || [];
+    if (!users[idx]) return;
+    users[idx].role = newRole;
+    data.users = users;
+    await adminSaveUsers(data);
+    if (window.toast) toast('Role updated', 'success');
+  } catch(e) {
+    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck CONFIG.GIST_TOKEN in app.js.');
+    adminRenderUsers(); // reset the dropdown to actual saved state
+  }
 };
 
 // Called from app.js after login — looks up user role and applies nav restrictions
