@@ -419,15 +419,7 @@ window.adminInitSettings = function() {
 };
 
 async function adminLoadUsers() {
-  const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-    headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    throw new Error('Gist fetch failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
-  }
-  const data = await res.json();
-  const content = data.files?.[USERS_GIST_FILE]?.content;
+  const content = await fetchGistFile(USERS_GIST_FILE);
   return content ? JSON.parse(content) : { users: [], log: [] };
 }
 

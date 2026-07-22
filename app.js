@@ -212,6 +212,35 @@ window.addEventListener('DOMContentLoaded', () => {
 const ADMIN_EMAIL     = 'patrick@fatpossum.com';
 const USERS_GIST_FILE = 'fp_users.json';
 
+// The combined GET /gists/:id response has a size budget across ALL files in
+// the gist — once the gist's total payload crosses it, files get their inline
+// `content` truncated to '' and marked `truncated: true`, regardless of how
+// small that individual file is (fp_users.json is 193 bytes but shares a gist
+// with several much larger files). Fall back to the file's raw_url, which
+// always returns the full content. raw_url is fetched without the auth header
+// since raw.githubusercontent.com doesn't handle the CORS preflight that a
+// custom Authorization header would trigger from the browser.
+async function fetchGistFile(filename) {
+  const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+    headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    throw new Error('Gist fetch failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
+  }
+  const data = await res.json();
+  const file = data.files?.[filename];
+  if (!file) return null;
+  if (file.truncated || !file.content) {
+    const rawRes = await fetch(file.raw_url, { cache: 'no-store' });
+    if (!rawRes.ok) {
+      throw new Error('Gist raw fetch failed for ' + filename + ': HTTP ' + rawRes.status);
+    }
+    return await rawRes.text();
+  }
+  return file.content;
+}
+
 window.handleGoogleLogin = async function(response) {
   const payload = parseJwt(response.credential);
 
@@ -228,15 +257,7 @@ window.handleGoogleLogin = async function(response) {
     role = 'admin';
   } else {
     try {
-      const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-        headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        throw new Error('Gist fetch failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
-      }
-      const data    = await res.json();
-      const content = data.files?.[USERS_GIST_FILE]?.content;
+      const content = await fetchGistFile(USERS_GIST_FILE);
       const users   = content ? JSON.parse(content) : { users: [], log: [] };
       const found   = (users.users || []).find(u => u.email.toLowerCase() === email);
       if (!found) {
