@@ -32,15 +32,19 @@ A browser-based inventory management tool for Fat Possum Records, pulling live d
 4. In [Google Cloud Console](https://console.cloud.google.com):
    - Go to **APIs & Services → Credentials → OAuth Client ID**
    - Add `https://fatpossumrecords.github.io` to **Authorized JavaScript origins**
-5. Visit `https://fatpossumrecords.github.io/fat-possum-inventory`
+5. Deploy the Worker in `worker/` (see `worker/README.md`) and set `CONFIG.WORKER_BASE`
+   in `app.js` to its URL — this is what holds the GitHub Gist and Packiyo credentials,
+   since GitHub Pages can't hold secrets itself
+6. Visit `https://fatpossumrecords.github.io/fat-possum-inventory`
 
 ## Files
 - `index.html` — App shell + Google Sign-In
 - `styles.css` — UI styles
 - `app.js` — All application logic
+- `worker/` — Cloudflare Worker proxy that holds the GitHub Gist PAT and Packiyo
+  token server-side (the browser app never receives them directly)
 
-## Updating Packiyo Token
-If the Packiyo API token changes, update line 10 of `app.js`:
-```js
-PACKIYO_TOKEN: 'your-new-token-here',
-```
+## Updating the GitHub Gist or Packiyo token
+Both credentials live only in the Cloudflare Worker now, not in `app.js`. See
+`worker/README.md` — in short: `npx wrangler secret put GIST_TOKEN` (or
+`PACKIYO_TOKEN`) from the `worker/` directory.

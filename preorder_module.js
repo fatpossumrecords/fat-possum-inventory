@@ -52,23 +52,17 @@ async function savePreOrderData() {
   } catch(e) {}
 
   // 2. Fetch current Gist, merge, then save — prevents overwriting concurrent changes
-  let _gistId, _token;
-  try { _gistId = CONFIG.GIST_ID; _token = CONFIG.GIST_TOKEN; } catch(e) {}
-  if (!_gistId) { try { const c=JSON.parse(localStorage.getItem('fp_config_cache')||'{}'); _gistId=c.GIST_ID; _token=c.GIST_TOKEN; } catch(e) {} }
+  let _gistId;
+  try { _gistId = CONFIG.GIST_ID; } catch(e) {}
+  if (!_gistId) { try { const c=JSON.parse(localStorage.getItem('fp_config_cache')||'{}'); _gistId=c.GIST_ID; } catch(e) {} }
   if (!_gistId) return;
 
   try {
     // Fetch current state
     let base = { preOrderCampaigns: [], ordersCache: {}, ordersRefreshedAt: {} };
     try {
-      const current = await fetch('https://api.github.com/gists/' + _gistId, {
-        headers: { 'Authorization': 'token ' + _token }, cache: 'no-store'
-      });
-      if (current.ok) {
-        const gist = await current.json();
-        const file = gist.files && gist.files[PO_GIST_FILE];
-        if (file && file.content) base = JSON.parse(file.content);
-      }
+      const content = await fetchGistFile(PO_GIST_FILE);
+      if (content) base = JSON.parse(content);
     } catch(e) {}
 
     // Merge campaigns — our version wins for campaigns we own by ID
@@ -85,9 +79,9 @@ async function savePreOrderData() {
       ordersCacheTs: Date.now(),
     };
 
-    const res = await fetch('https://api.github.com/gists/' + _gistId, {
+    const res = await fetch(gistUrl(_gistId), {
       method: 'PATCH',
-      headers: { 'Authorization': 'token ' + _token, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: { [PO_GIST_FILE]: { content: JSON.stringify(payload) } } }),
     });
     if (!res.ok) console.warn('Pre-order Gist save failed:', res.status);
@@ -100,21 +94,15 @@ async function savePreOrderData() {
 
 async function loadPreOrderData(creds) {
   try {
-    let gistId, token;
+    let gistId;
     if (creds) {
-      gistId = creds.gistId; token = creds.token;
+      gistId = creds.gistId;
     } else {
-      try { gistId = CONFIG.GIST_ID; token = CONFIG.GIST_TOKEN; } catch(e) {}
+      try { gistId = CONFIG.GIST_ID; } catch(e) {}
     }
-    if (!gistId || !token) { console.warn('Pre-order load: no credentials'); return; }
-    const res = await fetch('https://api.github.com/gists/' + gistId, {
-      headers: { 'Authorization': 'token ' + token },
-      cache: 'no-store',
-    });
-    if (res.ok) {
-      const gist = await res.json();
-      const fileContent = gist.files && gist.files[PO_GIST_FILE] && gist.files[PO_GIST_FILE].content;
-      if (fileContent) {
+    if (!gistId) { console.warn('Pre-order load: no credentials'); return; }
+    const fileContent = await fetchGistFile(PO_GIST_FILE);
+    if (fileContent) {
         const data = JSON.parse(fileContent);
         if (data.preOrderCampaigns && data.preOrderCampaigns.length) {
           POState.campaigns = data.preOrderCampaigns;
@@ -138,7 +126,6 @@ async function loadPreOrderData(creds) {
           const view = document.getElementById('view-preorders');
           if (view && !view.classList.contains('hidden')) renderPreOrders();
         }
-      }
     }
   } catch(e) {
     console.warn('Pre-order Gist load failed:', e.message);
@@ -182,8 +169,8 @@ document.addEventListener('DOMContentLoaded', function() {
   function getCredentials() {
     // Try direct CONFIG access first (works if in same scope)
     try {
-      if (typeof CONFIG !== 'undefined' && CONFIG.GIST_ID && CONFIG.GIST_TOKEN) {
-        return { gistId: CONFIG.GIST_ID, token: CONFIG.GIST_TOKEN };
+      if (typeof CONFIG !== 'undefined' && CONFIG.GIST_ID) {
+        return { gistId: CONFIG.GIST_ID };
       }
     } catch(e) {}
     // Fall back to reading from localStorage config cache
@@ -191,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const cached = localStorage.getItem('fp_config_cache');
       if (cached) {
         const obj = JSON.parse(cached);
-        if (obj.GIST_ID && obj.GIST_TOKEN) return { gistId: obj.GIST_ID, token: obj.GIST_TOKEN };
+        if (obj.GIST_ID) return { gistId: obj.GIST_ID };
       }
     } catch(e) {}
     return null;
@@ -737,10 +724,9 @@ async function releaseHolds(campaignId, orders) {
 
   for (const o of orders) {
     try {
-      const res = await fetch(CONFIG.PACKIYO_BASE + '/orders/' + o.orderId, {
+      const res = await fetch(CONFIG.WORKER_BASE + '/packiyo/orders/' + o.orderId, {
         method: 'PATCH',
         headers: {
-          'Authorization': 'Bearer ' + CONFIG.PACKIYO_TOKEN,
           'Content-Type': 'application/vnd.api+json',
           'Accept': 'application/vnd.api+json',
         },

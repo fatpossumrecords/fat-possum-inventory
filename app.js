@@ -8,13 +8,13 @@ const CONFIG = {
   SHEET_NAME: 'Sheet1',
   GOOGLE_CLIENT_ID: '955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com',
   ALLOWED_DOMAIN:   'fatpossum.com',
-  PACKIYO_BASE:     'https://fatpossum.app.packiyo.com/api/v1',
-  PACKIYO_TOKEN:    '314|AJSEnucp8nigZM7YEkgEvWfNgH4JdTuraKYBkLp2',
+  // GitHub Gist reads/writes and Packiyo calls go through this Worker, which
+  // holds the real tokens server-side — see worker/README.md to deploy/update.
+  WORKER_BASE:      'https://fp-gist-proxy.fatpossum.workers.dev',
   REORDER_WEEKS:    8,
   MFG_TRIGGER_MONTHS: 5,
   LEAD_TIME: { lp: 4, cd: 1.5 },
   GIST_ID:    'e79a142da6ddbc0a77560802db1ce780',
-  GIST_TOKEN: (()=>'github_pat_11CDQQ5RA0yhSrJMafd3Fy_SuJsZtHRLaCo'+'J2KPwApkIdS76CaxEo9xLuHEo96bkTiZ7D546A7KzhWglV5')(),
   GIST_FILE:  'fp_data.json',
   GIST_CONFIG_FILE: 'fp_config.json',
   ORCHARD_SHEET_ID: '1L9r-24Grf_vH17YKJF-D705VnMMvroKNBQD9YUCQVZg',
@@ -133,9 +133,9 @@ async function takeStockSnapshot() {
     if (snapshots.length > 52) snapshots = snapshots.slice(-52);
 
     const body = JSON.stringify({ files: { 'fp_snapshots.json': { content: JSON.stringify(snapshots) } } });
-    await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+    await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body,
     });
     localStorage.setItem('fp_last_snapshot', now.toString());
@@ -212,6 +212,13 @@ window.addEventListener('DOMContentLoaded', () => {
 const ADMIN_EMAIL     = 'patrick@fatpossum.com';
 const USERS_GIST_FILE = 'fp_users.json';
 
+// Gist reads/writes go through a Cloudflare Worker (worker/fp-gist-proxy.js)
+// that holds the real GitHub PAT server-side, so the browser never receives
+// it. See worker/README.md.
+function gistUrl(id) {
+  return CONFIG.WORKER_BASE + '/gist/' + id;
+}
+
 // The combined GET /gists/:id response has a size budget across ALL files in
 // the gist — once the gist's total payload crosses it, files get their inline
 // `content` truncated to '' and marked `truncated: true`, regardless of how
@@ -221,12 +228,9 @@ const USERS_GIST_FILE = 'fp_users.json';
 // since raw.githubusercontent.com doesn't handle the CORS preflight that a
 // custom Authorization header would trigger from the browser.
 async function fetchGistFile(filename) {
-  const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-    headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN },
-    cache: 'no-store',
-  });
+  const res = await fetch(gistUrl(CONFIG.GIST_ID), { cache: 'no-store' });
   if (!res.ok) {
-    throw new Error('Gist fetch failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
+    throw new Error('Gist fetch failed: HTTP ' + res.status + ' — check the Worker is deployed and reachable');
   }
   const data = await res.json();
   const file = data.files?.[filename];
@@ -271,13 +275,13 @@ window.handleGoogleLogin = async function(response) {
       if (!users.log) users.log = [];
       users.log.push({ email, at: new Date().toISOString(), role });
       if (users.log.length > 200) users.log = users.log.slice(-200);
-      fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+      fetch(gistUrl(CONFIG.GIST_ID), {
         method: 'PATCH',
-        headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(users, null, 2) } } }),
       }).catch(() => {});
     } catch(e) {
-      console.warn('Could not load user list (' + e.message + ') — allowing access for @fatpossum.com domain member as a fallback. Fix CONFIG.GIST_TOKEN so per-user roles/restrictions work again.');
+      console.warn('Could not load user list (' + e.message + ') — allowing access for @fatpossum.com domain member as a fallback. Check the Worker (worker/fp-gist-proxy.js) is deployed and its GIST_TOKEN secret is valid.');
       role = 'full';
     }
   }
@@ -663,9 +667,9 @@ async function saveOrchardToGist() {
     };
     const body = JSON.stringify({ files: { [CONFIG.GIST_FILE]: { content: JSON.stringify(payload) } } });
     console.log('Saving orchard to Gist, rows:', State.orchardData.length, 'size:', Math.round(body.length/1024)+'KB');
-    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+    const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body,
     });
     if (!res.ok) console.warn('Orchard Gist save failed:', res.status);
@@ -711,9 +715,9 @@ async function _saveGistDataImpl() {
     const sizeKB = body.length / 1024;
     console.log('Saving config to Gist, size:', Math.round(sizeKB)+'KB');
     updateGistStatus(sizeKB);
-    const res = await fetch(`https://api.github.com/gists/${CONFIG.GIST_ID}`, {
+    const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Authorization': `token ${CONFIG.GIST_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body,
     });
     if (!res.ok) {
@@ -865,11 +869,9 @@ function saveGistDebounced() {
 
 async function packiyoFetch(endpoint, params = {}, retries = 3) {
   const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-  const url = CONFIG.PACKIYO_BASE + endpoint + (qs ? '?' + qs : '');
+  const url = CONFIG.WORKER_BASE + '/packiyo' + endpoint + (qs ? '?' + qs : '');
   for (let attempt = 0; attempt < retries; attempt++) {
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${CONFIG.PACKIYO_TOKEN}`, 'Accept': '*/*' }
-    });
+    const res = await fetch(url, { headers: { 'Accept': '*/*' } });
     if (res.status === 429) {
       // Rate limited — wait and retry
       const wait = (attempt + 1) * 2000;

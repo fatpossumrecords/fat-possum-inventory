@@ -295,20 +295,17 @@ function _settingsGetVal(id)        { const el = document.getElementById(id); re
   const GIST_LIMIT_KB = 10240;
 
   function _fpUpdateGistSizes() {
-    let gistId, token;
-    try { gistId = CONFIG.GIST_ID; token = CONFIG.GIST_TOKEN; } catch(e) {}
+    let gistId;
+    try { gistId = CONFIG.GIST_ID; } catch(e) {}
     if (!gistId) {
       try {
         const c = JSON.parse(localStorage.getItem('fp_config_cache') || '{}');
-        gistId = c.GIST_ID; token = c.GIST_TOKEN;
+        gistId = c.GIST_ID;
       } catch(e) {}
     }
-    if (!gistId || !token) return;
+    if (!gistId) return;
 
-    fetch('https://api.github.com/gists/' + gistId, {
-      headers: { 'Authorization': 'token ' + token },
-      cache: 'no-store'
-    }).then(function(r) { return r.json(); }).then(function(g) {
+    fetch(gistUrl(gistId), { cache: 'no-store' }).then(function(r) { return r.json(); }).then(function(g) {
       const files = Object.values(g.files || {});
       const totalKb  = files.reduce(function(s, f) { return s + (f.size || 0); }, 0) / 1024;
       const largestKb = Math.max.apply(null, files.map(function(f) { return (f.size || 0) / 1024; }));
@@ -424,13 +421,13 @@ async function adminLoadUsers() {
 }
 
 async function adminSaveUsers(data) {
-  const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+  const res = await fetch(gistUrl(CONFIG.GIST_ID), {
     method: 'PATCH',
-    headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(data, null, 2) } } }),
   });
   if (!res.ok) {
-    throw new Error('Gist save failed: HTTP ' + res.status + ' — CONFIG.GIST_TOKEN may be expired or revoked');
+    throw new Error('Gist save failed: HTTP ' + res.status + ' — check the Worker is deployed and its GIST_TOKEN secret is valid');
   }
 }
 
@@ -522,7 +519,7 @@ window.adminAddUser = async function() {
     adminRenderUsers();
     if (window.toast) toast('User added: ' + email, 'success');
   } catch(e) {
-    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck CONFIG.GIST_TOKEN in app.js.');
+    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck that the Worker is deployed and its GIST_TOKEN secret is valid.');
   }
 };
 
@@ -539,7 +536,7 @@ window.adminRemoveUser = async function(idx) {
     adminRenderUsers();
     if (window.toast) toast('User removed: ' + user.email, 'success');
   } catch(e) {
-    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck CONFIG.GIST_TOKEN in app.js.');
+    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck that the Worker is deployed and its GIST_TOKEN secret is valid.');
   }
 };
 
@@ -553,7 +550,7 @@ window.adminChangeRole = async function(idx, newRole) {
     await adminSaveUsers(data);
     if (window.toast) toast('Role updated', 'success');
   } catch(e) {
-    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck CONFIG.GIST_TOKEN in app.js.');
+    alert('Could not update the user list — nothing was changed.\n\n' + e.message + '\n\nCheck that the Worker is deployed and its GIST_TOKEN secret is valid.');
     adminRenderUsers(); // reset the dropdown to actual saved state
   }
 };

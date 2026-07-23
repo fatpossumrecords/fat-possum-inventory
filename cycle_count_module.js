@@ -99,11 +99,7 @@ window.ccInit = async function() {
 
 async function ccLoadHistory() {
   try {
-    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN }, cache: 'no-store',
-    });
-    const data    = await res.json();
-    const content = data.files?.[CC_GIST_FILE]?.content;
+    const content = await fetchGistFile(CC_GIST_FILE);
     CCState.history = content ? JSON.parse(content) : [];
     CCState.historyLoaded = true;
     ccUpdateHistoryPanel();
@@ -115,9 +111,9 @@ async function ccLoadHistory() {
 
 async function ccSaveHistory() {
   try {
-    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
+    const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: { [CC_GIST_FILE]: { content: JSON.stringify(CCState.history) } } }),
     });
     if (!res.ok) {
@@ -674,11 +670,7 @@ async function ccRenderComplete() {
   // Load user list for email dropdown
   let users = [];
   try {
-    const res     = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN }, cache: 'no-store',
-    });
-    const gist    = await res.json();
-    const content = gist.files?.['fp_users.json']?.content;
+    const content = await fetchGistFile('fp_users.json');
     const data    = content ? JSON.parse(content) : { users: [] };
     users = data.users || [];
     // Always include admin

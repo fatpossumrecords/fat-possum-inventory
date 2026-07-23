@@ -23,18 +23,10 @@ const RptState = {
 function rptEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function rptFmt(n) { return '$' + parseFloat(n||0).toFixed(2); }
 
-function rptGetPackiyoToken() {
-  try { if (typeof CONFIG !== 'undefined') return CONFIG.PACKIYO_TOKEN; } catch(e) {}
-  try { return JSON.parse(localStorage.getItem('fp_config_cache')||'{}').PACKIYO_TOKEN; } catch(e) {}
-  return null;
-}
-
 async function rptPackiyoFetch(path) {
-  const token = rptGetPackiyoToken();
-  const base  = 'https://fatpossum.app.packiyo.com/api/v1';
+  const base = CONFIG.WORKER_BASE + '/packiyo';
   const res = await fetch(base + path, {
     headers: {
-      'Authorization': 'Bearer ' + token,
       'Content-Type':  'application/vnd.api+json',
       'Accept':        'application/vnd.api+json',
     }
@@ -68,12 +60,8 @@ window.rptShowLog = async function() {
   try {
     const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
     if (!creds) { document.getElementById('rpt-log-content').textContent = 'Not available — Gist credentials not loaded.'; return; }
-    const res = await fetch('https://api.github.com/gists/' + creds.gistId, {
-      headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
-    });
-    const gist = await res.json();
-    const file = gist.files && gist.files['fp_reports_log.json'];
-    const log  = file && file.content ? JSON.parse(file.content) : { runs: [] };
+    const content = await fetchGistFile('fp_reports_log.json');
+    const log  = content ? JSON.parse(content) : { runs: [] };
     const runs = log.runs || [];
 
     if (!runs.length) {
@@ -179,9 +167,9 @@ window.rptSaveSchedule = async function() {
   try {
     const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
     if (creds) {
-      await fetch('https://api.github.com/gists/' + creds.gistId, {
+      await fetch(gistUrl(creds.gistId), {
         method: 'PATCH',
-        headers: { 'Authorization': 'token ' + creds.token, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: { 'fp_report_schedule.json': { content: JSON.stringify(schedule, null, 2) } } }),
       });
       if (statusEl) statusEl.textContent = '✓ Schedule saved — runs on the ' + day + (day===1?'st':day===2?'nd':day===3?'rd':'th') + ' of each month at ' + document.getElementById('rpt-schedule-hour').options[hour].text + ' Central';
@@ -327,11 +315,7 @@ function rptRenderConfig(body) {
     try {
       const creds = typeof invGetCreds === 'function' ? invGetCreds() : null;
       if (creds) {
-        const res  = await fetch('https://api.github.com/gists/' + creds.gistId, {
-          headers: { Authorization: 'token ' + creds.token }, cache: 'no-store',
-        });
-        const data    = await res.json();
-        const content = data.files?.['fp_report_schedule.json']?.content;
+        const content = await fetchGistFile('fp_report_schedule.json');
         if (content) {
           const gs = JSON.parse(content);
           localStorage.setItem('fp_rpt_schedule', JSON.stringify(gs));
@@ -707,17 +691,14 @@ window.rptExportCSV = function() {
         recipients: [],
         error: null,
       };
-      fetch('https://api.github.com/gists/' + creds.gistId, {
-        headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
-      }).then(function(r){return r.json();}).then(function(gist) {
-        const file = gist.files && gist.files['fp_reports_log.json'];
-        const log  = file && file.content ? JSON.parse(file.content) : { runs: [] };
+      fetchGistFile('fp_reports_log.json').then(function(content) {
+        const log = content ? JSON.parse(content) : { runs: [] };
         if (!log.runs) log.runs = [];
         log.runs.unshift(logEntry);
         if (log.runs.length > 100) log.runs = log.runs.slice(0,100);
-        return fetch('https://api.github.com/gists/' + creds.gistId, {
+        return fetch(gistUrl(creds.gistId), {
           method: 'PATCH',
-          headers: { 'Authorization': 'token ' + creds.token, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ files: { 'fp_reports_log.json': { content: JSON.stringify(log) } } }),
         });
       }).catch(function(){});

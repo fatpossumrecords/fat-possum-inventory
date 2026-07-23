@@ -189,18 +189,12 @@ const WH_REPLEN_LOG_FILE = 'fp_replen_log.json';
 async function whSaveReplenLog(titles, units) {
   if (!titles && !units) return;
   try {
-    const creds = { gistId: CONFIG.GIST_ID, token: CONFIG.GIST_TOKEN };
+    const creds = { gistId: CONFIG.GIST_ID };
     // Load existing log
     let log = [];
     try {
-      const res = await fetch('https://api.github.com/gists/' + creds.gistId, {
-        headers: { Authorization: 'token ' + creds.token }, cache: 'no-store'
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data.files?.[WH_REPLEN_LOG_FILE]?.content;
-        if (raw) log = JSON.parse(raw);
-      }
+      const raw = await fetchGistFile(WH_REPLEN_LOG_FILE);
+      if (raw) log = JSON.parse(raw);
     } catch(e) {}
 
     const user = (typeof State !== 'undefined' && State.user?.email) || 'unknown';
@@ -214,9 +208,9 @@ async function whSaveReplenLog(titles, units) {
     });
     if (log.length > 100) log = log.slice(0, 100);
 
-    await fetch('https://api.github.com/gists/' + creds.gistId, {
+    await fetch(gistUrl(creds.gistId), {
       method: 'PATCH',
-      headers: { Authorization: 'token ' + creds.token, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: { [WH_REPLEN_LOG_FILE]: { content: JSON.stringify(log, null, 2) } } })
     });
     console.log('Replen log saved:', titles, 'titles,', units, 'units');
@@ -233,12 +227,7 @@ async function whRenderReplenLog() {
   if (!el) return;
   el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Loading…</div>';
   try {
-    const res = await fetch('https://api.github.com/gists/' + CONFIG.GIST_ID, {
-      headers: { Authorization: 'token ' + CONFIG.GIST_TOKEN }, cache: 'no-store'
-    });
-    if (!res.ok) throw new Error('Gist ' + res.status);
-    const data = await res.json();
-    const raw  = data.files?.[WH_REPLEN_LOG_FILE]?.content;
+    const raw  = await fetchGistFile(WH_REPLEN_LOG_FILE);
     const log  = raw ? JSON.parse(raw) : [];
 
     if (!log.length) {

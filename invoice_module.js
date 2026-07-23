@@ -48,24 +48,17 @@ function invDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 function invGetCreds() {
-  try { if (typeof CONFIG !== 'undefined') return { gistId: CONFIG.GIST_ID, token: CONFIG.GIST_TOKEN }; } catch(e) {}
+  try { if (typeof CONFIG !== 'undefined') return { gistId: CONFIG.GIST_ID }; } catch(e) {}
   try {
     const c = JSON.parse(localStorage.getItem('fp_config_cache') || '{}');
-    if (c.GIST_ID) return { gistId: c.GIST_ID, token: c.GIST_TOKEN };
+    if (c.GIST_ID) return { gistId: c.GIST_ID };
   } catch(e) {}
   return null;
 }
-function invGetPackiyoToken() {
-  try { if (typeof CONFIG !== 'undefined') return CONFIG.PACKIYO_TOKEN; } catch(e) {}
-  try { return JSON.parse(localStorage.getItem('fp_config_cache') || '{}').PACKIYO_TOKEN; } catch(e) {}
-  return null;
-}
 async function invPackiyoFetch(path, opts) {
-  const token = invGetPackiyoToken();
-  const base  = 'https://fatpossum.app.packiyo.com/api/v1';
+  const base = CONFIG.WORKER_BASE + '/packiyo';
   const res = await fetch(base + path, Object.assign({
     headers: {
-      'Authorization': 'Bearer ' + token,
       'Content-Type': 'application/vnd.api+json',
       'Accept': 'application/vnd.api+json',
     }
@@ -92,14 +85,9 @@ async function invLoad() {
   const creds = invGetCreds();
   if (!creds) return;
   try {
-    const res = await fetch('https://api.github.com/gists/' + creds.gistId, {
-      headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
-    });
-    if (!res.ok) return;
-    const gist = await res.json();
-    const file = gist.files && gist.files[INV_GIST_FILE];
-    if (file && file.content) {
-      const data = JSON.parse(file.content);
+    const content = await fetchGistFile(INV_GIST_FILE);
+    if (content) {
+      const data = JSON.parse(content);
       InvState.invoices     = data.invoices     || [];
       InvState.customers    = data.customers    || [];
       InvState.priceCatalog = data.priceCatalog || {};
@@ -123,14 +111,8 @@ async function invSave() {
     // Prevents overwriting another user's concurrent changes
     let base = { invoices: [], customers: [], priceCatalog: {}, nextNum: INV_START_NUM };
     try {
-      const current = await fetch('https://api.github.com/gists/' + creds.gistId, {
-        headers: { 'Authorization': 'token ' + creds.token }, cache: 'no-store'
-      });
-      if (current.ok) {
-        const gist = await current.json();
-        const file = gist.files && gist.files[INV_GIST_FILE];
-        if (file && file.content) base = JSON.parse(file.content);
-      }
+      const content = await fetchGistFile(INV_GIST_FILE);
+      if (content) base = JSON.parse(content);
     } catch(e) {}
 
     // Merge: our invoices win for IDs we own, keep others' invoices we don't have
@@ -168,9 +150,9 @@ async function invSave() {
       deletedIds: Array.from(deletedIds),
       savedAt: new Date().toISOString(),
     };
-    await fetch('https://api.github.com/gists/' + creds.gistId, {
+    await fetch(gistUrl(creds.gistId), {
       method: 'PATCH',
-      headers: { 'Authorization': 'token ' + creds.token, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: { [INV_GIST_FILE]: { content: JSON.stringify(payload) } } }),
     });
   } catch(e) { console.warn('Invoice save error:', e.message); }
