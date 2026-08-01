@@ -2264,7 +2264,6 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     var html = '<div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'
       + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Movement Summary</div>'
       + '<div style="display:flex;gap:6px;">'
-      + '<button onclick="movExportCSV()" class="btn-secondary btn-sm" style="font-size:10px;">&#8595; Export CSV</button>'
       + '<button onclick="movExpandAll()" class="btn-secondary btn-sm" style="font-size:10px;">Expand All</button>'
       + '<button onclick="movCollapseAll()" class="btn-secondary btn-sm" style="font-size:10px;">Collapse All</button>'
       + '</div></div>';
@@ -2329,6 +2328,7 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
               btns += '<span style="font-size:10px;color:var(--text-muted);">Clears in 30d</span>';
             }
             btns += '<button onclick="event.stopPropagation();movExportShipmentCSV(\'' + encodeURIComponent(sid) + '\')" class="btn-secondary btn-sm" style="font-size:10px;">&#8595; CSV</button>';
+            btns += '<button onclick="event.stopPropagation();movExportShipmentToSheet(\'' + encodeURIComponent(sid) + '\')" class="btn-secondary btn-sm" style="font-size:10px;">&#8594; Sheet</button>';
             btns += '</span>';
             return btns;
           })()
@@ -2413,33 +2413,46 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     if (window.toast) toast(items.length + ' items exported.', 'success');
   };
 
-  window.movExportCSV = function() {
-    if (typeof State === 'undefined' || !State.movements || !State.movements.length) {
-      if (window.toast) toast('No movements to export.', 'error');
-      return;
-    }
-    var headers = ['Route', 'Status', 'Shipment ID', 'PO Number', 'Artist', 'Title', 'Catalog #', 'UPC', 'Format', 'Qty', 'Date'];
-    var rows = State.movements.map(function(m) {
-      var route = (m.from||'') + ' → ' + (m.to||'');
-      var sid = m.shipmentId || '';
-      return [
-        route, m.status||'', sid, m.poNumber||'',
-        m.artist||'', m.title||'', m.catalog||'', m.upc||'', m.format||'',
-        m.qty||0,
-        m.timestamp ? new Date(m.timestamp).toLocaleDateString('en-US') : ''
-      ].map(function(v) {
-        var s = String(v||'').replace(/"/g,'""');
-        return /,|"|\n/.test(s) ? '"'+s+'"' : s;
-      }).join(',');
+  window.movExportShipmentToSheet = async function(sidEnc) {
+    var sid = decodeURIComponent(sidEnc);
+    if (typeof State === 'undefined' || !State.movements) return;
+    var items = State.movements.filter(function(m) {
+      return (m.shipmentId || ((m.from||'')+'→'+(m.to||'')+'-legacy')) === sid;
     });
-    var csv = headers.join(',') + '\n' + rows.join('\n');
-    var blob = new Blob([csv], {type:'text/csv'});
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'fp-movements-' + new Date().toISOString().slice(0,10) + '.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    if (window.toast) toast(State.movements.length + ' movements exported.', 'success');
+    if (!items.length) { if (window.toast) toast('No items found.', 'error'); return; }
+    if (!State.sheetsToken) { initSheetsAuth(); return; }
+
+    var route  = (items[0].from||'') + ' → ' + (items[0].to||'');
+    var status = items[0].status || '';
+    var po     = items[0].poNumber || '';
+    var dateStr = new Date().toISOString().slice(0,10);
+    var title = 'FP Movement — ' + route + (po ? ' — ' + po : '') + ' — ' + dateStr;
+
+    var headers = ['Artist', 'Title', 'Catalog #', 'UPC', 'Format', 'Qty', 'Route', 'Status', 'PO Number'];
+    var rows = items.map(function(m) {
+      return [m.artist||'', m.title||'', m.catalog||'', m.upc||'', m.format||'', m.qty||0, route, status, po];
+    });
+
+    try {
+      var createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ properties: { title: title }, sheets: [{ properties: { title: 'Movement' } }] }),
+      });
+      var created = await createRes.json();
+      if (!created.spreadsheetId) throw new Error((created.error && created.error.message) || 'Could not create sheet');
+
+      await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + created.spreadsheetId + '/values/Movement!A1?valueInputOption=RAW', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [headers].concat(rows) }),
+      });
+
+      if (window.toast) toast('New sheet created for this shipment ✓', 'success');
+      window.open(created.spreadsheetUrl || ('https://docs.google.com/spreadsheets/d/' + created.spreadsheetId + '/edit'), '_blank');
+    } catch(e) {
+      if (window.toast) toast('Sheet export failed: ' + e.message, 'error');
+    }
   };
 
   window.movUpdateQty = function(upcEnc, sidEnc, newQty) {
