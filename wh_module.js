@@ -246,6 +246,28 @@ async function whRenderReplenLog() {
 
 window.whInitReplenLog = function() {
   whRenderReplenLog();
+  whSyncReplenLogCollapse();
+};
+
+const WH_REPLEN_LOG_OPEN_KEY = 'fp_wh_replen_log_open';
+function whSyncReplenLogCollapse() {
+  const wrap  = document.getElementById('wh-replen-log-wrap');
+  const body  = document.getElementById('wh-replen-log');
+  const arrow = document.getElementById('wh-replen-log-arrow');
+  if (!wrap || !body || !arrow) return;
+  let open = false;
+  try { open = localStorage.getItem(WH_REPLEN_LOG_OPEN_KEY) === '1'; } catch(e) {}
+  body.style.display  = open ? 'block' : 'none';
+  wrap.style.flex      = open ? '0 1 200px' : '0 0 auto';
+  wrap.style.minHeight = open ? '76px' : '0';
+  arrow.textContent    = open ? '▾' : '▸';
+}
+window.whToggleReplenLog = function() {
+  const body = document.getElementById('wh-replen-log');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  try { localStorage.setItem(WH_REPLEN_LOG_OPEN_KEY, open ? '1' : '0'); } catch(e) {}
+  whSyncReplenLogCollapse();
 };
 
 window.runReplenishment = async function() {
