@@ -2413,6 +2413,22 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
     if (window.toast) toast(items.length + ' items exported.', 'success');
   };
 
+  // Requests a Sheets OAuth token and resumes the caller's action once granted —
+  // unlike initSheetsAuth(), this doesn't kick off the full inventory sync as a side effect.
+  function whRequestSheetsToken(onGranted) {
+    var client = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+      callback: function(resp) {
+        if (resp.access_token) {
+          State.sheetsToken = resp.access_token;
+          onGranted();
+        }
+      },
+    });
+    client.requestAccessToken({ prompt: 'consent' });
+  }
+
   window.movExportShipmentToSheet = async function(sidEnc) {
     var sid = decodeURIComponent(sidEnc);
     if (typeof State === 'undefined' || !State.movements) return;
@@ -2420,7 +2436,10 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       return (m.shipmentId || ((m.from||'')+'→'+(m.to||'')+'-legacy')) === sid;
     });
     if (!items.length) { if (window.toast) toast('No items found.', 'error'); return; }
-    if (!State.sheetsToken) { initSheetsAuth(); return; }
+    if (!State.sheetsToken) {
+      whRequestSheetsToken(function() { window.movExportShipmentToSheet(sidEnc); });
+      return;
+    }
 
     var route  = (items[0].from||'') + ' → ' + (items[0].to||'');
     var status = items[0].status || '';
