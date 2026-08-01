@@ -197,6 +197,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('add-movement-btn').addEventListener('click', addMovement);
   document.getElementById('export-movements-btn').addEventListener('click', exportMovements);
+  document.getElementById('export-movements-sheet-btn').addEventListener('click', exportMovementsToSheet);
   document.getElementById('clear-movements-btn').addEventListener('click', () => { State.movements = []; renderMovementsTable(); saveGistData(); toast('Movement queue cleared.'); });
   document.getElementById('mov-product-search').addEventListener('input', debounce(updateMovementDropdown, 200));
   document.getElementById('mov-from').addEventListener('change', validateRoute);
@@ -2976,6 +2977,44 @@ function exportMovements() {
   );
   toast('Movement request exported.', 'success');
 }
+window.exportMovementsToSheet = async function() {
+  if (State.movements.length === 0) { toast('No movements to export.', 'error'); return; }
+  if (!State.sheetsToken) { initSheetsAuth(); return; }
+
+  const SHEET_NAME_MOV = 'Movement Requests';
+  const HEADER = ['From Warehouse','To Warehouse','Artist','Title','Label','Catalog #','UPC','Format','Quantity','Notes'];
+  const rows = State.movements.map(m => [WH_LABELS[m.from],WH_LABELS[m.to],m.artist,m.title,m.label,m.catalog,m.upc,m.format,m.qty,m.notes||'']);
+
+  try {
+    const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}`,
+      { headers: { 'Authorization': 'Bearer ' + State.sheetsToken } });
+    const meta = await metaRes.json();
+    const sheetExists = meta.sheets?.some(s => s.properties?.title === SHEET_NAME_MOV);
+    if (!sheetExists) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}:batchUpdate`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: SHEET_NAME_MOV } } }] }),
+      });
+    }
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(SHEET_NAME_MOV)}:clear`,
+      { method: 'POST', headers: { 'Authorization': 'Bearer ' + State.sheetsToken } });
+
+    const now = new Date();
+    const dateLabel = 'Last updated: ' + (now.getMonth()+1) + '/' + now.getDate() + '/' + String(now.getFullYear()).slice(2) + ' ' + now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const allRows = [[dateLabel], HEADER, ...rows];
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(SHEET_NAME_MOV+'!A1')}?valueInputOption=RAW`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + State.sheetsToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: allRows }),
+    });
+    toast('Movement request synced to sheet ✓', 'success');
+  } catch(e) {
+    console.warn('Movement sheet sync failed:', e.message);
+    toast('Sheet sync failed: ' + e.message, 'error');
+  }
+};
+
 function exportInventory() {
   downloadCSV('fp_global_inventory_'+dateStr()+'.csv',
     ['Artist','Title','Label','Catalog #','UPC','Format','Total Stock','FP Avail','FP Inbound','US Avail','US MTD','US 3MS','US 12MS','CA Avail','CA MTD','CA 3MS','CA 12MS','UK Avail','UK Open Ord','UK Last Mo','UK This Yr','UK Last Yr','EU Avail','EU MTD','EU Last Mo','EU This Yr'],
