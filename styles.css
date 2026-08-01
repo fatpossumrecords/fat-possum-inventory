@@ -122,6 +122,7 @@ nav { padding: 8px 0; flex: 1; }
 .view { display: none; }
 .view.hidden { display: none !important; }
 .view.active { display: flex; flex-direction: column; min-height: 0; overflow: hidden; height: 100%; }
+#view-replenishment { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 /* Sticky headers — each scroll container handles its own */
 .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 .table-wrap thead th.is-pinned { z-index: 20 !important; }
