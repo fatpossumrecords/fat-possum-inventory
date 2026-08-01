@@ -147,36 +147,28 @@ async function shouldRun() {
   } catch(e) {
     console.warn(`  Schedule fetch failed: ${e.message}`);
   }
-  if (!schedule?.day) { console.log('No schedule — defaulting to 1st at 8 AM'); schedule = { day: 1, hour: 8 }; }
+  if (!schedule?.day) { console.log('No schedule — defaulting to 1st of the month'); schedule = { day: 1 }; }
 
-  // Convert current UTC time to Central time (CDT = UTC-5, CST = UTC-6)
+  // Convert current UTC time to Central time (CDT = UTC-5, CST = UTC-6).
+  // Only the day-of-month matters now — the workflow's cron fires once daily,
+  // so there's no meaningful "hour" to check; the report goes out on the
+  // first (and only) run of the scheduled day.
   const now = new Date();
   const centralOffset = isCDT(now) ? -5 : -6;
-  const centralHour = (now.getUTCHours() + 24 + centralOffset) % 24;
   const centralDate = new Date(now.getTime() + centralOffset * 3600000);
   const centralDay  = centralDate.getUTCDate();
 
-  const scheduledDay  = parseInt(schedule.day)  || 1;
-  const scheduledHour = parseInt(schedule.hour) ?? 8;
+  const scheduledDay = parseInt(schedule.day) || 1;
 
-  console.log(`Central time: day=${centralDay} hour=${centralHour} | Scheduled: day=${scheduledDay} hour=${scheduledHour} | DST: ${isCDT(now)?'CDT':'CST'}`);
+  console.log(`Central time: day=${centralDay} | Scheduled day: ${scheduledDay} | DST: ${isCDT(now)?'CDT':'CST'}`);
 
   if (centralDay !== scheduledDay) {
     console.log('Not scheduled day — skipping');
     return false;
   }
 
-  // Cron runs can be delayed by GitHub's scheduler (queue backlog, especially
-  // around common trigger times like 1st-of-month). Instead of requiring an
-  // exact hour match (which causes a delayed run to skip the whole day), we
-  // fire on the FIRST run at or after the scheduled hour, and use a
-  // "already sent this period" flag in the Gist to prevent duplicate sends
-  // from later runs the same day.
-  if (centralHour < scheduledHour) {
-    console.log(`Before scheduled hour (now ${centralHour}, want ${scheduledHour}) — skipping`);
-    return false;
-  }
-
+  // Guard against double-sends if the workflow is ever run more than once
+  // on the scheduled day (e.g. a manual trigger plus the cron run).
   const periodKey = `${centralDate.getUTCFullYear()}-${String(centralDate.getUTCMonth()+1).padStart(2,'0')}`;
   let log = null;
   try {
