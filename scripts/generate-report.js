@@ -536,7 +536,7 @@ async function main() {
         body: JSON.stringify({
           from:    'Fat Possum Reports <reports@fatpossum.com>',
           to:      recipients,
-          subject: `Fat Possum B2B Sales Report — ${from} to ${to}`,
+          subject: `Fat Possum B2B Sales Report — ${periodLabel}`,
           html:    `<p>Please find attached the Fat Possum sales report for <strong>${periodLabel}</strong>.</p><ul><li><strong>${dataRows.length}</strong> line items</li><li><strong>${b2bOrders.length}</strong> B2B orders</li><li><strong>${optedIn.length}</strong> app invoices</li></ul><p>Also available in Google Sheets: <a href="https://docs.google.com/spreadsheets/d/${SHEETS_ID}">FP B2B Sales Reports</a></p><p>Fat Possum Records</p>`,
           attachments: [{ filename, content: Buffer.from(csv).toString('base64') }],
         }),
