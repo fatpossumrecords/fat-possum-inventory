@@ -2054,8 +2054,13 @@ window.whPrintPickList = function(mode) {
   const rows = WHState.allRows
     .filter(r => (r.priority === 'urgent' || r.priority === 'replenish') && r.suggest > 0 && r.bulkLocs && r.bulkLocs.length)
     .map(r => {
-      // Filter bulk locs to only those relevant to this mode
-      const filteredLocs = r.bulkLocs.filter(loc => isNowMode ? whIsNowLoc(loc.name) : !whIsNowLoc(loc.name));
+      if (isNowMode) {
+        // NOW pick list: only titles stocked exclusively at NOW — skip anything also held at MW
+        if (!r.bulkLocs.every(loc => whIsNowLoc(loc.name))) return null;
+        return r;
+      }
+      // Main pick list: only non-NOW bulk locs
+      const filteredLocs = r.bulkLocs.filter(loc => !whIsNowLoc(loc.name));
       if (!filteredLocs.length) return null;
       return { ...r, bulkLocs: filteredLocs };
     })
