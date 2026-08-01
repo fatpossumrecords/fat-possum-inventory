@@ -139,24 +139,15 @@ function rptPeriodOptions() {
   }).join('');
 }
 
-function rptHourOptions() {
-  const saved = rptGetSchedule().hour || 8;
-  const labels = ['12:00 AM','1:00 AM','2:00 AM','3:00 AM','4:00 AM','5:00 AM','6:00 AM','7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM','10:00 PM','11:00 PM'];
-  return labels.map(function(l, i) {
-    return '<option value="' + i + '"' + (saved === i ? ' selected' : '') + '>' + l + '</option>';
-  }).join('');
-}
-
 function rptGetSchedule() {
   try { return JSON.parse(localStorage.getItem('fp_rpt_schedule') || '{}'); } catch(e) { return {}; }
 }
 
 window.rptSaveSchedule = async function() {
   const day    = parseInt(document.getElementById('rpt-schedule-day')?.value || '1');
-  const hour   = parseInt(document.getElementById('rpt-schedule-hour')?.value || '8');
   const period = document.getElementById('rpt-schedule-period')?.value || 'last_month';
   const emails = document.getElementById('rpt-schedule-emails')?.value.trim() || '';
-  const schedule = { day, hour, period, emails, updatedAt: new Date().toISOString() };
+  const schedule = { day, period, emails, updatedAt: new Date().toISOString() };
 
   // Save to localStorage
   try { localStorage.setItem('fp_rpt_schedule', JSON.stringify(schedule)); } catch(e) {}
@@ -172,7 +163,7 @@ window.rptSaveSchedule = async function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: { 'fp_report_schedule.json': { content: JSON.stringify(schedule, null, 2) } } }),
       });
-      if (statusEl) statusEl.textContent = '✓ Schedule saved — runs on the ' + day + (day===1?'st':day===2?'nd':day===3?'rd':'th') + ' of each month at ' + document.getElementById('rpt-schedule-hour').options[hour].text + ' Central';
+      if (statusEl) statusEl.textContent = '✓ Schedule saved — runs on the ' + day + (day===1?'st':day===2?'nd':day===3?'rd':'th') + ' of each month';
     } else {
       if (statusEl) statusEl.textContent = '✓ Saved locally (Gist not available)';
     }
@@ -273,15 +264,11 @@ function rptRenderConfig(body) {
     // Schedule config
     + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;">'
     + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px;">Automated Email Schedule</div>'
-    + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">The GitHub Action runs daily and emails the report on the day you configure below. Requires RESEND_API_KEY secret to be set in GitHub.</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">The GitHub Action checks daily and emails the report on the day you configure below (once per month, first check of that day). Requires RESEND_API_KEY secret to be set in GitHub.</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">'
     + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Day of Month</label>'
     + '<select id="rpt-schedule-day" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
     + rptDayOptions()
-    + '</select></div>'
-    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Time (Central)</label>'
-    + '<select id="rpt-schedule-hour" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
-    + rptHourOptions()
     + '</select></div>'
     + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Report Period</label>'
     + '<select id="rpt-schedule-period" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
