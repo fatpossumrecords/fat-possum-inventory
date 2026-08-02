@@ -348,11 +348,6 @@ function rptThisYear() {
 }
 
 window.rptToggleInv = function(id, checked) { RptState.invSelected[id] = checked; };
-window.rptSelectAllInv = function(val) {
-  const invoices = (typeof InvState !== 'undefined' ? InvState.invoices : []) || [];
-  invoices.forEach(function(inv) { if (inv.status !== 'draft') RptState.invSelected[inv.id] = val; });
-  rptRender();
-};
 
 // ── RUN REPORT ────────────────────────────────────────────────
 window.rptRun = async function() {
@@ -416,15 +411,15 @@ window.rptRun = async function() {
 
     setProgress(70, 'Enriching with catalog data...');
 
-    // Build item map by order ID
-    const itemsByOrderId = {};
-    allItems.forEach(function(item) { });
+    // Build item map by ID for O(1) lookup when tagging items onto orders
+    const itemsById = {};
+    allItems.forEach(function(item) { itemsById[item.id] = item; });
     // Tag items with order
     allOrders.forEach(function(order) {
       const refs = (order.relationships?.order_items?.data || []).map(function(r) { return r.id; });
       const contactRef = order.relationships?.shipping_contact_information?.data?.id;
       order._contact = contactRef ? allContacts[contactRef] : null;
-      order._items   = allItems.filter(function(i) { return refs.includes(i.id); });
+      order._items   = refs.map(function(id) { return itemsById[id]; }).filter(Boolean);
     });
 
     // Build catalog lookup by SKU

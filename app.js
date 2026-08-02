@@ -1435,48 +1435,6 @@ window.saveManualArtist = async function(upc, value) {
   toast('Artist saved.', 'success');
 };
 
-function parseCSVRobust(text) {
-  // Handles multiline quoted fields (e.g. Shopify HTML body)
-  const rows = [];
-  let headers = null;
-  let i = 0;
-  while (i < text.length) {
-    const fields = [];
-    while (i < text.length) {
-      if (text[i] === '"') {
-        // Quoted field
-        i++;
-        let val = '';
-        while (i < text.length) {
-          if (text[i] === '"' && text[i+1] === '"') { val += '"'; i += 2; }
-          else if (text[i] === '"') { i++; break; }
-          else { val += text[i++]; }
-        }
-        fields.push(val);
-        if (text[i] === ',') i++;
-      } else {
-        // Unquoted field
-        let val = '';
-        while (i < text.length && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
-          val += text[i++];
-        }
-        fields.push(val);
-        if (text[i] === ',') i++;
-      }
-      if (i >= text.length || text[i] === '\n' || text[i] === '\r') break;
-    }
-    // Skip \r\n or \n
-    if (text[i] === '\r') i++;
-    if (text[i] === '\n') i++;
-    if (!headers) { headers = fields; continue; }
-    if (fields.length === 0 || (fields.length === 1 && !fields[0])) continue;
-    const row = {};
-    headers.forEach((h, idx) => { row[h] = fields[idx] || ''; });
-    rows.push(row);
-  }
-  return rows;
-}
-
 function parseCSV(text) {
   const lines = text.split('\n');
   const headers = parseCSVLine(lines[0]);
@@ -2864,9 +2822,6 @@ window.processGroup = function(shipmentId) {
   toast('Group marked as processed. Will auto-remove in 30 days.', 'success');
 };
 
-window.confirmMovement = window.confirmGroup; // backwards compat
-window.processMovement = window.processGroup;
-
 // Check if any FP→US movements with PO# have shipped in Packiyo
 function checkMovementStatuses() {
   let changed = false;
@@ -2902,28 +2857,6 @@ function checkMovementStatuses() {
     }
   }
   if (changed) { saveGistData(); renderMovementsTable(); }
-}
-
-// Store PO orders for status checking
-function storeFPPoOrders(orders) {
-  State.fp_poOrders = orders
-    .filter(o => (o.attributes?.number || '').startsWith('PO#'))
-    .map(o => ({
-      number: o.attributes.number,
-      status_text: o.attributes.status_text,
-      fulfilled_at: o.attributes.fulfilled_at,
-    }));
-}
-
-// Get confirmed inbound quantities per warehouse from movements
-function getConfirmedInbound() {
-  const inbound = { fp:0, us:0, ca:0, uk:0, eu:0 };
-  for (const m of State.movements) {
-    if (m.status === 'confirmed' || m.status === 'shipped') {
-      inbound[m.to] = (inbound[m.to] || 0) + (m.qty || 0);
-    }
-  }
-  return inbound;
 }
 
 window.removeMovement = function(i) { State.movements.splice(i,1); renderMovementsTable(); saveGistData(); };
@@ -3303,7 +3236,6 @@ window.switchMfgTab = function(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`mfg-tab-${tab}`)?.classList.remove('hidden');
   document.getElementById(`mfg-tab-${tab}`)?.classList.add('active');
-  document.querySelector(`.tab-btn[data-tab="${tab}"]`)?.classList.add('active');
   if (tab === 'queue') renderMfgQueue();
   if (tab === 'runs') renderProductionRuns();
 };

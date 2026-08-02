@@ -24,20 +24,7 @@ window.togglePreOrderNav = function(e) {
   switchToPreOrders();
 };
 
-// ── PERSISTENCE (plugs into app.js Gist system) ─────────────
-// Called by applyConfigData when Gist loads
-window.applyPreOrderData = function(parsed) {
-  if (parsed && parsed.preOrderCampaigns) {
-    POState.campaigns = parsed.preOrderCampaigns;
-    console.log('Pre-order campaigns loaded:', POState.campaigns.length);
-  }
-};
-
-// Returns data to merge into Gist save payload
-window.getPreOrderSaveData = function() {
-  return { preOrderCampaigns: POState.campaigns };
-};
-
+// ── PERSISTENCE ──────────────────────────────────────────────
 const PO_LS_KEY   = 'fp_preorder_campaigns';
 const PO_GIST_FILE = 'fp_preorders.json';
 
@@ -998,11 +985,6 @@ document.addEventListener('click', function(e) {
   const cid    = btn.dataset.cid;
   if (!action || !cid) return;
   e.stopPropagation();
-  if (action === 'refresh') loadCampaignOrders(cid);
-  if (action === 'release') poConfirmRelease(cid);
-  if (action === 'archive') poArchive(cid);
-  if (action === 'edit')    poOpenModal(cid);
-  if (action === 'delete')  poDelete(cid);
   if (action === 'expand')  { if (!POState.expandedOrders) POState.expandedOrders = {}; POState.expandedOrders[cid] = true;  renderPreOrders(); }
   if (action === 'collapse'){ if (!POState.expandedOrders) POState.expandedOrders = {}; POState.expandedOrders[cid] = false; renderPreOrders(); }
 });

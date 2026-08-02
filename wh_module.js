@@ -1465,7 +1465,7 @@ function pickerBuildQueue() {
   });
 }
 
-window.startPickerMode = window.startReplenishRun = async function() {
+window.startReplenishRun = async function() {
   // If no data yet, run the report first then launch
   if (!WHState.allRows.length) {
     await whRunAndLaunch();
@@ -2257,7 +2257,6 @@ function whEsc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt
       var isFPtoUS = rk === 'fp\u2192us';
       var totalItems = shipKeys.reduce(function(s,k) { return s+shipments[k].items.length; }, 0);
       var totalUnits = shipKeys.reduce(function(s,k) { return s+shipments[k].totalQty; }, 0);
-      var hasUrgent = shipKeys.some(function(k) { return shipments[k].status === 'draft' || shipments[k].status === 'confirmed'; });
       var routeLabel = ROUTE_LABELS[rk] || rk;
 
       html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;overflow:hidden;">';

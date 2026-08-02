@@ -49,13 +49,6 @@ html, body {
   box-shadow: 0 4px 24px rgba(0,0,0,0.08); width: 380px;
 }
 .login-logo { text-align: center; }
-.fp-mark {
-  display: inline-block;
-  font-family: 'DM Mono', monospace;
-  font-size: 26px; font-weight: 500; color: var(--accent);
-  background: var(--red-bg); border: 2px solid var(--accent-dim);
-  padding: 8px 18px; letter-spacing: 4px; margin-bottom: 16px;
-}
 .login-logo h1 { font-size: 18px; font-weight: 600; color: var(--text); }
 .login-logo p {
   color: var(--text-muted); font-size: 11px; margin-top: 4px;
@@ -75,11 +68,6 @@ html, body {
 .sidebar-header {
   display: flex; align-items: center; gap: 10px;
   padding: 18px 16px; border-bottom: 1px solid var(--border);
-}
-.fp-mark-sm {
-  font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500;
-  color: var(--accent); background: var(--red-bg);
-  border: 1px solid var(--accent-dim); padding: 3px 8px; letter-spacing: 2px;
 }
 .sidebar-title {
   font-size: 12px; font-weight: 600;
@@ -214,15 +202,6 @@ th.pinned, td.pinned {
 th.pinned { z-index: 11; background: var(--surface2); }
 td.pinned { background: var(--surface); }
 tr:hover td.pinned { background: #ece8e0; }
-
-/* Collapsed warehouse group header */
-th.group-header {
-  text-align: center; background: var(--surface2);
-  cursor: pointer; letter-spacing: 1px;
-}
-th.group-header:hover { background: var(--border); }
-th.group-toggle { background: var(--accent); color: #fff; cursor: pointer; text-align: center; padding: 6px 8px; }
-th.group-toggle:hover { opacity: 0.85; }
 
 td {
   padding: 7px 10px;
@@ -410,7 +389,6 @@ td { overflow: hidden; }
 .dash-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 8px; }
 .dash-num   { font-family: 'DM Mono', monospace; font-size: 32px; font-weight: 500; line-height: 1; color: var(--text); }
 .dash-sub   { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
-.dash-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dash-section { background: var(--surface); border: 1px solid var(--border); padding: 20px 24px; }
 .dash-section h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
 .dash-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -504,7 +482,6 @@ td { overflow: hidden; }
   .mob-stat-strip .mob-stat-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-top: 2px; }
 
   /* ── INVENTORY: card layout, FP stock hero ── */
-  .mobile-hide { display: none !important; }
   .inv-body-wrap { overflow-x: hidden; }
   #inventory-table thead { display: none; }
   #inventory-table, #inventory-table tbody, #inventory-table tr { display: block; width: 100%; }
@@ -650,7 +627,6 @@ td { overflow: hidden; }
   nav .nav-item[data-view="alerts"] { display: none !important; }
   #mfg-nav-sub { display: none !important; }
   #inv-nav-sub, #wh-nav-sub { display: block !important; }
-  #mobile-loc-btn, #mobile-replen-btn, #mobile-settings-btn { display: none !important; }
   #mob-hamburger { display: none !important; }
 }
 
@@ -674,30 +650,6 @@ td { overflow: hidden; }
 .mfg-tab .table-wrap { flex: 1; overflow: auto; min-height: 0; height: 0; }
 .mfg-tab .table-wrap thead th { position: sticky; top: 0; z-index: 10; background: var(--surface2); }
 
-
-/* ── SUPPRESS BUTTON ── */
-.suppress-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: inherit;
-}
-tr:hover .suppress-btn { opacity: 1; }
-.suppress-btn:hover { color: var(--red); background: var(--red-bg); }
-
-/* ── ALERTS FROZEN COLUMNS ── */
-.alert-frozen, td.af {
-  background: var(--surface);
-}
-tr:nth-child(even) td.af { background: #f4f1ec; }
-tr:hover td.af { background: #e8e3d8 !important; }
 
 /* ── NOTIFICATION BADGES ── */
 .notif-badge {

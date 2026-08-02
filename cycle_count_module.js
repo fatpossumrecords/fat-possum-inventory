@@ -298,8 +298,6 @@ function ccRenderHome() {
   ccUpdateHistoryPanel();
 }
 
-window.ccUpdateSubZoneSelect = function() {}; // kept for compatibility
-
 window.ccUpdateBinSelect = function() {
   const zoneId = document.getElementById('cc-zone-select')?.value;
   const binSel = document.getElementById('cc-bin-select');
