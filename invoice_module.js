@@ -1538,7 +1538,7 @@ window.invHandlePriceCSV = function(input) {
     '@media print {',
     '  .no-print { display:none !important; }',
     '  #sidebar { display:none !important; }',
-    '  #top-bar, #needs-attention-banner { display:none !important; }',
+    '  #top-bar { display:none !important; }',
     '  body, html { overflow:visible !important; height:auto !important; background:white !important; }',
     '  #main-content { overflow:visible !important; display:block !important; height:auto !important; min-height:0 !important; }',
     '  .view { display:none !important; }',

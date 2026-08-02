@@ -340,15 +340,6 @@ function bootApp() {
   } catch(e) {}
    
   // Load Gist FIRST — has orchard data, suppressions, manual artists, movements
-  // Poll until banner has candidates and dashboard is active — wait for POs too
-  let _bannerInterval = setInterval(() => {
-    if (State.merged.length > 0 && Object.keys(State.packiyoPOs).length > 0) {
-      buildNeedsAttentionBanner();
-      const el = document.getElementById('needs-attention-banner');
-      if (el && el.style.display === 'flex') clearInterval(_bannerInterval);
-    }
-  }, 1000);
-  setTimeout(() => clearInterval(_bannerInterval), 30000); // stop after 30s
 
   // Check if local cache has unsynced changes from a previous rate-limited session
   const lastSync = parseInt(localStorage.getItem('fp_gist_last_sync') || '0');
@@ -1147,7 +1138,6 @@ async function loadFPVelocity() {
     checkMovementStatuses();
     renderAlerts();
     renderDashboard();
-    buildNeedsAttentionBanner();
     updateNotifications();
     renderInventory();
   } catch(e) {
@@ -2795,9 +2785,6 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('remove-dest-modal-btn')) {
     removeRunModalDest(e.target.dataset.vid, e.target.dataset.did);
   }
-  if (e.target.classList.contains('doom-kill')) {
-    doomsdayKill(e.target.dataset.upc, e.target.dataset.artist, e.target.dataset.title);
-  }
   if (e.target.classList.contains('grp-export')) {
     exportGroup(decodeURIComponent(e.target.dataset.sid));
   }
@@ -3250,10 +3237,6 @@ function renderDashboard() {
           + '<div class="dash-sub">' + totalUnitsInFlight.toLocaleString() + ' units · $' + Math.round(totalCommitted).toLocaleString() + (nextDate ? ' · next: '+nextDate : '') + '</div>'
           + '</div>';
       })()}
-      <div class="dash-card" id="doomsday-card" style="padding:12px 14px;min-width:0;">
-        <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">STOCKOUT CLOCK</div>
-        <div id="doomsday-display"></div>
-      </div>
       <div class="dash-card" style="grid-column:span 4;">
         <div class="dash-label" style="margin-bottom:8px;">Inbound to Fat Possum Warehouse</div>
         ${buildInboundHTML()}
@@ -3318,98 +3301,7 @@ function renderDashboard() {
   `;
   const _resolved = State.movements.filter(m => m.status==='confirmed'||m.status==='shipped'||m.status==='processed').length;
   setTimeout(() => countUp(document.getElementById('resolved-count'), _resolved), 150);
-  setTimeout(() => renderDoomsdayClock(), 80);
 }
-
-// ── RECORD OF THE DAY ───────────────────────────────────────
-
-// ── DOOMSDAY CLOCK ──────────────────────────────────────────
-let _doomsdayPool = null;
-let _doomsdayIdx = 0;
-
-function buildDoomsdayPool() {
-  const WHS = [
-    { key:'fp', avail:'fp_available', vel:'fp_12ms',    label:'FP WH' },
-    { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
-    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
-  ];
-  // Build exclusion sets — titles with open POs or confirmed/shipped movements are addressed
-  const addressedUpcs = new Set();
-  for (const m of State.movements) {
-    if (m.status === 'confirmed' || m.status === 'shipped') addressedUpcs.add(m.upc);
-  }
-  for (const [sku, po] of Object.entries(State.packiyoPOs)) {
-    if (po.qty > 0) {
-      // Find the product UPC for this SKU
-      const prod = State.merged.find(p => p.packiyo_sku === sku || p.catalog === sku);
-      if (prod) addressedUpcs.add(prod.upc);
-    }
-  }
-
-  const seen = new Set();
-  const items = [];
-  for (const p of State.merged) {
-    if (addressedUpcs.has(p.upc)) continue;
-    let worstWeeks = Infinity, worstLabel = '';
-    for (const wh of WHS) {
-      const monthly = (p[wh.vel]||0)/12;
-      if (monthly <= 0) continue;
-      const weeks = ((p[wh.avail]||0)/monthly)*4.33;
-      if (weeks < worstWeeks) { worstWeeks = weeks; worstLabel = wh.label; }
-    }
-    if (worstWeeks < CONFIG.REORDER_WEEKS && !seen.has(p.upc)) {
-      seen.add(p.upc);
-      items.push({ p, weeks: worstWeeks, whLabel: worstLabel });
-    }
-  }
-  // Shuffle
-  for (let i = items.length-1; i > 0; i--) {
-    const j = Math.floor(Math.random()*(i+1));
-    [items[i],items[j]] = [items[j],items[i]];
-  }
-  return items;
-}
-
-function renderDoomsdayClock() {
-  const el = document.getElementById('doomsday-display');
-  if (!el || !State.merged.length) return;
-  if (!_doomsdayPool) {
-    _doomsdayPool = buildDoomsdayPool();
-    _doomsdayIdx = 0;
-  } else if (_doomsdayIdx >= _doomsdayPool.length) {
-    _doomsdayPool = buildDoomsdayPool();
-    _doomsdayIdx = 0;
-  }
-  if (!_doomsdayPool.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--green)">All titles healthy ✓</div>';
-    return;
-  }
-  const { p, weeks, whLabel } = _doomsdayPool[_doomsdayIdx % _doomsdayPool.length];
-  const color = weeks < 2 ? '#c0392b' : weeks < 4 ? '#E8650A' : weeks < 8 ? '#c45f00' : 'var(--text-muted)';
-  el.innerHTML =
-    '<div style="font-family:monospace;font-size:28px;font-weight:700;color:' + color + ';letter-spacing:2px;margin-bottom:4px;">'
-    + (weeks < 0.1 ? 'OUT' : weeks.toFixed(1) + '<span style="font-size:14px;font-weight:400"> wks</span>')
-    + '</div>'
-    + '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">' + esc(p.artist) + '</div>'
-    + '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">' + esc(p.title) + '</div>'
-    + '<div style="font-size:10px;color:' + color + ';margin-bottom:10px;">' + esc(p.catalog) + ' · ' + whLabel + '</div>'
-    + '<div style="display:flex;gap:6px;">'
-    + '<button onclick="doomsdayKeepIt()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;cursor:pointer;color:var(--text);">Keep It</button>'
-    + '<button onclick="doomsdayMakeMore()" style="flex:1;background:var(--accent);border:none;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;cursor:pointer;color:white;">Make More</button>'
-    + '<button class="doom-kill" data-upc="' + p.upc + '" data-artist="' + esc(p.artist) + '" data-title="' + esc(p.title) + '" style="flex:1;background:#c0392b;border:none;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;cursor:pointer;color:white;">Kill</button>'
-    + '</div>';
-}
-
-window.doomsdayKeepIt = function() {
-  _doomsdayIdx++;
-};
-window.doomsdayMakeMore = function() {
-  switchView('manufacturing');
-};
-window.doomsdayKill = function(upc, artist, title) {
-  suppressTitle(upc, artist, title);
-  _doomsdayPool = _doomsdayPool.filter(item => item.p.upc !== upc);
-};
 
 // ── MANUFACTURING QUEUE (Packiyo PO-driven) ──────────────────
 window.switchMfgTab = function(tab) {
@@ -3571,147 +3463,6 @@ window.updateFPSales = async function() {
     toast('FP sales update failed: ' + e.message, 'error');
   }
   if (btn) { btn.disabled = false; btn.textContent = 'Update FP Sales'; }
-};
-
-// ── NEEDS ATTENTION BANNER ───────────────────────────────────
-function buildNeedsAttentionBanner() {
-  const el = document.getElementById('needs-attention-banner');
-  if (!el) return;
-  if (!State.merged.length) return;
-
-  // Find candidates: velocity >= 10/mo, under 4 weeks at any warehouse, not in movements or mfg queue
-  const WAREHOUSES_NA = [
-    { key:'fp', avail:'fp_available', vel:'fp_12ms',    label:'Fat Possum WH' },
-    { key:'us', avail:'us_avail',     vel:'us_12ms',    label:'Orchard US' },
-    { key:'uk', avail:'uk_avail',     vel:'uk_last_yr', label:'Orchard UK' },
-  ];
-
-  // Track addressed alerts per upc|wh combo
-  const addressedKeys = new Set();
-  for (const m of State.movements) {
-    if (m.status === 'confirmed' || m.status === 'shipped' || m.status === 'processed') {
-      addressedKeys.add(m.upc + '|' + m.to);
-    }
-  }
-  // Also exclude production run destinations
-  const runInboundKeys = getRunInboundByUpcWh();
-  for (const key of Object.keys(runInboundKeys)) {
-    const [upc, whKey] = key.split('|');
-    addressedKeys.add(upc + '|' + whKey);
-  }
-  // Also exclude titles with open Packiyo POs (these are inbound to FP)
-  for (const [sku, po] of Object.entries(State.packiyoPOs)) {
-    if ((po.qty||0) > 0) {
-      const prod = State.merged.find(p => p.packiyo_sku === sku || p.catalog === sku);
-      if (prod) addressedKeys.add(prod.upc + '|fp');
-    }
-  }
-
-  const candidates = [];
-  for (const p of State.merged) {
-    for (const wh of WAREHOUSES_NA) {
-      const avail = p[wh.avail] || 0;
-      const annual = p[wh.vel] || 0;
-      const monthly = annual / 12;
-      if (monthly < 10) continue;
-      const weeks = (avail / monthly) * 4.33;
-      if (weeks < 4) {
-        const key = p.upc + '|' + wh.key;
-        // Skip if addressed by movement or PO
-        if (addressedKeys.has(key)) break;
-        // Skip if manually cleared
-        const cleared = State.clearedAlerts[key];
-        if (cleared && avail <= cleared.availAtClear) break;
-        candidates.push({ p, wh, avail, monthly, weeks });
-        break;
-      }
-    }
-  }
-
-  if (!candidates.length) {
-    el.style.display = 'none';
-    return;
-  }
-
-  // Pick a random candidate each visit
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  const { p, wh, avail, monthly, weeks } = pick;
-  const status = avail === 0 ? 'OUT OF STOCK' : weeks < 2 ? 'CRITICAL' : 'LOW';
-  const need = Math.ceil(monthly * 12 - avail);
-
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.position = 'relative';
-  el.style.overflow = 'hidden';
-  el.innerHTML = `
-    <div id="na-possum-wrap" style="position:absolute;bottom:0;left:0;pointer-events:none;transform:translateX(-180px);">
-      <svg width="180" height="56" viewBox="0 0 180 56" overflow="visible">
-        <g transform="translate(80,38)">
-          <ellipse cx="0" cy="2" rx="26" ry="15" fill="rgba(200,200,200,0.85)"/>
-          <ellipse cx="2" cy="8" rx="15" ry="8" fill="rgba(235,235,235,0.9)"/>
-          <circle cx="25" cy="-5" r="12" fill="rgba(200,200,200,0.9)"/>
-          <ellipse cx="28" cy="-3" rx="9" ry="10" fill="rgba(232,232,232,0.95)"/>
-          <path d="M32,-6 Q44,-4 52,-2 Q44,0 32,2 Z" fill="#e8c0c0"/>
-          <ellipse cx="52" cy="-2" rx="2.5" ry="1.8" fill="#d66"/>
-          <circle cx="36" cy="-10" r="3" fill="#111"/>
-          <circle cx="37" cy="-11" r="1" fill="white"/>
-          <ellipse cx="18" cy="-16" rx="5" ry="6" fill="rgba(200,200,200,0.9)"/>
-          <ellipse cx="18" cy="-16" rx="3" ry="4" fill="#e89696"/>
-          <path d="M-22,5 Q-42,1 -48,-6 Q-52,-14 -44,-18" fill="none" stroke="#e8a0a0" stroke-width="3.5" stroke-linecap="round"/>
-          <line id="l1" x1="14" y1="12" x2="17" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
-          <line id="l2" x1="5" y1="12" x2="2" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
-          <line id="l3" x1="-8" y1="12" x2="-6" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
-          <line id="l4" x1="-17" y1="12" x2="-20" y2="22" stroke="#aaa" stroke-width="3" stroke-linecap="round"/>
-        </g>
-      </svg>
-    </div>
-    <div style="flex:1;min-width:0;position:relative;z-index:2;padding:12px 20px;">
-      <div style="font-size:10px;font-weight:700;letter-spacing:1px;opacity:0.8;margin-bottom:2px;">NEEDS ATTENTION</div>
-      <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${esc(p.artist)} — ${esc(p.title)}
-      </div>
-      <div style="font-size:11px;opacity:0.85;margin-top:2px;">
-        ${status} at ${wh.label} · ${weeks.toFixed(1)} wks left · ${monthly.toFixed(0)}/mo velocity · ${need.toLocaleString()} units needed
-      </div>
-    </div>
-    <div style="flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-right:20px;position:relative;z-index:3;">
-      <button onclick="needsAttentionAction('${p.upc}','${wh.key}')" style="background:white;color:#E8650A;border:none;padding:6px 14px;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">View Alert</button>
-      <button onclick="needsAttentionDismiss()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:6px 10px;border-radius:3px;font-size:11px;cursor:pointer;">Dismiss</button>
-    </div>
-  `;
-  // Animate possum with JS (avoids CSS animation issues)
-  function runPossum() {
-    const wrap = document.getElementById('na-possum-wrap');
-    if (!wrap) return;
-    const bannerW = el.offsetWidth + 200;
-    let x = -160;
-    let legAngle = 0;
-    const speed = 4;
-    const interval = setInterval(() => {
-      x += speed;
-      legAngle = (legAngle + 15) % 360;
-      const s = Math.sin(legAngle * Math.PI / 180);
-      wrap.style.transform = 'translateX(' + x + 'px)';
-      const svg = wrap.querySelector('svg');
-      if (svg) {
-        const l1 = svg.getElementById('l1'); if(l1) { l1.setAttribute('x2', 17 + s*6); l1.setAttribute('y2', 22); }
-        const l2 = svg.getElementById('l2'); if(l2) { l2.setAttribute('x2', 2 - s*6); l2.setAttribute('y2', 22); }
-        const l3 = svg.getElementById('l3'); if(l3) { l3.setAttribute('x2', -6 + s*6); l3.setAttribute('y2', 22); }
-        const l4 = svg.getElementById('l4'); if(l4) { l4.setAttribute('x2', -20 - s*6); l4.setAttribute('y2', 22); }
-      }
-      if (x > bannerW) {
-        clearInterval(interval);
-        wrap.style.transform = 'translateX(-160px)';
-        setTimeout(runPossum, 60000);
-      }
-    }, 16);
-  }
-  setTimeout(runPossum, 500);
-}
-
-window.needsAttentionDismiss = function() {
-  const el = document.getElementById('needs-attention-banner');
-  if (el) el.style.display = 'none';
 };
 
 window.needsAttentionAction = function(upc, whKey) {
@@ -5132,15 +4883,12 @@ function switchView(viewName, pushHistory=true) {
   if (pushHistory && history.state?.view !== viewName) {
     history.pushState({ view: viewName }, '', '#' + viewName);
   }
-  const banner = document.getElementById('needs-attention-banner');
-  if (banner) banner.style.display = viewName === 'dashboard' ? '' : 'none';
   if (viewName === 'dashboard') {
     if (State.merged.length) {
       renderDashboard();
-      buildNeedsAttentionBanner();
       updateNotifications();
         } else {
-      setTimeout(() => { if (State.merged.length) { renderDashboard(); buildNeedsAttentionBanner(); } }, 500);
+      setTimeout(() => { if (State.merged.length) { renderDashboard(); } }, 500);
     }
     const dv = document.getElementById('view-dashboard');
     if (dv) {

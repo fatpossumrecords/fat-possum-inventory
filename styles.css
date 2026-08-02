@@ -630,9 +630,6 @@ td { overflow: hidden; }
   #run-modal > div { width: 100% !important; max-height: 94vh !important; border-radius: 12px 12px 0 0 !important; }
   #run-modal-body { padding: 12px; }
 
-  /* ── Needs attention banner ── */
-  #needs-attention-banner { font-size: 11px; padding: 8px 12px; }
-
   /* ── Alerts: scrollable horizontal ── */
   .alert-section { margin: 0 0 16px; }
   .alert-section h3 { font-size: 12px; padding: 10px 12px; position: sticky; top: 0; z-index: 5; background: var(--bg); }

@@ -11,7 +11,6 @@ const SETTINGS_DEFAULTS = {
   // Appearance
   defaultDarkMode:        false,
   // Dashboard
-  showNeedsAttention:     true,
   dashCards: {
     totalProducts:        true,
     globalStock:          true,
@@ -20,7 +19,6 @@ const SETTINGS_DEFAULTS = {
     walkReplenish:        true,
     productionRuns:       true,
     mfgPredictions:       true,
-    stockoutClock:        true,
   },
   // Inventory
   defaultWarehouse:       'fp',   // fp | us | total
@@ -86,10 +84,6 @@ function applySettings(s) {
     if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
   }
 
-  // Needs attention banner
-  const banner = document.getElementById('needs-attention-banner');
-  if (banner && !s.showNeedsAttention) banner.style.display = 'none';
-
   // Apply replen defaults to the inputs
   applyReplenDefaults(s.replen);
 }
@@ -120,7 +114,6 @@ window.openSettings = function() {
 
   // Populate all fields
   _settingsSetCheck('s-dark-mode',         s.defaultDarkMode);
-  _settingsSetCheck('s-needs-attention',   s.showNeedsAttention);
   _settingsSetCheck('s-card-total',        s.dashCards.totalProducts);
   _settingsSetCheck('s-card-global',       s.dashCards.globalStock);
   _settingsSetCheck('s-card-alerts',       s.dashCards.reorderAlerts);
@@ -128,7 +121,6 @@ window.openSettings = function() {
   _settingsSetCheck('s-card-wh',           s.dashCards.walkReplenish);
   _settingsSetCheck('s-card-runs',         s.dashCards.productionRuns);
   _settingsSetCheck('s-card-mfg',          s.dashCards.mfgPredictions);
-  _settingsSetCheck('s-card-clock',        s.dashCards.stockoutClock);
   _settingsSetCheck('s-card-preorders',    s.dashCards.preOrders);
   _settingsSetVal('s-default-warehouse',   s.defaultWarehouse);
   _settingsSetVal('s-table-density',       s.tableDensity);
@@ -157,7 +149,6 @@ window.saveSettingsFromForm = function() {
   const s = window._FPUserSettings;
 
   s.defaultDarkMode        = _settingsGetCheck('s-dark-mode');
-  s.showNeedsAttention     = _settingsGetCheck('s-needs-attention');
   s.dashCards.totalProducts  = _settingsGetCheck('s-card-total');
   s.dashCards.globalStock    = _settingsGetCheck('s-card-global');
   s.dashCards.reorderAlerts  = _settingsGetCheck('s-card-alerts');
@@ -165,7 +156,6 @@ window.saveSettingsFromForm = function() {
   s.dashCards.walkReplenish  = _settingsGetCheck('s-card-wh');
   s.dashCards.productionRuns = _settingsGetCheck('s-card-runs');
   s.dashCards.mfgPredictions = _settingsGetCheck('s-card-mfg');
-  s.dashCards.stockoutClock  = _settingsGetCheck('s-card-clock');
   s.dashCards.preOrders      = _settingsGetCheck('s-card-preorders');
   s.defaultWarehouse         = _settingsGetVal('s-default-warehouse');
   s.tableDensity             = _settingsGetVal('s-table-density');
@@ -189,20 +179,12 @@ window.saveSettingsFromForm = function() {
     document.body.classList.remove('dark-mode');
   }
 
-  // Apply banner immediately on save
-  const existingStyle = document.getElementById('fp-hide-banner');
-  if (!s.showNeedsAttention) {
-    if (!existingStyle) document.head.insertAdjacentHTML('beforeend', '<style id="fp-hide-banner">#needs-attention-banner{display:none!important}</style>');
-  } else {
-    if (existingStyle) existingStyle.remove();
-  }
-
   // Apply dashboard card visibility immediately on save
   const cardMap = {
     totalProducts:'total products', globalStock:'global stock',
     reorderAlerts:'reorder alerts', resolved:'resolved',
     walkReplenish:'walk replenish', productionRuns:'production runs',
-    mfgPredictions:'mfg predictions', stockoutClock:'stockout', preOrders:'open pre-orders',
+    mfgPredictions:'mfg predictions', preOrders:'open pre-orders',
   };
   window._fpHiddenCards = Object.entries(cardMap)
     .filter(([key]) => s.dashCards && s.dashCards[key] === false)
@@ -338,15 +320,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
     }
 
-    // Needs attention banner
-    if (!s.showNeedsAttention) {
-      if (!document.getElementById('fp-hide-banner'))
-        document.head.insertAdjacentHTML('beforeend', '<style id="fp-hide-banner">#needs-attention-banner{display:none!important}</style>');
-    } else {
-      const existing = document.getElementById('fp-hide-banner');
-      if (existing) existing.remove();
-    }
-
     // Replen defaults
     applyReplenDefaults(s.replen);
 
@@ -363,7 +336,6 @@ document.addEventListener('DOMContentLoaded', function() {
       walkReplenish:  'walk replenish',
       productionRuns: 'production runs',
       mfgPredictions: 'mfg predictions',
-      stockoutClock:  'stockout clock',
       preOrders:      'open pre-orders',
     };
     window._fpHiddenCards = Object.entries(cardMap)

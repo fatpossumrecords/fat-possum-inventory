@@ -1226,9 +1226,6 @@ window.wtToggleEmpty = function() {
   }
 
   function makeDraggable(card, grid) {
-    // Don't make doomsday card draggable - it has interactive buttons
-    if (card.id === 'doomsday-card') return;
-
     card.setAttribute('draggable', 'true');
     card.style.cursor = 'grab';
 
@@ -1422,21 +1419,6 @@ window.wtToggleEmpty = function() {
   }
 
   document.addEventListener('DOMContentLoaded', watchDashboard);
-
-  // Override doomsdayKeepIt with a clean implementation
-  document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-      window.doomsdayKeepIt = function() {
-        if (typeof _doomsdayPool === 'undefined' || !_doomsdayPool) return;
-        _doomsdayIdx = (_doomsdayIdx || 0) + 1;
-        if (_doomsdayIdx >= _doomsdayPool.length) {
-          _doomsdayPool = buildDoomsdayPool();
-          _doomsdayIdx = 0;
-        }
-        renderDoomsdayClock();
-      };
-    }, 1000);
-  });
 })();
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
