@@ -339,7 +339,7 @@ select { cursor: pointer; }
 
 /* ── ALERTS ── */
 #alerts-container {
-  overflow-y: auto; padding: 24px; flex: 1;
+  overflow-y: auto; padding: 24px; flex: 1; min-height: 0;
   display: flex; flex-direction: column; gap: 24px;
 }
 /* Dashboard, movements, suppressed — need their own scroll */
@@ -637,7 +637,7 @@ td { overflow: hidden; }
   #alerts-container table { min-width: 700px; font-size: 11px; }
 
   /* ── Suppress desktop-only elements ── */
-  #mfg-nav-sub, .wh-nav-sub { display: none !important; }
+  #mfg-nav-sub, #wh-nav-sub { display: none !important; }
   .dash-section { padding: 10px 12px; }
   .dash-table { font-size: 11px; }
 }
