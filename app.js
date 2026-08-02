@@ -2068,11 +2068,11 @@ function alertingWarehouses(p) {
 }
 
 // ── MANUFACTURING VIEW ────────────────────────────────────────
-function renderManufacturing() {
-  const urgFilter = document.getElementById('mfg-filter').value;
-  const today  = new Date();
-
-  let items = State.merged.map(p => {
+// Shared by renderManufacturing() and exportManufacturing() so the on-screen
+// table and the CSV export can never compute different numbers for the same title.
+function buildMfgItems() {
+  const today = new Date();
+  return State.merged.map(p => {
     if (State.hiddenMfgItems.has(p.upc)) return null;
     const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
     const poQty = (State.packiyoPOs[p.packiyo_sku] || State.packiyoPOs[p.catalog])?.qty || 0;
@@ -2108,6 +2108,11 @@ function renderManufacturing() {
 
     return { ...p, totalStock, poQty, totalWithInbound, monthly, need12mo, globalShortfall, monthsLeft, poDeadlineDate, daysToDeadline, urgency, isLP: isLPItem, hasPO };
   }).filter(Boolean);
+}
+
+function renderManufacturing() {
+  const urgFilter = document.getElementById('mfg-filter').value;
+  let items = buildMfgItems();
 
   // Urgency filter
   if (urgFilter === 'urgent')  items = items.filter(i => i.urgency === 'urgent' || i.urgency === 'overdue');
@@ -2966,18 +2971,7 @@ function exportInventory() {
   toast('Inventory exported.', 'success');
 }
 function exportManufacturing() {
-  const today = new Date();
-  const items = State.merged.map(p => {
-    const totalStock = (p.fp_available||0)+(p.us_avail||0)+(p.ca_avail||0)+(p.uk_avail||0)+(p.eu_avail||0);
-    const totalWithInbound = totalStock + (p.fp_inbound||0);
-    const monthly = ((p.us_12ms||0)+(p.ca_12ms||0)+(p.uk_last_yr||0)+(p.eu_this_yr||0)) / 12;
-    if (monthly <= 0) return null;
-    const monthsLeft = totalWithInbound / monthly;
-    if (monthsLeft > CONFIG.MFG_TRIGGER_MONTHS + 3) return null;
-    const leadTime = isVinyl(p.format||'') ? CONFIG.LEAD_TIME.lp : CONFIG.LEAD_TIME.cd;
-    const poDeadlineDate = new Date(today.getTime() + (monthsLeft - leadTime) * 30 * 24 * 3600 * 1000);
-    return { ...p, totalStock, totalWithInbound, monthly, monthsLeft, poDeadlineDate };
-  }).filter(Boolean);
+  const items = buildMfgItems();
   downloadCSV('fp_manufacturing_'+dateStr()+'.csv',
     ['Artist','Title','Catalog #','Format','Total Stock','FP Inbound','Open PO Qty','Total w/ All Inbound','Mo. Velocity','12mo Need','Mfg Shortfall','Months Left','PO Deadline'],
     items.map(p => [p.artist,p.title,p.catalog,p.format,p.totalStock,p.fp_inbound,p.poQty,p.totalWithInbound,p.monthly.toFixed(1),p.need12mo,p.globalShortfall,isFinite(p.monthsLeft)?p.monthsLeft.toFixed(1):'∞',p.poDeadlineDate?formatDate(p.poDeadlineDate):'—'])
