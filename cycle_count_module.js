@@ -109,12 +109,12 @@ async function ccLoadHistory() {
   }
 }
 
-async function ccSaveHistory() {
+async function ccSaveHistory(historyArr) {
   try {
     const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: { [CC_GIST_FILE]: { content: JSON.stringify(CCState.history) } } }),
+      body: JSON.stringify({ files: { [CC_GIST_FILE]: { content: JSON.stringify(historyArr) } } }),
     });
     if (!res.ok) {
       const err = await res.text();
@@ -122,7 +122,7 @@ async function ccSaveHistory() {
       if (window.toast) toast('⚠ Cycle count save failed (' + res.status + ')', 'error');
       return false;
     }
-    console.log('Cycle count saved to Gist OK, entries:', CCState.history.length);
+    console.log('Cycle count saved to Gist OK, entries:', historyArr.length);
     return true;
   } catch(e) {
     console.error('Cycle count Gist save error:', e.message);
@@ -131,13 +131,28 @@ async function ccSaveHistory() {
   }
 }
 
-// Save in-progress session to Gist so it can be resumed
+// Save in-progress session to Gist so it can be resumed. Upserts just this
+// session into the latest server copy of the history (by id) instead of
+// saving over it with the locally-cached array, so two people counting
+// different zones at the same time can't silently erase each other's
+// sessions the way a stale array-overwrite would.
 async function ccSaveSession() {
   if (!CCState.session) return false;
-  CCState.history = CCState.history.filter(h => h.id !== CCState.session.id);
-  CCState.history.unshift(CCState.session);
-  if (CCState.history.length > 100) CCState.history = CCState.history.slice(0, 100);
-  return await ccSaveHistory();
+
+  let remoteHistory = CCState.history;
+  try {
+    const remoteTxt = await fetchGistFile(CC_GIST_FILE);
+    if (remoteTxt) remoteHistory = JSON.parse(remoteTxt);
+  } catch(e) {
+    console.warn('Could not fetch latest cycle count history before save — using local copy:', e.message);
+  }
+
+  let merged = remoteHistory.filter(h => h.id !== CCState.session.id);
+  merged.unshift(CCState.session);
+  if (merged.length > 100) merged = merged.slice(0, 100);
+
+  CCState.history = merged;
+  return await ccSaveHistory(merged);
 }
 
 // ── SUGGEST ──────────────────────────────────────────────────

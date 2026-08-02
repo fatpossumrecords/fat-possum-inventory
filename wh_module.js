@@ -1951,15 +1951,16 @@ window.pickerPrintSummary = function() {
     const extra = (!c.skipped && c.suggestedQty && c.qty > c.suggestedQty)
       ? '<br><span style="font-size:9px;color:#1e7e4a">+' + (c.qty - c.suggestedQty) + ' extra</span>' : '';
     return `<tr class="${c.skipped ? 'skipped' : ''}">
-      <td class="mono loc">${c.bulkLoc}</td>
-      <td><strong>${c.row.name}</strong><br><span class="mono small">${c.row.sku}</span></td>
+      <td class="mono loc">${whEsc(c.bulkLoc)}</td>
+      <td><strong>${whEsc(c.row.name)}</strong><br><span class="mono small">${whEsc(c.row.sku)}</span></td>
       <td class="mono center qty">${c.skipped ? '   ' : c.qty}${extra}</td>
-      <td class="mono dest">${dest}</td>
+      <td class="mono dest">${whEsc(dest)}</td>
       <td class="center">${c.skipped ? 'SKIPPED' : '&#x2713;'}</td>
     </tr>`;
   }).join('');
 
   const win = window.open('', '_blank');
+  if (win) win.opener = null;
   win.document.write(`<!DOCTYPE html><html><head><title>FP Replenish Summary     ${now}</title>
   <style>
     @page { margin: 0.5in; size: portrait; }
@@ -2073,10 +2074,10 @@ window.whPrintPickList = function(mode) {
     return `<tr class="${urgCls}">
       <td class="num seq">${i+1}</td>
       <td class="check"><span class="box"></span></td>
-      <td class="loc mono">${bulkLoc}</td>
+      <td class="loc mono">${whEsc(bulkLoc)}</td>
       <td class="qty mono">${r.suggest}</td>
-      <td class="prod"><strong>${r.name}</strong><br><span class="sku">${r.sku}</span></td>
-      <td class="dest mono">${destBins}</td>
+      <td class="prod"><strong>${whEsc(r.name)}</strong><br><span class="sku">${whEsc(r.sku)}</span></td>
+      <td class="dest mono">${whEsc(destBins)}</td>
       <td class="avail mono">${bulkQty}</td>
     </tr>`;
   }).join('');
@@ -2085,6 +2086,7 @@ window.whPrintPickList = function(mode) {
   const totalUnits = rows.reduce((s,r) => s + r.suggest, 0);
 
   const win = window.open('', '_blank');
+  if (win) win.opener = null;
   win.document.write(`<!DOCTYPE html><html><head><title>FP Pick List — ${locationLabel}     ${now}</title>
   <style>
     @page { margin: 0.4in 0.5in; size: landscape; }
@@ -3399,14 +3401,12 @@ function locEsc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// On first load, ensure Locations tab state is correct (title, config hidden, prompt shown)
+// On boot, default the (currently hidden) Locations/Replenishment view's internal
+// tab state to "locations" so it's correct whenever the user navigates there —
+// this must not itself navigate the user away from wherever they actually are.
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     if (typeof switchWHTab === 'function') {
-      // On mobile/tablet, auto-navigate to Locations
-      if (window.innerWidth <= 1024) {
-        if (typeof switchView === 'function') switchView('replenishment');
-      }
       switchWHTab('locations');
     }
   }, 200);
