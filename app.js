@@ -535,6 +535,10 @@ async function loadGistData() {
       if (txt) {
         const parsed = JSON.parse(txt);
         applyConfigData(parsed);
+        // Snapshot a baseline from this real (non-cached) load — saves diff
+        // against this, not the live in-memory state, so a stale tab's save
+        // can't silently erase entries another session added since this load.
+        snapshotGistBaseline();
         try { localStorage.setItem('fp_config_cache', txt); } catch(e) {}
         console.log('Config loaded from Gist:', Object.keys(parsed.boxLots||{}).length, 'box lots,', (parsed.suppressed||[]).length, 'suppressed');
         updateGistStatus(txt.length/1024);
@@ -683,10 +687,80 @@ async function saveGistData() {
   }
 }
 
+// ── CONCURRENT-EDIT SAFETY FOR GIST SAVES ──────────────────────
+// _gistBaseline is a snapshot of these fields as of the last real Gist load
+// (or successful save). Saving computes a proper 3-way merge (baseline vs.
+// this session's current State vs. whatever's on the server right now) for
+// each field below, instead of blindly overwriting the server with whatever
+// happens to be in memory — which is what let one stale/old tab silently
+// erase entries another session had added since this tab last loaded.
+const GIST_DICT_FIELDS = ['manualLabels', 'manualArtists', 'manualFormats', 'boxLots', 'clearedAlerts'];
+let _gistBaseline = null;
+
+function snapshotGistBaseline() {
+  _gistBaseline = {
+    suppressed: [...State.suppressedUpcs],
+  };
+  for (const key of GIST_DICT_FIELDS) {
+    _gistBaseline[key] = Object.assign({}, State[key] || {});
+  }
+}
+
+// Merge one flat {key: value} field: local changes/additions win over remote,
+// but only for keys this session actually touched (differ from baseline) —
+// any other key present on the server (added by another session) is kept.
+// Keys present in baseline but removed locally are deleted from the result too.
+function mergeGistDictField(remoteObj, baselineObj, localObj) {
+  remoteObj = remoteObj || {}; baselineObj = baselineObj || {}; localObj = localObj || {};
+  const result = Object.assign({}, remoteObj);
+  for (const k of Object.keys(localObj)) {
+    if (baselineObj[k] !== localObj[k]) result[k] = localObj[k];
+  }
+  for (const k of Object.keys(baselineObj)) {
+    if (!(k in localObj)) delete result[k];
+  }
+  return result;
+}
+
+// Same idea for the suppressed-UPCs set: local additions/removals since
+// baseline are applied on top of the server's current list.
+function mergeGistSuppressed(remoteArr, baselineArr, localSet) {
+  const result = new Set(remoteArr || []);
+  const baselineSet = new Set(baselineArr || []);
+  for (const upc of localSet) { if (!baselineSet.has(upc)) result.add(upc); }
+  for (const upc of baselineSet) { if (!localSet.has(upc)) result.delete(upc); }
+  return [...result];
+}
+
 async function _saveGistDataImpl() {
   try {
+    // Pull the latest server copy and merge our changes on top of it, rather
+    // than overwriting it outright — see snapshotGistBaseline() above.
+    let remote = null;
+    try {
+      const remoteTxt = await fetchGistFile(CONFIG.GIST_CONFIG_FILE);
+      if (remoteTxt) remote = JSON.parse(remoteTxt);
+    } catch(e) {
+      console.warn('Could not fetch latest Gist config before save — saving local copy as-is:', e.message);
+    }
+    const baseline = _gistBaseline || {};
+    const mergedSuppressed = remote
+      ? mergeGistSuppressed(remote.suppressed, baseline.suppressed, State.suppressedUpcs)
+      : [...State.suppressedUpcs];
+    const mergedDicts = {};
+    for (const key of GIST_DICT_FIELDS) {
+      mergedDicts[key] = remote
+        ? mergeGistDictField(remote[key], baseline[key], State[key])
+        : Object.assign({}, State[key] || {});
+    }
+    // Reflect the merged result back into State/baseline so the UI and the
+    // next save both build on what actually got written.
+    State.suppressedUpcs = new Set(mergedSuppressed);
+    for (const key of GIST_DICT_FIELDS) State[key] = mergedDicts[key];
+    snapshotGistBaseline();
+
     const payload = {
-      suppressed: [...State.suppressedUpcs],
+      suppressed: mergedSuppressed,
       shopifyVendors: State.shopifyVendors,
       manualArtists: State.manualArtists || {},
       movements: State.movements || [],
