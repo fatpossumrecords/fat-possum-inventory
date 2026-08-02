@@ -120,22 +120,24 @@ async function ccSaveHistory() {
       const err = await res.text();
       console.error('Cycle count Gist save failed:', res.status, err.slice(0,200));
       if (window.toast) toast('⚠ Cycle count save failed (' + res.status + ')', 'error');
-    } else {
-      console.log('Cycle count saved to Gist OK, entries:', CCState.history.length);
+      return false;
     }
+    console.log('Cycle count saved to Gist OK, entries:', CCState.history.length);
+    return true;
   } catch(e) {
     console.error('Cycle count Gist save error:', e.message);
     if (window.toast) toast('⚠ Cycle count save failed: ' + e.message, 'error');
+    return false;
   }
 }
 
 // Save in-progress session to Gist so it can be resumed
 async function ccSaveSession() {
-  if (!CCState.session) return;
+  if (!CCState.session) return false;
   CCState.history = CCState.history.filter(h => h.id !== CCState.session.id);
   CCState.history.unshift(CCState.session);
   if (CCState.history.length > 100) CCState.history = CCState.history.slice(0, 100);
-  await ccSaveHistory();
+  return await ccSaveHistory();
 }
 
 // ── SUGGEST ──────────────────────────────────────────────────
@@ -809,10 +811,10 @@ window.ccEmailReport = async function() {
 
   // Save pendingEmails to Gist — picked up by ship-notify cron
   CCState.session.pendingEmails = recipients;
-  await ccSaveSession();
+  const saved = await ccSaveSession();
 
   if (statusEl) {
-    if (CCState.history.find(h => h.id === CCState.session.id)) {
+    if (saved) {
       statusEl.innerHTML = '<span style="color:var(--green);">✓ Queued — will be emailed within 30 min.</span>';
     } else {
       statusEl.innerHTML = '<span style="color:var(--red);">⚠ Save failed — check console for errors.</span>';
