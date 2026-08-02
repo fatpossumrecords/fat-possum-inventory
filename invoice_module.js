@@ -723,8 +723,8 @@ window.invAddItemByIdx = function(idx) {
 
 window.invUpdateDiscount = function(val) {
   InvState.draft.discount = (val > 0 && val <= 100) ? val : 0;
-  var itemsWrap = document.getElementById('inv-items-wrap');
-  if (itemsWrap) itemsWrap.innerHTML = invRenderItemsTable(InvState.draft.items);
+  var tableEl = document.getElementById('inv-items-table');
+  if (tableEl) tableEl.innerHTML = invRenderItemsTable(InvState.draft.items);
   var totalsEl = document.getElementById('inv-totals-box');
   if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
 };
@@ -743,7 +743,9 @@ window.invUpdateItem = function(idx, field, val) {
   const lineEl = document.getElementById('inv-line-total-' + idx);
   if (lineEl) {
     const item = InvState.draft.items[idx];
-    lineEl.textContent = invFmt((item.qty||1) * (item.price||0));
+    const d = parseFloat((InvState.draft||{}).discount || 0);
+    const m = d > 0 ? (1 - d / 100) : 1;
+    lineEl.textContent = invFmt((item.qty||1) * Math.round((item.price||0) * m * 100) / 100);
   }
   const totalsEl = document.getElementById('inv-totals-box');
   if (totalsEl) totalsEl.innerHTML = invRenderTotals(InvState.draft);
@@ -1213,11 +1215,12 @@ window.invPushToPackiyo = function() {
 
 async function invCreatePackiyoOrder(inv) {
   if (window.toast) toast('Creating order in Packiyo... please wait', '');
+  let orderPayload;
   try {
     const shipTo = inv.shipSame ? inv.billTo : inv.shipTo;
 
     // Build payload matching confirmed working structure
-    const orderPayload = {
+    orderPayload = {
       data: {
         type: 'orders',
         attributes: {

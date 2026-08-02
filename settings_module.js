@@ -19,6 +19,7 @@ const SETTINGS_DEFAULTS = {
     walkReplenish:        true,
     productionRuns:       true,
     mfgPredictions:       true,
+    preOrders:            true,
   },
   // Inventory
   defaultWarehouse:       'fp',   // fp | us | total
@@ -77,16 +78,61 @@ window._FPUserSettings = loadSettings();
 function applySettings(s) {
   s = s || window._FPUserSettings;
 
-  // Dark mode
-  if (s.defaultDarkMode && !document.body.classList.contains('dark-mode')) {
+  // Dark mode — toggle both ways so Reset to Defaults actually turns it off too
+  const icon = document.getElementById('darkmode-icon');
+  if (s.defaultDarkMode) {
     document.body.classList.add('dark-mode');
-    const icon = document.getElementById('darkmode-icon');
     if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  } else {
+    document.body.classList.remove('dark-mode');
+    if (icon) icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
   }
+  try { localStorage.setItem('fp_dark_mode', s.defaultDarkMode ? '1' : '0'); } catch(e) {}
 
   // Apply replen defaults to the inputs
   applyReplenDefaults(s.replen);
+
+  // Dashboard card visibility
+  applyDashCardVisibility(s);
+
+  // Table density
+  const invTable = document.getElementById('inventory-table');
+  if (invTable) invTable.classList.toggle('density-compact', s.tableDensity === 'compact');
+
+  // Default warehouse filter
+  if (s.defaultWarehouse) {
+    const whFilter = document.getElementById('filter-warehouse');
+    if (whFilter && !whFilter.value) whFilter.value = s.defaultWarehouse;
+  }
 }
+
+// Shared by applySettings(), saveSettingsFromForm(), and boot init so the
+// dashboard-card hide/show list can't drift between save, reset, and page load.
+const DASH_CARD_MAP = {
+  totalProducts:  'total products',
+  globalStock:    'global stock',
+  reorderAlerts:  'reorder alerts',
+  resolved:       'resolved',
+  walkReplenish:  'walk replenish',
+  productionRuns: 'production runs',
+  mfgPredictions: 'mfg predictions',
+  preOrders:      'open pre-orders',
+};
+function applyDashCardVisibility(s) {
+  s = s || window._FPUserSettings;
+  window._fpHiddenCards = Object.entries(DASH_CARD_MAP)
+    .filter(function(entry) { return s.dashCards && s.dashCards[entry[0]] === false; })
+    .map(function(entry) { return entry[1]; });
+  document.querySelectorAll('.dash-card').forEach(function(card) {
+    const lbl = card.querySelector('.dash-label');
+    if (!lbl) return;
+    const text = lbl.textContent.toLowerCase();
+    const shouldHide = (window._fpHiddenCards || []).some(function(h) { return text.includes(h); });
+    card.style.display = shouldHide ? 'none' : '';
+  });
+}
+// Exposed so wh_module.js can reapply the current list after every dashboard grid rebuild
+window._fpApplyCardVisibility = applyDashCardVisibility;
 
 function applyReplenDefaults(replen) {
   if (!replen) return;
@@ -171,34 +217,7 @@ window.saveSettingsFromForm = function() {
 
   window._FPUserSettings = s;
   saveSettings(s);
-
-  // Apply dark mode immediately on save
-  if (s.defaultDarkMode && !document.body.classList.contains('dark-mode')) {
-    document.body.classList.add('dark-mode');
-  } else if (!s.defaultDarkMode && document.body.classList.contains('dark-mode')) {
-    document.body.classList.remove('dark-mode');
-  }
-
-  // Apply dashboard card visibility immediately on save
-  const cardMap = {
-    totalProducts:'total products', globalStock:'global stock',
-    reorderAlerts:'reorder alerts', resolved:'resolved',
-    walkReplenish:'walk replenish', productionRuns:'production runs',
-    mfgPredictions:'mfg predictions', preOrders:'open pre-orders',
-  };
-  window._fpHiddenCards = Object.entries(cardMap)
-    .filter(([key]) => s.dashCards && s.dashCards[key] === false)
-    .map(([, label]) => label);
-  document.querySelectorAll('.dash-card').forEach(card => {
-    const lbl = card.querySelector('.dash-label');
-    if (!lbl) return;
-    const text = lbl.textContent.toLowerCase();
-    card.style.display = (window._fpHiddenCards || []).some(h => text.includes(h)) ? 'none' : '';
-  });
-
-  // Apply table density immediately
-  const invTable = document.getElementById('inventory-table');
-  if (invTable) invTable.classList.toggle('density-compact', s.tableDensity === 'compact');
+  applySettings(s);
 
   closeSettings();
   if (window.toast) toast('Settings saved.', 'success');
@@ -310,56 +329,7 @@ function _settingsGetVal(id)        { const el = document.getElementById(id); re
 
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
-    const s = window._FPUserSettings;
-    if (!s) return;
-
-    // Dark mode
-    if (s.defaultDarkMode && !document.body.classList.contains('dark-mode')) {
-      document.body.classList.add('dark-mode');
-      const icon = document.getElementById('darkmode-icon');
-      if (icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-    }
-
-    // Replen defaults
-    applyReplenDefaults(s.replen);
-
-    // Table density
-    const invTable = document.getElementById('inventory-table');
-    if (invTable) invTable.classList.toggle('density-compact', s.tableDensity === 'compact');
-
-    // Dashboard cards — hide unchecked ones by finding cards by label text
-    const cardMap = {
-      totalProducts:  'total products',
-      globalStock:    'global stock',
-      reorderAlerts:  'reorder alerts',
-      resolved:       'resolved',
-      walkReplenish:  'walk replenish',
-      productionRuns: 'production runs',
-      mfgPredictions: 'mfg predictions',
-      preOrders:      'open pre-orders',
-    };
-    window._fpHiddenCards = Object.entries(cardMap)
-      .filter(function(entry) { return s.dashCards && s.dashCards[entry[0]] === false; })
-      .map(function(entry) { return entry[1]; });
-
-    // Expose as global so wh_module.js can call after every grid rebuild
-    window._fpApplyCardVisibility = function() {
-      document.querySelectorAll('.dash-card').forEach(function(card) {
-        const lbl = card.querySelector('.dash-label');
-        if (!lbl) return;
-        const text = lbl.textContent.toLowerCase();
-        const shouldHide = (window._fpHiddenCards || []).some(function(h) { return text.includes(h); });
-        card.style.display = shouldHide ? 'none' : '';
-      });
-    };
-    window._fpApplyCardVisibility();
-
-    // Default warehouse filter
-    if (s.defaultWarehouse) {
-      const whFilter = document.getElementById('filter-warehouse');
-      if (whFilter && !whFilter.value) whFilter.value = s.defaultWarehouse;
-    }
-
+    if (window._FPUserSettings) applySettings(window._FPUserSettings);
   }, 2000);
 });
 

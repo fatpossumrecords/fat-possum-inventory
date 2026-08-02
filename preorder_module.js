@@ -197,24 +197,36 @@ window.poRefreshAll = async function() {
 
 // Auto-check release dates every time we load the view or on boot
 function checkReleaseDates() {
+  const el = document.getElementById('po-release-due-banner');
+  if (!el) return;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (const c of POState.campaigns) {
-    if (c.status !== 'active') continue;
+  POState.dismissedReleaseBanners = POState.dismissedReleaseBanners || {};
+  const overdue = POState.campaigns.filter(function(c) {
+    if (c.status !== 'active' || POState.dismissedReleaseBanners[c.id]) return false;
     const rel = new Date(c.releaseDate);
     rel.setHours(0, 0, 0, 0);
-    if (rel <= today) {
-      // Show banner — don't auto-release, require manual confirm
-      const el = document.getElementById('po-release-due-banner');
-      if (el) {
-        el.style.display = 'flex';
-        el.innerHTML = '<span style="flex:1;font-weight:600;">&#128276; Release date reached for <strong>' + poEsc(c.name) + '</strong></span>'
-          + '<button onclick="poConfirmRelease(\'' + c.id + '\')" style="background:#fff;color:var(--accent);border:none;border-radius:4px;padding:6px 16px;font-weight:700;cursor:pointer;font-size:12px;margin-left:12px;">Release Now</button>'
-          + '<button onclick="document.getElementById(\'po-release-due-banner\').style.display=\'none\'" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;margin-left:8px;">&#x2715;</button>';
-      }
-    }
-  }
+    return rel <= today;
+  });
+  if (!overdue.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  // Show one row per overdue campaign — don't auto-release, require manual confirm per campaign
+  el.style.display = 'flex';
+  el.style.flexDirection = 'column';
+  el.style.gap = '6px';
+  el.innerHTML = overdue.map(function(c) {
+    return '<div style="display:flex;align-items:center;gap:12px;">'
+      + '<span style="flex:1;font-weight:600;">&#128276; Release date reached for <strong>' + poEsc(c.name) + '</strong></span>'
+      + '<button onclick="poConfirmRelease(\'' + c.id + '\')" style="background:#fff;color:var(--accent);border:none;border-radius:4px;padding:6px 16px;font-weight:700;cursor:pointer;font-size:12px;">Release Now</button>'
+      + '<button onclick="poDismissReleaseBanner(\'' + c.id + '\')" style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;">&#x2715;</button>'
+      + '</div>';
+  }).join('');
 }
+
+window.poDismissReleaseBanner = function(id) {
+  POState.dismissedReleaseBanners = POState.dismissedReleaseBanners || {};
+  POState.dismissedReleaseBanners[id] = true;
+  checkReleaseDates();
+};
 
 // ── MAIN RENDER ───────────────────────────────────────────────
 function renderPreOrders() {
@@ -329,9 +341,11 @@ function poAttachButtons(id, isActive, isReleased) {
     r.textContent = '↻ Refresh Orders';
     r.addEventListener('click', function() { loadCampaignOrders(id); });
     d.appendChild(r);
+    var isReleasing = !!(POState.releasing && POState.releasing[id]);
     var rel = document.createElement('button');
     rel.style.cssText = 'background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;';
-    rel.innerHTML = '&#9654; Release All Holds';
+    rel.innerHTML = isReleasing ? 'Releasing…' : '&#9654; Release All Holds';
+    if (isReleasing) { rel.disabled = true; rel.style.opacity = '0.6'; rel.style.cursor = 'default'; }
     rel.addEventListener('click', function() { poConfirmRelease(id); });
     d.appendChild(rel);
   }
@@ -666,6 +680,7 @@ window.loadCampaignOrders = async function(campaign) {
 window.poConfirmRelease = function(campaignId) {
   const c = POState.campaigns.find(x => x.id === campaignId);
   if (!c) return;
+  if (POState.releasing[campaignId]) { toast('Already releasing this campaign — please wait for it to finish.', 'error'); return; }
   const allOrders   = POState.orders[campaignId] || [];
   const activeTags  = (POState.tagFilters  || {})[campaignId] || [];
   const activeHolds = (POState.holdFilters || {})[campaignId] || [];
