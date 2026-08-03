@@ -202,7 +202,8 @@ async function takeStockSnapshot() {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-screen').classList.remove('hidden');
   const saved = sessionStorage.getItem('fp_user');
-  State.idToken = sessionStorage.getItem('fp_id_token') || null;
+  const storedToken = sessionStorage.getItem('fp_id_token') || null;
+  State.idToken = (storedToken && !isTokenExpired(storedToken)) ? storedToken : null;
   if (saved) { State.user = JSON.parse(saved); bootApp(); }
 
   document.getElementById('upload-csv-btn').addEventListener('click', () => document.getElementById('csv-file-input').click());
@@ -368,6 +369,22 @@ async function recordSignIn(email, role) {
 
 function parseJwt(token) {
   return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+}
+
+// Google ID tokens are JWTs with a Unix `exp` claim (~1hr lifetime). A
+// session restored from sessionStorage after the tab's been idle a while
+// can have an already-expired token — sending it anyway just gets a
+// "token rejected by Google (HTTP 400)" from the Worker's tokeninfo check
+// instead of the cleaner "missing token" path that actually triggers a
+// silent refresh (see waitForToken). 30s buffer for clock skew / the
+// round-trip to the Worker's own verification call.
+function isTokenExpired(token) {
+  try {
+    const { exp } = parseJwt(token);
+    return !exp || Date.now() >= (exp * 1000 - 30000);
+  } catch(e) {
+    return true;
+  }
 }
 
 function logout() {
