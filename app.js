@@ -73,6 +73,45 @@ const State = {
   colWidths: {},
 };
 
+// ── ERROR REPORTING ───────────────────────────────────────────
+// Catches uncaught errors and rejections and logs them via the Worker to
+// fp_error_log.json, so problems are visible without someone having to
+// notice broken behavior and go check the browser console.
+const _reportedErrors = new Set(); // dedupe identical errors within this page load
+function reportClientError(message, stack, extra) {
+  try {
+    const key = String(message||'') + '|' + String(stack||'').slice(0, 200);
+    if (_reportedErrors.has(key)) return; // already reported this exact error this session
+    if (_reportedErrors.size >= 50) return; // hard cap — stop flooding if something's very wrong
+    _reportedErrors.add(key);
+
+    const payload = Object.assign({
+      message:   String(message||'').slice(0, 500),
+      stack:     String(stack||'').slice(0, 2000),
+      url:       location.href,
+      view:      (document.querySelector('.view.active')||{}).id || '',
+      user:      (State.user && State.user.email) || '',
+      userAgent: navigator.userAgent,
+    }, extra||{});
+
+    fetch(CONFIG.WORKER_BASE + '/error-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {}); // never let error reporting itself throw
+  } catch(e) { /* error reporting must never break the app */ }
+}
+window.addEventListener('error', function(e) {
+  reportClientError(e.message, e.error && e.error.stack);
+});
+window.addEventListener('unhandledrejection', function(e) {
+  const reason = e.reason;
+  reportClientError(
+    (reason && reason.message) || String(reason),
+    reason && reason.stack
+  );
+});
+
 // ── AUTO-REFRESH ─────────────────────────────────────────────
 const AUTO_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
 
@@ -1086,17 +1125,6 @@ async function loadPackiyoPOs() {
     }, 2000);
     const poCount = Object.keys(poMap).length;
     console.log(`POs loaded: ${poCount} SKUs with open orders | allPOs: ${allPOs.length} | openPOs: ${allPOs.filter(p=>!p.attributes?.closed_at).length} | included: ${allIncluded.length} | lineItems: ${Object.keys(lineItemById).length} | products: ${Object.keys(productById).length}`);
-    if (poCount > 0) console.log('Sample PO data:', JSON.stringify(Object.entries(poMap).slice(0,3)));
-    if (poCount === 0 && Object.keys(lineItemById).length > 0) {
-      // Debug: show a sample line item and its product lookup
-      const sampleId = Object.keys(lineItemById)[0];
-      const sampleLine = lineItemById[sampleId];
-      const sampleProdRef = sampleLine.relationships?.product?.data;
-      const sampleProd = sampleProdRef ? productById[sampleProdRef.id] : null;
-      console.log('Sample line item:', JSON.stringify(sampleLine.attributes));
-      console.log('Sample product ref:', JSON.stringify(sampleProdRef));
-      console.log('Sample product found:', JSON.stringify(sampleProd));
-    }
   } catch(e) {
     console.warn('Could not load POs:', e.message);
     State.packiyoPOs = {};

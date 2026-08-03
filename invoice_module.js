@@ -373,7 +373,7 @@ function invRenderLog(body) {
           + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '') + '</td>'
           + '<td style="padding:10px 16px;font-size:12px;color:var(--text-muted);">' + invDate(inv.createdAt) + '</td>'
           + '<td style="padding:8px 16px;">'
-          + (inv.createdBy ? (inv.createdBy.picture ? '<img src="' + invEsc(inv.createdBy.picture) + '" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px;" title="' + invEsc(inv.createdBy.name) + '">' : '') + '<span style="font-size:11px;color:var(--text-muted);">' + invEsc(inv.createdBy.name || inv.createdBy.email || '') + '</span>' : '<span style="font-size:11px;color:var(--text-dim);">—</span>')
+          + (inv.createdBy ? (inv.createdBy.picture ? '<img src="' + invEsc(inv.createdBy.picture) + '" alt="' + invEsc(inv.createdBy.name || '') + '" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px;" title="' + invEsc(inv.createdBy.name) + '">' : '') + '<span style="font-size:11px;color:var(--text-muted);">' + invEsc(inv.createdBy.name || inv.createdBy.email || '') + '</span>' : '<span style="font-size:11px;color:var(--text-dim);">—</span>')
           + '</td>'
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;">' + invFmt(total) + '</td>'
           + '<td style="padding:10px 16px;">' + statusBadge(inv.status) + '</td>'

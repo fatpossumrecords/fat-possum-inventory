@@ -354,6 +354,51 @@ window.adminInitSettings = function() {
   if (isAdmin) {
     adminRenderUsers();
     adminRenderLog();
+    adminRenderErrorLog();
+  }
+};
+
+const ERROR_LOG_FILE = 'fp_error_log.json';
+
+async function adminRenderErrorLog() {
+  const el = document.getElementById('s-error-log');
+  if (!el) return;
+
+  let log;
+  try {
+    const content = await fetchGistFile(ERROR_LOG_FILE);
+    log = content ? JSON.parse(content) : [];
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red);">⚠ Could not load error log: ' + e.message + '</div>';
+    return;
+  }
+
+  if (!log.length) { el.textContent = 'No errors reported yet.'; return; }
+
+  el.innerHTML = log.slice(0, 50).map(function(e) {
+    const when = e.ts ? new Date(e.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+    return '<div style="padding:5px 0;border-bottom:1px solid var(--border);">'
+      + '<div><span style="color:var(--red);font-weight:600;">' + esc(e.message||'(no message)') + '</span></div>'
+      + '<div style="color:var(--text-dim);font-size:10px;margin-top:2px;">'
+      + when + ' · ' + esc(e.view||'—') + ' · ' + esc(e.user||'unknown user')
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+window.adminClearErrorLog = async function() {
+  if (!confirm('Clear the error log? This cannot be undone.')) return;
+  try {
+    const res = await fetch(gistUrl(CONFIG.GIST_ID), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { [ERROR_LOG_FILE]: { content: '[]' } } }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (window.toast) toast('Error log cleared.', 'success');
+    adminRenderErrorLog();
+  } catch(e) {
+    if (window.toast) toast('Could not clear error log: ' + e.message, 'error');
   }
 };
 

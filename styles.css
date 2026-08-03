@@ -509,11 +509,11 @@ td { overflow: hidden; }
   }
   /* Catalog + format inline */
   #inventory-table td.mob-catalog {
-    display: inline-block; font-size: 10px; color: var(--text-dim);
+    display: inline-block; font-size: 10px; color: var(--text-muted);
     margin-right: 8px; font-family: 'DM Mono', monospace;
   }
   #inventory-table td.mob-format {
-    display: inline-block; font-size: 10px; color: var(--text-dim);
+    display: inline-block; font-size: 10px; color: var(--text-muted);
   }
   /* FP stock — hero number */
   #inventory-table td.mob-fp {

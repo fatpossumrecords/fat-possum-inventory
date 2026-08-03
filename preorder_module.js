@@ -6,7 +6,6 @@
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
-console.log('preorder_module.js loaded — build 184659');
 const POState = {
   campaigns:       [],
   orders:          {},

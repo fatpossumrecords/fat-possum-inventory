@@ -2,7 +2,7 @@
 
 Cloudflare Worker that holds the GitHub Gist PAT and Packiyo API token
 server-side, so the browser app (`app.js` etc.) never receives them
-directly. It exposes exactly two operations:
+directly. It exposes exactly three operations:
 
 - `GET`/`PATCH /gist/e79a142da6ddbc0a77560802db1ce780` → proxies to
   `https://api.github.com/gists/:id`, injecting the real GitHub token.
@@ -10,6 +10,10 @@ directly. It exposes exactly two operations:
 - `GET`/`POST`/`PATCH /packiyo/*` → proxies to
   `https://fatpossum.app.packiyo.com/api/v1/*`, injecting the real Packiyo
   bearer token.
+- `POST /error-log` → appends a client-reported JS error to
+  `fp_error_log.json` in the same gist (capped at the 200 most recent).
+  Viewable from Settings → Admin → Error Log in the app. Uses the same
+  `GIST_TOKEN` secret as the `/gist/*` route — no separate secret needed.
 
 ## Deploy
 
