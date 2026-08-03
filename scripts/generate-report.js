@@ -396,10 +396,13 @@ async function main() {
       console.log(`  Packiyo products: ${pkProducts.length}`);
     } catch(e) { console.warn('  Packiyo products error:', e.message); }
 
-    // Load artist data from fp_config.json (shopifyVendors + manualArtists keyed by UPC)
+    // Load artist data from fp_config_v2.json (shopifyVendors + manualArtists keyed by UPC).
+    // fp_config.json got stuck refusing further writes (GitHub-side 409 after
+    // enough revisions accumulated) — the app migrated its content to this
+    // fresh filename, which the old file no longer receives.
     let shopifyVendors = {}, manualArtists = {};
     try {
-      const cfg = await gistFetch('fp_config.json');
+      const cfg = await gistFetch('fp_config_v2.json');
       shopifyVendors = cfg?.shopifyVendors || {};
       manualArtists  = cfg?.manualArtists  || {};
       console.log(`  shopifyVendors: ${Object.keys(shopifyVendors).length}, manualArtists: ${Object.keys(manualArtists).length}`);

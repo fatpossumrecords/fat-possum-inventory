@@ -16,7 +16,13 @@ const CONFIG = {
   LEAD_TIME: { lp: 4, cd: 1.5 },
   GIST_ID:    'e79a142da6ddbc0a77560802db1ce780',
   GIST_FILE:  'fp_data.json',
-  GIST_CONFIG_FILE: 'fp_config.json',
+  // fp_config.json got stuck refusing further PATCHes (HTTP 409 "Gist
+  // cannot be updated") after enough revisions accumulated — reproduced
+  // with an idempotent no-op resave, ruled out payload size/content, so
+  // it looks like a GitHub-side per-file history limit. Migrated the
+  // exact same content to a fresh filename, which writes fine; the old
+  // file is left in place, untouched, as a read-only archive.
+  GIST_CONFIG_FILE: 'fp_config_v2.json',
   ORCHARD_SHEET_ID: '1L9r-24Grf_vH17YKJF-D705VnMMvroKNBQD9YUCQVZg',
 };
 
@@ -668,7 +674,7 @@ async function loadGistData() {
       }
     }
 
-    // Config data (fp_config.json)
+    // Config data (CONFIG.GIST_CONFIG_FILE)
     if (configRes.ok) {
       const txt = await configRes.text();
       if (txt) {
@@ -683,8 +689,8 @@ async function loadGistData() {
         updateGistStatus(txt.length/1024);
       }
     } else if (dataRes.ok) {
-      // fp_config.json doesn't exist yet — legacy mode, config already applied from fp_data.json above
-      console.log('fp_config.json not found yet — will be created on next save');
+      // CONFIG.GIST_CONFIG_FILE doesn't exist yet — legacy mode, config already applied from fp_data.json above
+      console.log(CONFIG.GIST_CONFIG_FILE + ' not found yet — will be created on next save');
     }
 
   } catch(e) {
@@ -785,7 +791,7 @@ function expandOrchardRow(s) {
 }
 
 async function saveFPVelocityToGist() {
-  // Velocity is now saved as part of saveGistData (fp_config.json)
+  // Velocity is now saved as part of saveGistData (CONFIG.GIST_CONFIG_FILE)
   State.fp_velocity_ts = new Date().toISOString();
   await saveGistData();
 }
