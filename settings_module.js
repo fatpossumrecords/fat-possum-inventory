@@ -375,11 +375,13 @@ window.adminRenderAuthLog = async function() {
     return;
   }
 
-  if (!log.length) { el.textContent = 'No auth checks logged yet.'; return; }
+  if (!log.length) { el.textContent = 'No auth failures logged — clean.'; return; }
 
-  const passCount = log.filter(function(e) { return e.ok; }).length;
-  const failCount = log.length - passCount;
-  const summary = '<div style="margin-bottom:8px;color:var(--text);">' + passCount + ' passed · <span style="color:' + (failCount ? 'var(--red)' : 'var(--text-muted)') + ';">' + failCount + ' would-fail</span> (of last ' + log.length + ')</div>';
+  // Only failures get logged (passing checks don't, to limit GitHub API
+  // usage — see worker/fp-gist-proxy.js checkAuth). Older entries from
+  // before that change may still show PASS rows mixed in.
+  const failCount = log.filter(function(e) { return !e.ok; }).length;
+  const summary = '<div style="margin-bottom:8px;color:' + (failCount ? 'var(--red)' : 'var(--text-muted)') + ';">' + failCount + ' would-fail entr' + (failCount === 1 ? 'y' : 'ies') + ' (of last ' + log.length + ' logged — failures only)</div>';
 
   el.innerHTML = summary + log.slice(0, 50).map(function(e) {
     const when = e.ts ? new Date(e.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '—';

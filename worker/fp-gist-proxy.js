@@ -181,9 +181,15 @@ async function logAuthCheck(route, method, result, env) {
 async function checkAuth(request, url, env, { writingUsersFile } = {}) {
   const result = await authenticate(request, env);
 
-  // Always log in shadow mode; in enforce mode only log failures (the
-  // interesting case) to keep the log from filling with routine passes.
-  if (AUTH_MODE === 'shadow' || !result.ok) {
+  // Only log failures (the interesting case), in both shadow and enforce
+  // mode. Logging every routine pass costs 2 extra GitHub API calls (read
+  // + write the log file) per request — for Packiyo calls in particular
+  // that's pure added GitHub-quota overhead they never had before, and at
+  // this app's request volume it's enough to burn through the PAT's hourly
+  // rate limit and start failing real Gist saves. Shadow mode only needs
+  // to answer "what would fail" — it doesn't need a pass tally badly
+  // enough to risk that.
+  if (!result.ok) {
     await logAuthCheck(url.pathname, request.method, result, env);
   }
 
