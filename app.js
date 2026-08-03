@@ -2254,6 +2254,7 @@ function renderAlerts(preserveExpanded=false) {
   let html = '';
   if (!preserveExpanded) _expandedAlertWh = null; // reset so first warehouse auto-expands
 
+  const runInboundAll = getRunInboundByUpcWh();
   for (const wh of WAREHOUSES) {
     // Sum confirmed/shipped movement quantities inbound to this warehouse per UPC
     const confirmedInbound = {};
@@ -2263,8 +2264,7 @@ function renderAlerts(preserveExpanded=false) {
       }
     }
     // Also include production run destinations
-    const runInbound = getRunInboundByUpcWh();
-    for (const [key, qty] of Object.entries(runInbound)) {
+    for (const [key, qty] of Object.entries(runInboundAll)) {
       const [upc, whKey] = key.split('|');
       if (whKey === wh.key) confirmedInbound[upc] = (confirmedInbound[upc]||0) + qty;
     }
@@ -2311,7 +2311,13 @@ function renderAlerts(preserveExpanded=false) {
         }
       }
       const effectiveQty = Math.max(transferQty, globalNeed);
-      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail, leavesAtSource, globalNeed, effectiveQty };
+      // EU can source from either UK or US — pick whichever actually has more
+      // stock for this title, since a real transfer can only come from one.
+      const repFrom = wh.key === 'eu'
+        ? ((p.uk_avail||0) >= (p.us_avail||0) ? 'uk' : 'us')
+        : wh.repFrom;
+      const repLabel = repFrom ? WH_LABELS[repFrom] : '—';
+      return { ...p, avail, monthly, weeksLeft, suggestQty, transferQty, shortfall, sourceAvail, leavesAtSource, globalNeed, effectiveQty, repFrom, repLabel };
     }).filter(Boolean);
 
     // Apply label filter
@@ -2331,9 +2337,6 @@ function renderAlerts(preserveExpanded=false) {
     });
 
     totalAlerts += alerts.length;
-
-    const repFrom    = wh.repFrom;
-    const repLabel   = repFrom ? WH_LABELS[repFrom] : '—';
 
     const sortTh = (col, label, num=false) => {
       const active = s.col === col;
@@ -2400,10 +2403,10 @@ function renderAlerts(preserveExpanded=false) {
               ? '<div style="font-size:9px;color:' + (p.leavesAtSource===0 ? 'var(--red)' : 'var(--text-muted)') + ';font-weight:400;">leaves ' + p.leavesAtSource + ' at source</div>'
               : '';
             const repCell = p.sourceAvail > 0
-              ? '<td style="color:var(--text-muted);font-size:11px">' + repLabel + leavesNote + '</td>'
+              ? '<td style="color:var(--text-muted);font-size:11px">' + p.repLabel + leavesNote + '</td>'
               : '<td style="font-size:11px"><a href="#" onclick="event.preventDefault();switchView(\'manufacturing\')" style="color:var(--accent);font-weight:600;">Order more?</a></td>';
             return `<tr>
-              <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.effectiveQty}" data-from="${repFrom}" data-to="${wh.key}" /></td>
+              <td style="position:sticky;left:0px;z-index:3;${bg};width:32px;text-align:center;"><input type="checkbox" class="alert-check" data-wh="${wh.key}" data-upc="${esc(p.upc)}" data-qty="${p.effectiveQty}" data-from="${p.repFrom}" data-to="${wh.key}" /></td>
               <td style="position:sticky;left:32px;z-index:3;${bg};width:160px;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.artist)}</td>
               <td style="position:sticky;left:192px;z-index:3;${bg};width:220px;min-width:220px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.title)}</td>
               <td style="position:sticky;left:412px;z-index:3;${bg};width:100px;min-width:100px;box-shadow:3px 0 5px rgba(0,0,0,0.07);white-space:nowrap;">${catalogLink(p.catalog)}</td>
@@ -3157,8 +3160,7 @@ function renderDashboard() {
       const weeks = (avail/monthly)*4.33;
       if (weeks >= CONFIG.REORDER_WEEKS) return;
       // Skip if production run covers this
-      const runIb = getRunInboundByUpcWh();
-      if (runIb[p.upc + '|' + wh.key]) return;
+      if (runInbound[p.upc + '|' + wh.key]) return;
       // Skip cleared alerts
       const clearKey = p.upc + '|' + wh.key;
       const cleared = State.clearedAlerts[clearKey];
@@ -3874,12 +3876,19 @@ window.openAllocModal = function(upc) {
   document.getElementById('alloc-title').textContent = (p.artist||'') + ' — ' + (p.title||'');
   document.getElementById('alloc-subtitle').textContent = (p.catalog||'') + ' · ' + (p.format||'');
 
+  // EU can source from either UK or US — pick whichever actually has more
+  // stock for this title as the real single warehouse a transfer would pull
+  // from, but show the combined total (matching Alerts/CSV export) below.
+  const euSourceKey = (p.uk_avail||0) >= (p.us_avail||0) ? 'uk' : 'us';
+
   // Warehouse definitions with stock and velocity
   const WHS = [
     { key:'fp', label:'Fat Possum WH',  avail: p.fp_available||0, vel12: p.fp_12ms||0,    source: null },
     { key:'us', label:'Orchard US',     avail: p.us_avail||0,     vel12: p.us_12ms||0,    source: 'fp' },
+    { key:'ca', label:'Orchard Canada', avail: p.ca_avail||0,     vel12: p.ca_12ms||0,    source: 'us' },
     { key:'uk', label:'Orchard UK',     avail: p.uk_avail||0,     vel12: p.uk_last_yr||0, source: 'us' },
-    { key:'eu', label:'Orchard EU',     avail: p.eu_avail||0,     vel12: p.eu_this_yr||0, source: 'us' },
+    { key:'eu', label:'Orchard EU',     avail: p.eu_avail||0,     vel12: p.eu_this_yr||0, source: euSourceKey,
+      sourceLabelOverride: 'Orchard UK + US (combined)', sourceAvailOverride: (p.uk_avail||0) + (p.us_avail||0) },
   ];
 
   // Calculate needs for each warehouse
@@ -3892,7 +3901,7 @@ window.openAllocModal = function(upc) {
   });
 
   // Running balances — start with current stock
-  const balances = { fp: p.fp_available||0, us: p.us_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
+  const balances = { fp: p.fp_available||0, us: p.us_avail||0, ca: p.ca_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
 
   const body = document.getElementById('alloc-body');
 
@@ -3929,8 +3938,8 @@ window.openAllocModal = function(upc) {
   alertWhs.forEach(wh => {
     const n = needs[wh.key];
     const sourceKey = wh.source;
-    const sourceLabel = WH_LABELS[sourceKey] || sourceKey;
-    const sourceAvail = sourceKey ? (balances[sourceKey]||0) : 0;
+    const sourceLabel = wh.sourceLabelOverride || WH_LABELS[sourceKey] || sourceKey;
+    const sourceAvail = wh.sourceAvailOverride !== undefined ? wh.sourceAvailOverride : (sourceKey ? (balances[sourceKey]||0) : 0);
     const suggested = Math.min(n.need12mo, sourceAvail);
     const weeksColor = n.weeksLeft < 4 ? 'var(--red)' : n.weeksLeft < 8 ? 'var(--orange)' : 'var(--text-muted)';
     const inputId = 'alloc-qty-' + wh.key;
@@ -3972,7 +3981,7 @@ window.openAllocModal = function(upc) {
 window.updateAllocBalance = function() {
   const p = State.merged.find(x => x.upc === _allocUpc);
   if (!p) return;
-  const balances = { fp: p.fp_available||0, us: p.us_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
+  const balances = { fp: p.fp_available||0, us: p.us_avail||0, ca: p.ca_avail||0, uk: p.uk_avail||0, eu: p.eu_avail||0 };
 
   // Process each input and update running balances
   document.querySelectorAll('[id^="alloc-qty-"]').forEach(input => {
@@ -4002,6 +4011,7 @@ window.updateAllocBalance = function() {
     summary.innerHTML = 'After allocation — '
       + 'FP: <b>' + balances.fp.toLocaleString() + '</b> · '
       + 'US: <b>' + balances.us.toLocaleString() + '</b> · '
+      + 'CA: <b>' + balances.ca.toLocaleString() + '</b> · '
       + 'UK: <b>' + balances.uk.toLocaleString() + '</b> · '
       + 'EU: <b>' + balances.eu.toLocaleString() + '</b>';
   }

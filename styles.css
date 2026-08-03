@@ -84,6 +84,7 @@ nav { padding: 8px 0; flex: 1; }
 .nav-item svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .nav-item:hover { color: var(--text); background: var(--surface2); }
 .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--red-bg); }
+.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .badge {
   background: var(--accent); color: #fff;
   font-size: 10px; font-weight: 600;

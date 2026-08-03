@@ -23,16 +23,26 @@ const RptState = {
 function rptEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function rptFmt(n) { return '$' + parseFloat(n||0).toFixed(2); }
 
-async function rptPackiyoFetch(path) {
+async function rptPackiyoFetch(path, retries) {
+  retries = retries || 3;
   const base = CONFIG.WORKER_BASE + '/packiyo';
-  const res = await fetch(base + path, {
-    headers: {
-      'Content-Type':  'application/vnd.api+json',
-      'Accept':        'application/vnd.api+json',
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(base + path, {
+      headers: {
+        'Content-Type':  'application/vnd.api+json',
+        'Accept':        'application/vnd.api+json',
+      }
+    });
+    if (res.status === 429) {
+      const wait = (attempt + 1) * 2000;
+      console.warn(`Report Packiyo fetch rate limited, retrying in ${wait}ms…`);
+      await sleep(wait);
+      continue;
     }
-  });
-  if (!res.ok) { const t = await res.text(); throw new Error('Packiyo ' + res.status + ': ' + t.slice(0,100)); }
-  return res.json();
+    if (!res.ok) { const t = await res.text(); throw new Error('Packiyo ' + res.status + ': ' + t.slice(0,100)); }
+    return res.json();
+  }
+  throw new Error('Packiyo rate limit exceeded after retries');
 }
 
 // ── NAV ───────────────────────────────────────────────────────
