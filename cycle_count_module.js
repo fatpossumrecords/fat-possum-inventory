@@ -113,7 +113,7 @@ async function ccSaveHistory(historyArr) {
   try {
     const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body: JSON.stringify({ files: { [CC_GIST_FILE]: { content: JSON.stringify(historyArr) } } }),
     });
     if (!res.ok) {

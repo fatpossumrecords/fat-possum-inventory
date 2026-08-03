@@ -67,7 +67,7 @@ async function savePreOrderData() {
 
     const res = await fetch(gistUrl(_gistId), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body: JSON.stringify({ files: { [PO_GIST_FILE]: { content: JSON.stringify(payload) } } }),
     });
     if (!res.ok) console.warn('Pre-order Gist save failed:', res.status);
@@ -727,10 +727,10 @@ async function releaseHolds(campaignId, orders) {
     try {
       const res = await fetch(CONFIG.WORKER_BASE + '/packiyo/orders/' + o.orderId, {
         method: 'PATCH',
-        headers: {
+        headers: Object.assign({
           'Content-Type': 'application/vnd.api+json',
           'Accept': 'application/vnd.api+json',
-        },
+        }, authHeader()),
         body: JSON.stringify({
           data: {
             id: String(o.orderId),

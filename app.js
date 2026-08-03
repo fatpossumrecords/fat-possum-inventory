@@ -22,6 +22,7 @@ const CONFIG = {
 
 const State = {
   user: null,
+  idToken: null, // Google ID token — sent to the Worker so it can verify who's asking
   packiyoProducts: [],
   orchardData: [],
   orchardSyncSource: null, // 'sheets' | 'manual' | 'gist' | null
@@ -112,6 +113,13 @@ window.addEventListener('unhandledrejection', function(e) {
   );
 });
 
+// Headers to merge into any fetch() call to the Worker (/gist, /packiyo) so
+// it can verify who's asking. Returns {} if not signed in yet — the Worker
+// logs (shadow mode) or rejects (enforce mode) accordingly.
+function authHeader() {
+  return State.idToken ? { Authorization: 'Bearer ' + State.idToken } : {};
+}
+
 // ── AUTO-REFRESH ─────────────────────────────────────────────
 const AUTO_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
 
@@ -174,7 +182,7 @@ async function takeStockSnapshot() {
     const body = JSON.stringify({ files: { 'fp_snapshots.json': { content: JSON.stringify(snapshots) } } });
     await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body,
     });
     localStorage.setItem('fp_last_snapshot', now.toString());
@@ -188,6 +196,7 @@ async function takeStockSnapshot() {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-screen').classList.remove('hidden');
   const saved = sessionStorage.getItem('fp_user');
+  State.idToken = sessionStorage.getItem('fp_id_token') || null;
   if (saved) { State.user = JSON.parse(saved); bootApp(); }
 
   document.getElementById('upload-csv-btn').addEventListener('click', () => document.getElementById('csv-file-input').click());
@@ -249,6 +258,10 @@ window.addEventListener('DOMContentLoaded', () => {
 // ── GOOGLE AUTH ───────────────────────────────────────────────
 const ADMIN_EMAIL     = 'patrick@fatpossum.com';
 const USERS_GIST_FILE = 'fp_users.json';
+// Sign-in activity lives in its own file, separate from fp_users.json, so
+// every login doesn't need a write to the access-controlled roles file —
+// the Worker restricts fp_users.json writes to the admin role.
+const ACCESS_LOG_FILE = 'fp_access_log.json';
 
 // Gist reads/writes go through a Cloudflare Worker (worker/fp-gist-proxy.js)
 // that holds the real GitHub PAT server-side, so the browser never receives
@@ -266,7 +279,7 @@ function gistUrl(id) {
 // since raw.githubusercontent.com doesn't handle the CORS preflight that a
 // custom Authorization header would trigger from the browser.
 async function fetchGistFile(filename) {
-  const res = await fetch(gistUrl(CONFIG.GIST_ID), { cache: 'no-store' });
+  const res = await fetch(gistUrl(CONFIG.GIST_ID), { cache: 'no-store', headers: authHeader() });
   if (!res.ok) {
     throw new Error('Gist fetch failed: HTTP ' + res.status + ' — check the Worker is deployed and reachable');
   }
@@ -284,6 +297,10 @@ async function fetchGistFile(filename) {
 }
 
 window.handleGoogleLogin = async function(response) {
+  // Capture the raw ID token early so it's available for the Worker calls
+  // this same function makes below (user-list lookup) as well as every
+  // Worker call for the rest of the session.
+  State.idToken = response.credential;
   const payload = parseJwt(response.credential);
 
   // Domain check — must be @fatpossum.com
@@ -300,7 +317,7 @@ window.handleGoogleLogin = async function(response) {
   } else {
     try {
       const content = await fetchGistFile(USERS_GIST_FILE);
-      const users   = content ? JSON.parse(content) : { users: [], log: [] };
+      const users   = content ? JSON.parse(content) : { users: [] };
       const found   = (users.users || []).find(u => u.email.toLowerCase() === email);
       if (!found) {
         document.getElementById('login-error').classList.remove('hidden');
@@ -309,27 +326,35 @@ window.handleGoogleLogin = async function(response) {
         return;
       }
       role = found.role || 'full';
-      found.lastSignIn = new Date().toISOString();
-      if (!users.log) users.log = [];
-      users.log.push({ email, at: new Date().toISOString(), role });
-      if (users.log.length > 200) users.log = users.log.slice(-200);
-      fetch(gistUrl(CONFIG.GIST_ID), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(users, null, 2) } } }),
-      }).catch(() => {});
     } catch(e) {
       console.warn('Could not load user list (' + e.message + ') — allowing access for @fatpossum.com domain member as a fallback. Check the Worker (worker/fp-gist-proxy.js) is deployed and its GIST_TOKEN secret is valid.');
       role = 'full';
     }
   }
 
+  recordSignIn(email, role); // own file, no admin gate — fire and forget
+
   State.user     = { name: payload.name, email: payload.email, picture: payload.picture };
   State.userRole = role;
   sessionStorage.setItem('fp_user',     JSON.stringify(State.user));
   sessionStorage.setItem('fp_userRole', role);
+  sessionStorage.setItem('fp_id_token', State.idToken);
   bootApp();
 };
+
+async function recordSignIn(email, role) {
+  try {
+    const content = await fetchGistFile(ACCESS_LOG_FILE);
+    let log = content ? JSON.parse(content) : [];
+    log.push({ email, at: new Date().toISOString(), role });
+    if (log.length > 200) log = log.slice(-200);
+    await fetch(gistUrl(CONFIG.GIST_ID), {
+      method: 'PATCH',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
+      body: JSON.stringify({ files: { [ACCESS_LOG_FILE]: { content: JSON.stringify(log) } } }),
+    });
+  } catch(e) { /* sign-in logging is best-effort — never block login on it */ }
+}
 
 function parseJwt(token) {
   return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
@@ -338,15 +363,30 @@ function parseJwt(token) {
 function logout() {
   sessionStorage.removeItem('fp_user');
   sessionStorage.removeItem('fp_userRole');
+  sessionStorage.removeItem('fp_id_token');
   State.user     = null;
   State.userRole = null;
+  State.idToken  = null;
+  if (_tokenRefreshTimer) { clearInterval(_tokenRefreshTimer); _tokenRefreshTimer = null; }
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
+}
+
+// Google ID tokens expire ~1hr; silently re-prompt periodically so a long
+// session doesn't just go stale until the next full page reload/login.
+let _tokenRefreshTimer = null;
+function startTokenRefreshTimer() {
+  if (_tokenRefreshTimer) return;
+  _tokenRefreshTimer = setInterval(() => {
+    if (!State.user) return;
+    try { window.google?.accounts?.id?.prompt(); } catch(e) {}
+  }, 45 * 60 * 1000);
 }
 
 function bootApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  startTokenRefreshTimer();
   const ur = document.getElementById('user-row');
   if (State.user) {
     const firstName = State.user.email.split('@')[0].split('.')[0];
@@ -702,7 +742,7 @@ async function saveOrchardToGist() {
     console.log('Saving orchard to Gist, rows:', State.orchardData.length, 'size:', Math.round(body.length/1024)+'KB');
     const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body,
     });
     if (!res.ok) console.warn('Orchard Gist save failed:', res.status);
@@ -820,7 +860,7 @@ async function _saveGistDataImpl() {
     updateGistStatus(sizeKB);
     const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body,
     });
     if (!res.ok) {
@@ -974,7 +1014,7 @@ async function packiyoFetch(endpoint, params = {}, retries = 3) {
   const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const url = CONFIG.WORKER_BASE + '/packiyo' + endpoint + (qs ? '?' + qs : '');
   for (let attempt = 0; attempt < retries; attempt++) {
-    const res = await fetch(url, { headers: { 'Accept': '*/*' } });
+    const res = await fetch(url, { headers: Object.assign({ 'Accept': '*/*' }, authHeader()) });
     if (res.status === 429) {
       // Rate limited — wait and retry
       const wait = (attempt + 1) * 2000;

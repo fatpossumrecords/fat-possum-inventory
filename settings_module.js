@@ -306,7 +306,7 @@ function _settingsGetVal(id)        { const el = document.getElementById(id); re
     }
     if (!gistId) return;
 
-    fetch(gistUrl(gistId), { cache: 'no-store' }).then(function(r) { return r.json(); }).then(function(g) {
+    fetch(gistUrl(gistId), { cache: 'no-store', headers: authHeader() }).then(function(r) { return r.json(); }).then(function(g) {
       const files = Object.values(g.files || {});
       const totalKb  = files.reduce(function(s, f) { return s + (f.size || 0); }, 0) / 1024;
       const largestKb = Math.max.apply(null, files.map(function(f) { return (f.size || 0) / 1024; }));
@@ -355,10 +355,45 @@ window.adminInitSettings = function() {
     adminRenderUsers();
     adminRenderLog();
     adminRenderErrorLog();
+    adminRenderAuthLog();
   }
 };
 
 const ERROR_LOG_FILE = 'fp_error_log.json';
+const AUTH_LOG_FILE  = 'fp_auth_shadow_log.json';
+
+window.adminRenderAuthLog = async function() {
+  const el = document.getElementById('s-auth-log');
+  if (!el) return;
+
+  let log;
+  try {
+    const content = await fetchGistFile(AUTH_LOG_FILE);
+    log = content ? JSON.parse(content) : [];
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red);">⚠ Could not load auth log: ' + e.message + '</div>';
+    return;
+  }
+
+  if (!log.length) { el.textContent = 'No auth checks logged yet.'; return; }
+
+  const passCount = log.filter(function(e) { return e.ok; }).length;
+  const failCount = log.length - passCount;
+  const summary = '<div style="margin-bottom:8px;color:var(--text);">' + passCount + ' passed · <span style="color:' + (failCount ? 'var(--red)' : 'var(--text-muted)') + ';">' + failCount + ' would-fail</span> (of last ' + log.length + ')</div>';
+
+  el.innerHTML = summary + log.slice(0, 50).map(function(e) {
+    const when = e.ts ? new Date(e.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+    const statusColor = e.ok ? 'var(--green)' : 'var(--red)';
+    const statusText  = e.ok ? 'PASS (' + esc(e.role||'') + ')' : 'WOULD FAIL: ' + esc(e.reason||'');
+    return '<div style="padding:3px 0;border-bottom:1px solid var(--border);">'
+      + '<span style="color:' + statusColor + ';font-weight:600;">' + statusText + '</span>'
+      + ' <span style="color:var(--text-dim);">·</span> '
+      + esc(e.method||'') + ' ' + esc(e.route||'')
+      + (e.email ? ' <span style="color:var(--text-dim);">·</span> ' + esc(e.email) : '')
+      + '<span style="color:var(--text-dim);float:right;">' + when + '</span>'
+      + '</div>';
+  }).join('');
+};
 
 async function adminRenderErrorLog() {
   const el = document.getElementById('s-error-log');
@@ -391,7 +426,7 @@ window.adminClearErrorLog = async function() {
   try {
     const res = await fetch(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body: JSON.stringify({ files: { [ERROR_LOG_FILE]: { content: '[]' } } }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -404,13 +439,13 @@ window.adminClearErrorLog = async function() {
 
 async function adminLoadUsers() {
   const content = await fetchGistFile(USERS_GIST_FILE);
-  return content ? JSON.parse(content) : { users: [], log: [] };
+  return content ? JSON.parse(content) : { users: [] };
 }
 
 async function adminSaveUsers(data) {
   const res = await fetch(gistUrl(CONFIG.GIST_ID), {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
     body: JSON.stringify({ files: { [USERS_GIST_FILE]: { content: JSON.stringify(data, null, 2) } } }),
   });
   if (!res.ok) {
@@ -418,19 +453,34 @@ async function adminSaveUsers(data) {
   }
 }
 
+// Sign-in activity lives in its own file (fp_access_log.json), separate
+// from fp_users.json — see ACCESS_LOG_FILE comment in app.js. "Last sign-in"
+// per user is derived from it rather than stored on the user record.
+async function adminLoadAccessLog() {
+  const content = await fetchGistFile(ACCESS_LOG_FILE);
+  return content ? JSON.parse(content) : [];
+}
+
 async function adminRenderUsers() {
   const el = document.getElementById('s-users-list');
   if (!el) return;
 
-  let data;
+  let data, accessLog;
   try {
     data = await adminLoadUsers();
+    accessLog = await adminLoadAccessLog();
   } catch(e) {
     el.innerHTML = '<div style="font-size:12px;color:var(--red);">⚠ Could not load user list: ' + e.message + '</div>';
     return;
   }
 
   const users = data.users || [];
+  const lastSeenByEmail = {};
+  for (const entry of accessLog) {
+    const email = (entry.email || '').toLowerCase();
+    if (!email) continue;
+    if (!lastSeenByEmail[email] || entry.at > lastSeenByEmail[email]) lastSeenByEmail[email] = entry.at;
+  }
 
   if (!users.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No users added yet.</div>';
@@ -446,7 +496,8 @@ async function adminRenderUsers() {
     + '</tr></thead><tbody>'
     + users.map((u, i) => {
         const isMe = u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-        const lastSeen = u.lastSignIn ? new Date(u.lastSignIn).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+        const lastSignIn = lastSeenByEmail[u.email.toLowerCase()];
+        const lastSeen = lastSignIn ? new Date(lastSignIn).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
         return '<tr style="border-bottom:1px solid var(--border);">'
           + '<td style="padding:6px 8px;">' + u.email + (isMe ? ' <span style="font-size:9px;background:var(--accent);color:#fff;border-radius:3px;padding:1px 5px;">you</span>' : '') + '</td>'
           + '<td style="padding:6px 8px;">'
@@ -467,15 +518,15 @@ async function adminRenderLog() {
   const el = document.getElementById('s-access-log');
   if (!el) return;
 
-  let data;
+  let accessLog;
   try {
-    data = await adminLoadUsers();
+    accessLog = await adminLoadAccessLog();
   } catch(e) {
     el.textContent = 'Could not load sign-in log: ' + e.message;
     return;
   }
 
-  const log = (data.log || []).slice(-50).reverse();
+  const log = accessLog.slice(-50).reverse();
   if (!log.length) { el.textContent = 'No sign-ins recorded yet.'; return; }
   el.innerHTML = log.map(e =>
     '<div style="padding:2px 0;border-bottom:1px solid var(--border);">'

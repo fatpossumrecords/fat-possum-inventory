@@ -1158,6 +1158,13 @@
           </div>
           <div id="s-error-log" style="font-size:11px;font-family:monospace;color:var(--text-muted);max-height:220px;overflow-y:auto;"></div>
         </div>
+        <div style="padding:16px 20px;border-top:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Auth Check Log <span style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(Worker token verification — shadow mode)</span></div>
+            <button onclick="adminRenderAuthLog()" class="btn-ghost" style="font-size:10px;color:var(--text-dim);">Refresh</button>
+          </div>
+          <div id="s-auth-log" style="font-size:11px;font-family:monospace;color:var(--text-muted);max-height:220px;overflow-y:auto;"></div>
+        </div>
       </div>
 
     </div>

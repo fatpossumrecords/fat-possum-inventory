@@ -58,10 +58,10 @@ function invGetCreds() {
 async function invPackiyoFetch(path, opts) {
   const base = CONFIG.WORKER_BASE + '/packiyo';
   const res = await fetch(base + path, Object.assign({
-    headers: {
+    headers: Object.assign({
       'Content-Type': 'application/vnd.api+json',
       'Accept': 'application/vnd.api+json',
-    }
+    }, authHeader())
   }, opts));
   if (!res.ok) {
     const t = await res.text();
@@ -152,7 +152,7 @@ async function invSave() {
     };
     await fetch(gistUrl(creds.gistId), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body: JSON.stringify({ files: { [INV_GIST_FILE]: { content: JSON.stringify(payload) } } }),
     });
   } catch(e) { console.warn('Invoice save error:', e.message); }

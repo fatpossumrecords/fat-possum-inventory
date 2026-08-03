@@ -28,10 +28,10 @@ async function rptPackiyoFetch(path, retries) {
   const base = CONFIG.WORKER_BASE + '/packiyo';
   for (let attempt = 0; attempt < retries; attempt++) {
     const res = await fetch(base + path, {
-      headers: {
+      headers: Object.assign({
         'Content-Type':  'application/vnd.api+json',
         'Accept':        'application/vnd.api+json',
-      }
+      }, authHeader())
     });
     if (res.status === 429) {
       const wait = (attempt + 1) * 2000;
@@ -170,7 +170,7 @@ window.rptSaveSchedule = async function() {
     if (creds) {
       await fetch(gistUrl(creds.gistId), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
         body: JSON.stringify({ files: { 'fp_report_schedule.json': { content: JSON.stringify(schedule, null, 2) } } }),
       });
       if (statusEl) statusEl.textContent = '✓ Schedule saved — runs on the ' + day + (day===1?'st':day===2?'nd':day===3?'rd':'th') + ' of each month';
@@ -690,7 +690,7 @@ window.rptExportCSV = function() {
         if (log.runs.length > 100) log.runs = log.runs.slice(0,100);
         return fetch(gistUrl(creds.gistId), {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
           body: JSON.stringify({ files: { 'fp_reports_log.json': { content: JSON.stringify(log) } } }),
         });
       }).catch(function(){});

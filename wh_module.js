@@ -210,7 +210,7 @@ async function whSaveReplenLog(titles, units) {
 
     await fetch(gistUrl(creds.gistId), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body: JSON.stringify({ files: { [WH_REPLEN_LOG_FILE]: { content: JSON.stringify(log, null, 2) } } })
     });
     console.log('Replen log saved:', titles, 'titles,', units, 'units');
