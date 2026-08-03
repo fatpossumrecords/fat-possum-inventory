@@ -399,14 +399,27 @@ function waitForGsiReady(timeoutMs) {
   });
 }
 
-// Polls for State.idToken to be set (by a successful silent refresh) up to
-// timeoutMs, so boot-time Worker calls can wait briefly for a fresh token
-// instead of firing without one. Resolves either way — never blocks boot
-// indefinitely (e.g. if the silent prompt can't complete without user
+// If there's no token yet, sequences: wait for GSI to be ready, fire a
+// silent refresh prompt, THEN wait for it to land — then polls State.idToken
+// up to timeoutMs so boot-time Worker calls can wait briefly for a fresh
+// token instead of firing without one. Resolves either way — never blocks
+// boot indefinitely (e.g. if the silent prompt can't complete without user
 // interaction).
-function waitForToken(timeoutMs) {
+//
+// Previously this wait and the GSI-ready-then-prompt() call in
+// startTokenRefreshTimer were two independently-bounded timers racing each
+// other from the same starting instant: waitForGsiReady alone could eat
+// most or all of its window before prompt() was even called, so this
+// timer's clock often expired before the silent refresh had a chance to
+// land — not just for old restored sessions, but on ordinary fresh boots.
+// Sequencing them here means the token-wait clock only starts once the
+// prompt has actually been fired.
+async function waitForToken(timeoutMs) {
+  if (State.idToken) return;
+  const ready = await waitForGsiReady(2000);
+  if (ready) { try { window.google.accounts.id.prompt(); } catch(e) {} }
+  if (State.idToken) return;
   return new Promise(resolve => {
-    if (State.idToken) return resolve();
     const start = Date.now();
     const iv = setInterval(() => {
       if (State.idToken || Date.now() - start >= timeoutMs) {
@@ -419,11 +432,6 @@ function waitForToken(timeoutMs) {
 
 let _tokenRefreshTimer = null;
 function startTokenRefreshTimer() {
-  if (!State.idToken) {
-    waitForGsiReady(2000).then(ready => {
-      if (ready) { try { window.google.accounts.id.prompt(); } catch(e) {} }
-    });
-  }
   if (_tokenRefreshTimer) return;
   _tokenRefreshTimer = setInterval(() => {
     if (!State.user) return;
