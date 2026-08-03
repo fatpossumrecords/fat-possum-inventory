@@ -339,6 +339,10 @@ window.handleGoogleLogin = async function(response) {
   sessionStorage.setItem('fp_user',     JSON.stringify(State.user));
   sessionStorage.setItem('fp_userRole', role);
   sessionStorage.setItem('fp_id_token', State.idToken);
+  // If this fired as a silent token refresh on an already-running session
+  // (see startTokenRefreshTimer), State.idToken is now updated in place —
+  // no need to re-run the whole boot sequence.
+  if (window._appBooted) return;
   bootApp();
 };
 
@@ -367,6 +371,7 @@ function logout() {
   State.user     = null;
   State.userRole = null;
   State.idToken  = null;
+  window._appBooted = false;
   if (_tokenRefreshTimer) { clearInterval(_tokenRefreshTimer); _tokenRefreshTimer = null; }
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
@@ -378,10 +383,46 @@ function logout() {
 // session restored from sessionStorage that predates this token existing
 // (e.g. right after this was deployed, for anyone already signed in) so
 // they don't have to manually log out/in to pick it up.
+
+// Polls for window.google.accounts.id (loaded async/defer, so it may not
+// be ready yet at boot) up to timeoutMs. Resolves true/false.
+function waitForGsiReady(timeoutMs) {
+  return new Promise(resolve => {
+    if (window.google?.accounts?.id) return resolve(true);
+    const start = Date.now();
+    const iv = setInterval(() => {
+      if (window.google?.accounts?.id || Date.now() - start >= timeoutMs) {
+        clearInterval(iv);
+        resolve(!!window.google?.accounts?.id);
+      }
+    }, 100);
+  });
+}
+
+// Polls for State.idToken to be set (by a successful silent refresh) up to
+// timeoutMs, so boot-time Worker calls can wait briefly for a fresh token
+// instead of firing without one. Resolves either way — never blocks boot
+// indefinitely (e.g. if the silent prompt can't complete without user
+// interaction).
+function waitForToken(timeoutMs) {
+  return new Promise(resolve => {
+    if (State.idToken) return resolve();
+    const start = Date.now();
+    const iv = setInterval(() => {
+      if (State.idToken || Date.now() - start >= timeoutMs) {
+        clearInterval(iv);
+        resolve();
+      }
+    }, 100);
+  });
+}
+
 let _tokenRefreshTimer = null;
 function startTokenRefreshTimer() {
   if (!State.idToken) {
-    try { window.google?.accounts?.id?.prompt(); } catch(e) {}
+    waitForGsiReady(2000).then(ready => {
+      if (ready) { try { window.google.accounts.id.prompt(); } catch(e) {} }
+    });
   }
   if (_tokenRefreshTimer) return;
   _tokenRefreshTimer = setInterval(() => {
@@ -391,6 +432,7 @@ function startTokenRefreshTimer() {
 }
 
 function bootApp() {
+  window._appBooted = true;
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   startTokenRefreshTimer();
@@ -436,7 +478,10 @@ function bootApp() {
     window._hasPendingLocalChanges = true;
   }
 
-  loadGistData().then(() => {
+  // If we don't have a token yet (stale restored session — see
+  // startTokenRefreshTimer), give the silent refresh a brief window to land
+  // before firing the Worker calls, instead of racing it every time.
+  (State.idToken ? Promise.resolve() : waitForToken(2000)).then(loadGistData).then(() => {
     if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
     scheduleAutoRefresh();
