@@ -374,8 +374,15 @@ function logout() {
 
 // Google ID tokens expire ~1hr; silently re-prompt periodically so a long
 // session doesn't just go stale until the next full page reload/login.
+// Also fires once immediately on boot if there's no token yet — covers a
+// session restored from sessionStorage that predates this token existing
+// (e.g. right after this was deployed, for anyone already signed in) so
+// they don't have to manually log out/in to pick it up.
 let _tokenRefreshTimer = null;
 function startTokenRefreshTimer() {
+  if (!State.idToken) {
+    try { window.google?.accounts?.id?.prompt(); } catch(e) {}
+  }
   if (_tokenRefreshTimer) return;
   _tokenRefreshTimer = setInterval(() => {
     if (!State.user) return;
