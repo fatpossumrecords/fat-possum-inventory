@@ -420,15 +420,41 @@ function logout() {
 // (e.g. right after this was deployed, for anyone already signed in) so
 // they don't have to manually log out/in to pick it up.
 
+// The login screen's g_id_onload div declaratively configures GSI (client_id,
+// callback) — GSI auto-initializes from it once the script loads and scans
+// the DOM. That's fine for the visible Sign In button, but calling
+// .prompt() programmatically (for the silent refresh) alongside a purely
+// declarative init has shown "Missing required parameter: client_id" and
+// "initialize() is called multiple times" in the console, with prompt()
+// then never landing a credential — consistent with GSI's own internal
+// setup racing our prompt() call before the declarative config has fully
+// registered. Calling initialize() ourselves, explicitly, with the exact
+// same config, once GSI is confirmed loaded and before we ever call
+// prompt(), removes that race — idempotent with the declarative init
+// since the config is identical either way.
+let _gsiInitialized = false;
+function ensureGsiInitialized() {
+  if (_gsiInitialized || !window.google?.accounts?.id) return;
+  _gsiInitialized = true;
+  try {
+    window.google.accounts.id.initialize({
+      client_id: '955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com',
+      callback: handleGoogleLogin,
+      auto_prompt: false,
+    });
+  } catch(e) {}
+}
+
 // Polls for window.google.accounts.id (loaded async/defer, so it may not
 // be ready yet at boot) up to timeoutMs. Resolves true/false.
 function waitForGsiReady(timeoutMs) {
   return new Promise(resolve => {
-    if (window.google?.accounts?.id) return resolve(true);
+    if (window.google?.accounts?.id) { ensureGsiInitialized(); return resolve(true); }
     const start = Date.now();
     const iv = setInterval(() => {
       if (window.google?.accounts?.id || Date.now() - start >= timeoutMs) {
         clearInterval(iv);
+        if (window.google?.accounts?.id) ensureGsiInitialized();
         resolve(!!window.google?.accounts?.id);
       }
     }, 100);
