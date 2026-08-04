@@ -596,11 +596,19 @@ function bootApp() {
     // If the user has consented before, we get a token instantly and sync.
     // If not, the existing "Sync Sheet" button in the header handles it.
     window._orchardSheetsSyncDone = false;
-    function _tryOrchardSheetsSync() {
+    async function _tryOrchardSheetsSync() {
       if (window._orchardSheetsSyncDone) return;
       window._orchardSheetsSyncDone = true;
       document.removeEventListener('click', _tryOrchardSheetsSync);
       document.removeEventListener('keydown', _tryOrchardSheetsSync);
+      // This fires on the user's first click/keydown after boot — which can
+      // land while waitForToken's own silent ID-token refresh (a separate
+      // Google Identity flow, accounts.id vs this one's accounts.oauth2) is
+      // still in flight. Both compete for the browser's single credential-
+      // mediation slot; firing this one concurrently was seen aborting the
+      // other with "FedCM get() rejects with AbortError". Let any pending
+      // token wait finish first.
+      if (_tokenWaitPromise) { try { await _tokenWaitPromise; } catch(e) {} }
       try {
         const client = google.accounts.oauth2.initTokenClient({
           client_id: CONFIG.GOOGLE_CLIENT_ID,
