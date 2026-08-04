@@ -63,9 +63,13 @@ async function packiyoFetch(path) {
 
 // Wrapper for GitHub API calls: disables gzip (works around a node-fetch v2 +
 // newer Node runtime bug that throws ERR_STREAM_PREMATURE_CLOSE while
-// decompressing gzip responses) and retries transient network/stream errors
-// and 5xx responses (api.github.com and the raw githubusercontent.com CDN both
-// occasionally 503) with exponential backoff.
+// decompressing gzip responses) and retries transient network/stream errors,
+// 5xx responses (api.github.com and the raw githubusercontent.com CDN both
+// occasionally 503), and 409s (this gist has several independent writers —
+// this script, the app, other devices — and two PATCHes landing close
+// together can lose a git-level race; a short retry almost always clears it
+// since the other writer's PATCH has normally already landed) with
+// exponential backoff.
 async function githubFetch(url, opts, ms, maxRetries) {
   ms = ms || 15000;
   maxRetries = maxRetries == null ? 3 : maxRetries;
@@ -76,7 +80,7 @@ async function githubFetch(url, opts, ms, maxRetries) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetchWithTimeout(url, finalOpts, ms);
-      if (res.status >= 500 && attempt < maxRetries) {
+      if ((res.status >= 500 || res.status === 409) && attempt < maxRetries) {
         lastRes = res;
         const delay = 1000 * Math.pow(2, attempt);
         console.log(`  GitHub API returned ${res.status}, retrying in ${delay}ms… (attempt ${attempt + 1}/${maxRetries})`);

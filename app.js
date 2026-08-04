@@ -894,6 +894,26 @@ function mergeGistSuppressed(remoteArr, baselineArr, localSet) {
   return [...result];
 }
 
+// Gists are backed by a single git ref; two PATCHes landing close together
+// can lose a git-level race and get "409 Gist cannot be updated" even
+// though neither request was actually wrong. This Gist has a lot of
+// independent writers (this app, ship-notify.js every 5 min, other
+// browser tabs/devices), so that collision is expected occasionally — a
+// short retry is usually all it takes since the other writer's PATCH has
+// normally already landed a second later.
+async function fetchWithGistConflictRetry(url, options, maxAttempts = 3) {
+  let res;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    res = await fetch(url, options);
+    if (res.status !== 409) return res;
+    if (attempt < maxAttempts) {
+      console.warn('Gist PATCH hit 409 (conflict), retrying — attempt', attempt);
+      await new Promise(r => setTimeout(r, 500 * attempt + Math.random() * 500));
+    }
+  }
+  return res;
+}
+
 async function _saveGistDataImpl() {
   try {
     // Pull the latest server copy and merge our changes on top of it, rather
@@ -941,7 +961,7 @@ async function _saveGistDataImpl() {
     const sizeKB = body.length / 1024;
     console.log('Saving config to Gist, size:', Math.round(sizeKB)+'KB');
     updateGistStatus(sizeKB);
-    const res = await fetch(gistUrl(CONFIG.GIST_ID), {
+    const res = await fetchWithGistConflictRetry(gistUrl(CONFIG.GIST_ID), {
       method: 'PATCH',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body,
