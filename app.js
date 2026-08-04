@@ -286,6 +286,12 @@ function gistUrl(id) {
 // since raw.githubusercontent.com doesn't handle the CORS preflight that a
 // custom Authorization header would trigger from the browser.
 async function fetchGistFile(filename) {
+  // Every module's boot-time load goes through here to reach the Worker,
+  // which requires a token. A restored stale session can have none yet
+  // (see waitForToken) — give the silent refresh a brief bounded window to
+  // land first, instead of firing without one and logging a guaranteed
+  // "missing token" failure.
+  if (!State.idToken) await waitForToken(2000);
   const res = await fetch(gistUrl(CONFIG.GIST_ID), { cache: 'no-store', headers: authHeader() });
   if (!res.ok) {
     throw new Error('Gist fetch failed: HTTP ' + res.status + ' — check the Worker is deployed and reachable');
@@ -437,20 +443,36 @@ function waitForGsiReady(timeoutMs) {
 // land — not just for old restored sessions, but on ordinary fresh boots.
 // Sequencing them here means the token-wait clock only starts once the
 // prompt has actually been fired.
+//
+// Every module (preorder/invoice/reports/wh/cycle-count/settings) reads
+// through the shared fetchGistFile() below, and several fire their own
+// boot-time load independently of app.js's. Without dedup, a stale-session
+// boot would have each of them call this concurrently, each firing its own
+// redundant prompt() and poll loop. _tokenWaitPromise makes them all share
+// one in-flight wait instead.
+let _tokenWaitPromise = null;
 async function waitForToken(timeoutMs) {
   if (State.idToken) return;
-  const ready = await waitForGsiReady(2000);
-  if (ready) { try { window.google.accounts.id.prompt(); } catch(e) {} }
-  if (State.idToken) return;
-  return new Promise(resolve => {
-    const start = Date.now();
-    const iv = setInterval(() => {
-      if (State.idToken || Date.now() - start >= timeoutMs) {
-        clearInterval(iv);
-        resolve();
-      }
-    }, 100);
-  });
+  if (_tokenWaitPromise) return _tokenWaitPromise;
+  _tokenWaitPromise = (async () => {
+    const ready = await waitForGsiReady(2000);
+    if (ready) { try { window.google.accounts.id.prompt(); } catch(e) {} }
+    if (State.idToken) return;
+    return new Promise(resolve => {
+      const start = Date.now();
+      const iv = setInterval(() => {
+        if (State.idToken || Date.now() - start >= timeoutMs) {
+          clearInterval(iv);
+          resolve();
+        }
+      }, 100);
+    });
+  })();
+  try {
+    await _tokenWaitPromise;
+  } finally {
+    _tokenWaitPromise = null;
+  }
 }
 
 let _tokenRefreshTimer = null;
@@ -509,10 +531,12 @@ function bootApp() {
     window._hasPendingLocalChanges = true;
   }
 
-  // If we don't have a token yet (stale restored session — see
-  // startTokenRefreshTimer), give the silent refresh a brief window to land
-  // before firing the Worker calls, instead of racing it every time.
-  (State.idToken ? Promise.resolve() : waitForToken(2000)).then(loadGistData).then(() => {
+  // loadGistData() reads fp_data.json/fp_config.json straight from the
+  // public gist.githubusercontent.com raw CDN, not through the Worker — no
+  // token needed, so it doesn't need to wait for one (see fetchGistFile()
+  // for where the actual token wait belongs: every *other* module's boot
+  // load goes through that, via the Worker).
+  loadGistData().then(() => {
     if (State.orchardLoaded) updateOrchardStatus();
     if (State.movements.length) renderMovementsTable();
     scheduleAutoRefresh();
