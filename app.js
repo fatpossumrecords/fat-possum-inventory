@@ -314,6 +314,12 @@ window.handleGoogleLogin = async function(response) {
   // this same function makes below (user-list lookup) as well as every
   // Worker call for the rest of the session.
   State.idToken = response.credential;
+  // A fresh token just landed — however it got here (fresh login, silent
+  // One Tap, or the 45-min periodic refresh all funnel through this same
+  // GSI callback). Clear the one-shot gate so if the token goes missing
+  // again later, waitForToken gets to try again instead of staying
+  // permanently blocked from this session's earlier attempt.
+  _tokenWaitAttempted = false;
   const payload = parseJwt(response.credential);
 
   // Domain check — must be @fatpossum.com
@@ -401,6 +407,7 @@ function logout() {
   State.userRole = null;
   State.idToken  = null;
   window._appBooted = false;
+  _tokenWaitAttempted = false;
   if (_tokenRefreshTimer) { clearInterval(_tokenRefreshTimer); _tokenRefreshTimer = null; }
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
@@ -450,10 +457,24 @@ function waitForGsiReady(timeoutMs) {
 // boot would have each of them call this concurrently, each firing its own
 // redundant prompt() and poll loop. _tokenWaitPromise makes them all share
 // one in-flight wait instead.
+//
+// _tokenWaitAttempted caps that to ONE silent-refresh attempt per "episode"
+// of a missing token, not one per module. Without it, modules that load a
+// few seconds apart (past the in-flight window above) would each start a
+// fresh wait and call prompt() again once the previous one gave up — and
+// Google's One Tap has its own exponential cooldown for exactly that
+// pattern (prompt() called repeatedly without the user completing it), so
+// retrying more aggressively than this actually makes it less likely to
+// ever land, not more. One attempt; if it doesn't land, later callers
+// proceed without a token and this self-heals via the 45-min periodic
+// refresh or the next full reload.
 let _tokenWaitPromise = null;
+let _tokenWaitAttempted = false;
 async function waitForToken(timeoutMs) {
   if (State.idToken) return;
   if (_tokenWaitPromise) return _tokenWaitPromise;
+  if (_tokenWaitAttempted) return;
+  _tokenWaitAttempted = true;
   _tokenWaitPromise = (async () => {
     const ready = await waitForGsiReady(2000);
     if (ready) { try { window.google.accounts.id.prompt(); } catch(e) {} }
@@ -472,6 +493,7 @@ async function waitForToken(timeoutMs) {
     await _tokenWaitPromise;
   } finally {
     _tokenWaitPromise = null;
+    if (State.idToken) _tokenWaitAttempted = false;
   }
 }
 
