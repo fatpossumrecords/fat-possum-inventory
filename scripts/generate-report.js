@@ -125,8 +125,20 @@ async function gistFetch(filename) {
   if (!res.ok) throw new Error(`Gist fetch failed: ${res.status}`);
   const gist = await res.json();
   const file = gist.files?.[filename];
-  if (!file?.content) return null;
-  return JSON.parse(file.content);
+  if (!file) return null;
+
+  // GitHub's Gist API inlines file content only up to ~1MB; beyond that it
+  // marks the file truncated (sometimes with a partial, unparseable content
+  // string, sometimes with content omitted entirely) and provides raw_url
+  // instead, which always serves the full untruncated file.
+  let content = file.content;
+  if (file.truncated || !content) {
+    if (!file.raw_url) return null;
+    const rawRes = await fetch(file.raw_url, { headers: { 'Authorization': `token ${GIST_TOKEN}` } });
+    if (!rawRes.ok) throw new Error(`Gist raw fetch failed for ${filename}: ${rawRes.status}`);
+    content = await rawRes.text();
+  }
+  return JSON.parse(content);
 }
 
 async function gistWrite(filename, data) {
@@ -396,13 +408,10 @@ async function main() {
       console.log(`  Packiyo products: ${pkProducts.length}`);
     } catch(e) { console.warn('  Packiyo products error:', e.message); }
 
-    // Load artist data from fp_config_v2.json (shopifyVendors + manualArtists keyed by UPC).
-    // fp_config.json got stuck refusing further writes (GitHub-side 409 after
-    // enough revisions accumulated) — the app migrated its content to this
-    // fresh filename, which the old file no longer receives.
+    // Load artist data from fp_config.json (shopifyVendors + manualArtists keyed by UPC)
     let shopifyVendors = {}, manualArtists = {};
     try {
-      const cfg = await gistFetch('fp_config_v2.json');
+      const cfg = await gistFetch('fp_config.json');
       shopifyVendors = cfg?.shopifyVendors || {};
       manualArtists  = cfg?.manualArtists  || {};
       console.log(`  shopifyVendors: ${Object.keys(shopifyVendors).length}, manualArtists: ${Object.keys(manualArtists).length}`);
@@ -428,8 +437,8 @@ async function main() {
     // 3. Invoices
     console.log('\n[3/5] Fetching invoices...');
     let invData = { invoices: [] };
-    try { invData = await gistFetch(INV_GIST_FILE); } catch(e) {}
-    const optedIn = (invData.invoices||[]).filter(inv => inv.includeInReports && inv.status !== 'draft');
+    try { invData = await gistFetch(INV_GIST_FILE); } catch(e) { console.warn('  invoices fetch error:', e.message); }
+    const optedIn = ((invData && invData.invoices) || []).filter(inv => inv.includeInReports && inv.status !== 'draft');
     console.log(`  ${optedIn.length} opted-in invoices`);
 
     // 4. Build rows
@@ -539,7 +548,7 @@ async function main() {
         body: JSON.stringify({
           from:    'Fat Possum Reports <reports@fatpossum.com>',
           to:      recipients,
-          subject: `Fat Possum B2B Sales Report — ${periodLabel}`,
+          subject: `Fat Possum B2B Sales Report — ${from} to ${to}`,
           html:    `<p>Please find attached the Fat Possum sales report for <strong>${periodLabel}</strong>.</p><ul><li><strong>${dataRows.length}</strong> line items</li><li><strong>${b2bOrders.length}</strong> B2B orders</li><li><strong>${optedIn.length}</strong> app invoices</li></ul><p>Also available in Google Sheets: <a href="https://docs.google.com/spreadsheets/d/${SHEETS_ID}">FP B2B Sales Reports</a></p><p>Fat Possum Records</p>`,
           attachments: [{ filename, content: Buffer.from(csv).toString('base64') }],
         }),
