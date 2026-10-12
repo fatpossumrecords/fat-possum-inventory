@@ -1,8 +1,11 @@
 /* ============================================================
-   FAT POSSUM -- PRE-ORDER CAMPAIGN MANAGER  v20260519133858
+   FAT POSSUM -- PRE-ORDER CAMPAIGN MANAGER  v20261012
    preorder_module.js
    Tracks operator-held pre-order campaigns and releases them
    via PATCH /orders/{id} operator_hold: 0
+   v20261012: qty filter, row checkboxes, "select next N units",
+              release-selected waves, partial releases keep the
+              remaining orders listed (no refresh needed).
    ============================================================ */
 
 // ── STATE ────────────────────────────────────────────────────
@@ -15,6 +18,9 @@ const POState = {
   tagFilters:      {},  // { campaignId: ['tag1','tag2'] }
   holdFilters:     {},  // { campaignId: ['operator','date','allocation','address'] }
   searchTerms:     {},  // { campaignId: 'searchText' }
+  qtyFilters:      {},  // { campaignId: { min: number|null, max: number|null } }
+  selected:        {},  // { campaignId: { orderId: true } }
+  nextUnits:       {},  // { campaignId: last "select next N units" value }
 };
 
 // ── NAV TOGGLE ───────────────────────────────────────────────
@@ -227,6 +233,92 @@ window.poDismissReleaseBanner = function(id) {
   checkReleaseDates();
 };
 
+// ── SHARED FILTERING ─────────────────────────────────────────
+// One place that decides which orders are "visible" — used by the table,
+// the selection bar, "select next N units", and both release buttons.
+const PO_ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
+
+const PO_HOLD_TYPES = [
+  { key: 'operator',   label: 'Operator Hold',   test: function(o){ return !!o.operatorHold; } },
+  { key: 'date',       label: 'Date Hold',        test: function(o){ return !!o.holdUntil; } },
+  { key: 'allocation', label: 'Allocation Hold',  test: function(o){ return !!o.allocationHold; } },
+  { key: 'address',    label: 'Address Hold',     test: function(o){ return !!o.addressHold; } },
+];
+
+function poHoldTest(key) {
+  const h = PO_HOLD_TYPES.find(function(x){ return x.key === key; });
+  return h ? h.test : function(){ return false; };
+}
+
+function poGetFilterState(campaignId) {
+  const activeTags  = (POState.tagFilters  || {})[campaignId] || [];
+  const activeHolds = (POState.holdFilters || {})[campaignId] || [];
+  const searchTerm  = (POState.searchTerms || {})[campaignId] || '';
+  const qf          = (POState.qtyFilters  || {})[campaignId] || {};
+  const qtyMin      = (typeof qf.min === 'number') ? qf.min : null;
+  const qtyMax      = (typeof qf.max === 'number') ? qf.max : null;
+  const hasQty      = qtyMin !== null || qtyMax !== null;
+  const hasFilters  = !!(activeTags.length || activeHolds.length || searchTerm || hasQty);
+  return { activeTags, activeHolds, searchTerm, qtyMin, qtyMax, hasQty, hasFilters };
+}
+
+function poGetFilteredOrders(campaignId) {
+  const orders = POState.orders[campaignId] || [];
+  const f = poGetFilterState(campaignId);
+  const term = f.searchTerm.toLowerCase();
+  return orders.filter(function(o) {
+    if (f.activeTags.length && !f.activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
+    if (f.activeHolds.length && !f.activeHolds.some(function(hk){ return poHoldTest(hk)(o); })) return false;
+    if (term && !(o.orderNumber || '').toLowerCase().includes(term)) return false;
+    if (f.qtyMin !== null && o.qty < f.qtyMin) return false;
+    if (f.qtyMax !== null && o.qty > f.qtyMax) return false;
+    return true;
+  });
+}
+
+// Selected orders = selected AND currently visible under the filters
+function poGetSelectedOrders(campaignId) {
+  const sel = (POState.selected || {})[campaignId] || {};
+  return poGetFilteredOrders(campaignId).filter(function(o){ return !!sel[o.orderId]; });
+}
+
+function poSumUnits(orders) {
+  return orders.reduce(function(s, o){ return s + (o.qty || 0); }, 0);
+}
+
+// Drop any selected orders that are no longer visible — what you see is what you release
+function poPruneSelection(campaignId) {
+  const sel = (POState.selected || {})[campaignId];
+  if (!sel) return;
+  const visible = new Set(poGetFilteredOrders(campaignId).map(function(o){ return o.orderId; }));
+  Object.keys(sel).forEach(function(id){ if (!visible.has(id)) delete sel[id]; });
+}
+
+// Called whenever a filter changes
+function poOnFilterChange(campaignId) {
+  const f = poGetFilterState(campaignId);
+  if (!POState.expandedOrders) POState.expandedOrders = {};
+  if (f.activeTags.length || f.activeHolds.length || f.hasQty) POState.expandedOrders[campaignId] = true;
+  poPruneSelection(campaignId);
+  poRenderKeepFocus();
+}
+
+// Re-render without losing focus/caret in the search or qty inputs
+function poRenderKeepFocus() {
+  const ae = document.activeElement;
+  const focusId = ae && ae.id ? ae.id : null;
+  let selStart = null, selEnd = null;
+  try { if (ae && ae.type === 'text') { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } } catch(e) {}
+  renderPreOrders();
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) {
+      el.focus();
+      try { if (selStart !== null) el.setSelectionRange(selStart, selEnd); } catch(e) {}
+    }
+  }
+}
+
 // ── MAIN RENDER ───────────────────────────────────────────────
 function renderPreOrders() {
   const body = document.getElementById('po-body');
@@ -284,14 +376,27 @@ function renderPreOrders() {
       searchInput.addEventListener('input', function() {
         if (!POState.searchTerms) POState.searchTerms = {};
         POState.searchTerms[c.id] = this.value;
-        poFilterInPlace(c.id);
+        poOnFilterChange(c.id);
       });
     }
 
+    // Attach qty min/max listeners
+    ['min', 'max'].forEach(function(which) {
+      const input = document.getElementById('po-qty' + which + '-' + c.id);
+      if (!input) return;
+      input.addEventListener('input', function() {
+        if (!POState.qtyFilters) POState.qtyFilters = {};
+        if (!POState.qtyFilters[c.id]) POState.qtyFilters[c.id] = { min: null, max: null };
+        const raw = this.value.trim();
+        const parsed = raw === '' ? null : parseInt(raw, 10);
+        POState.qtyFilters[c.id][which] = (parsed === null || isNaN(parsed)) ? null : parsed;
+        poOnFilterChange(c.id);
+      });
+    });
+
     // Attach tag pill listeners
     const orders = POState.orders[c.id] || [];
-    const ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
-    const presentTags = ALLOWED_TAGS.filter(t =>
+    const presentTags = PO_ALLOWED_TAGS.filter(t =>
       orders.some(o => (o.tags||[]).some(ot => ot.toLowerCase() === t.toLowerCase()))
     );
     presentTags.forEach(function(tag) {
@@ -303,13 +408,13 @@ function renderPreOrders() {
         const tagIdx = POState.tagFilters[c.id].indexOf(tag);
         if (tagIdx > -1) POState.tagFilters[c.id].splice(tagIdx, 1);
         else POState.tagFilters[c.id].push(tag);
-        poFilterInPlace(c.id);
+        poOnFilterChange(c.id);
       });
     });
 
     // Hold type pill click handlers
-    const HOLD_KEYS = ['operator','date','allocation','address'];
-    HOLD_KEYS.forEach(function(hk) {
+    PO_HOLD_TYPES.forEach(function(h) {
+      const hk = h.key;
       const pill = document.getElementById('po-hold-' + c.id + '-' + hk);
       if (!pill) return;
       pill.addEventListener('click', function() {
@@ -318,9 +423,12 @@ function renderPreOrders() {
         const idx = POState.holdFilters[c.id].indexOf(hk);
         if (idx > -1) POState.holdFilters[c.id].splice(idx, 1);
         else POState.holdFilters[c.id].push(hk);
-        poFilterInPlace(c.id);
+        poOnFilterChange(c.id);
       });
     });
+
+    // Sync checkbox / selection bar state
+    poUpdateSelectionUI(c.id);
   }
 }
 
@@ -341,9 +449,13 @@ function poAttachButtons(id, isActive, isReleased) {
     r.addEventListener('click', function() { loadCampaignOrders(id); });
     d.appendChild(r);
     var isReleasing = !!(POState.releasing && POState.releasing[id]);
+    var f = poGetFilterState(id);
+    var filteredCount = poGetFilteredOrders(id).length;
     var rel = document.createElement('button');
     rel.style.cssText = 'background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;';
-    rel.innerHTML = isReleasing ? 'Releasing…' : '&#9654; Release All Holds';
+    rel.innerHTML = isReleasing ? 'Releasing…'
+      : f.hasFilters ? '&#9654; Release All Filtered (' + filteredCount + ')'
+      : '&#9654; Release All Holds';
     if (isReleasing) { rel.disabled = true; rel.style.opacity = '0.6'; rel.style.cursor = 'default'; }
     rel.addEventListener('click', function() { poConfirmRelease(id); });
     d.appendChild(rel);
@@ -387,9 +499,8 @@ function poCampaignCard(c) {
 
   const orders    = POState.orders[c.id] || [];
   const loading   = POState.loading[c.id];
-  const releasing = POState.releasing[c.id];
   const totalOrders = orders.length;
-  const totalUnits  = orders.reduce((s, o) => s + o.qty, 0);
+  const totalUnits  = poSumUnits(orders);
 
   // Countdown color
   const countdownColor = isPast ? 'var(--red)' : isToday ? 'var(--red)' : daysLeft <= 3 ? 'var(--yellow)' : 'var(--green)';
@@ -404,37 +515,19 @@ function poCampaignCard(c) {
 
   const skuList = (c.skus || []).map(s => '<code style="background:var(--surface2);padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">' + poEsc(s) + '</code>').join('');
 
-  // Order rows (show first 8, then expand)
-    // Only show these specific tags as filter options
-  const ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
-  const allTags = ALLOWED_TAGS.filter(t =>
+  // Only show these specific tags as filter options
+  const allTags = PO_ALLOWED_TAGS.filter(t =>
     (orders || []).some(o => (o.tags || []).some(ot => ot.toLowerCase() === t.toLowerCase()))
   );
-  const activeTags  = (POState.tagFilters  || {})[c.id] || [];
-  const activeHolds = (POState.holdFilters || {})[c.id] || [];
-  const searchTerm  = (POState.searchTerms || {})[c.id] || '';
+  const f = poGetFilterState(c.id);
   if (!POState.expandedOrders) POState.expandedOrders = {};
 
-  // Hold type definitions
-  const HOLD_TYPES = [
-    { key: 'operator',   label: 'Operator Hold',   test: function(o){ return !!o.operatorHold; } },
-    { key: 'date',       label: 'Date Hold',        test: function(o){ return !!o.holdUntil; } },
-    { key: 'allocation', label: 'Allocation Hold',  test: function(o){ return !!o.allocationHold; } },
-    { key: 'address',    label: 'Address Hold',     test: function(o){ return !!o.addressHold; } },
-  ];
   // Only show hold types that actually appear in the data
-  const activeHoldTypes = HOLD_TYPES.filter(function(h){ return (orders||[]).some(h.test); });
+  const activeHoldTypes = PO_HOLD_TYPES.filter(function(h){ return (orders||[]).some(h.test); });
 
-  // Apply search + tag + hold filter
-  const filteredOrders = orders.filter(o => {
-    if (activeTags.length && !activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
-    if (activeHolds.length && !activeHolds.some(function(hk){ return HOLD_TYPES.find(function(h){ return h.key===hk; }).test(o); })) return false;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      if (!o.orderNumber.toLowerCase().includes(term)) return false;
-    }
-    return true;
-  });
+  // Apply search + tag + hold + qty filter
+  const filteredOrders = poGetFilteredOrders(c.id);
+  const filteredUnits  = poSumUnits(filteredOrders);
 
   const showAll = !!POState.expandedOrders[c.id];
   const shown   = showAll ? filteredOrders : filteredOrders.slice(0, 10);
@@ -446,20 +539,28 @@ function poCampaignCard(c) {
     orderRowsHtml = '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px;">No held orders found. Refresh orders first.</div>';
   } else if (orders.length) {
     const th = 'padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);';
+    const numInput = 'padding:5px 6px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:60px;';
 
     // Search + tag filter bar
     const tagPills = allTags.map(t =>
       '<span id="po-tag-' + c.id + '-' + poEsc(t.replace(/\s+/g,'-')) + '" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px;margin-bottom:4px;'
-      + (activeTags.includes(t) ? 'background:var(--accent);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
+      + (f.activeTags.includes(t) ? 'background:var(--accent);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
       + poEsc(t) + '</span>'
     ).join('');
 
     const holdPills = activeHoldTypes.map(function(h) {
-      const isActive = activeHolds.includes(h.key);
+      const isOn = f.activeHolds.includes(h.key);
       return '<span id="po-hold-' + c.id + '-' + h.key + '" style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px;margin-bottom:4px;'
-        + (isActive ? 'background:var(--red);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
+        + (isOn ? 'background:var(--red);color:#fff;' : 'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border2);') + '">'
         + poEsc(h.label) + '</span>';
     }).join('');
+
+    const qtyFilterHtml = '<div style="display:flex;align-items:center;gap:4px;border-left:1px solid var(--border2);padding-left:10px;">'
+      + '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">Units</span>'
+      + '<input id="po-qtymin-' + c.id + '" type="number" min="0" placeholder="min" value="' + (f.qtyMin !== null ? f.qtyMin : '') + '" style="' + numInput + '" />'
+      + '<span style="color:var(--text-muted);font-size:11px;">–</span>'
+      + '<input id="po-qtymax-' + c.id + '" type="number" min="0" placeholder="max" value="' + (f.qtyMax !== null ? f.qtyMax : '') + '" style="' + numInput + '" />'
+      + '</div>';
 
     // Last refreshed timestamp
     const refreshedAt = (POState.ordersRefreshedAt || {})[c.id];
@@ -467,19 +568,42 @@ function poCampaignCard(c) {
       ? 'Last refreshed ' + timeAgo(refreshedAt)
       : 'Not yet refreshed this session';
 
-    const hasFilters = activeTags.length || activeHolds.length || searchTerm;
     const filterBar = '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface2);">'
-      + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(searchTerm) + '"'
+      + '<input id="po-search-' + c.id + '" type="text" placeholder="Search order #…" value="' + poEsc(f.searchTerm) + '"'
       + ' style="padding:5px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;width:160px;" />'
       + (allTags.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;border-right:1px solid var(--border2);padding-right:10px;margin-right:2px;">' + tagPills + '</div>' : '')
       + (activeHoldTypes.length ? '<div style="display:flex;flex-wrap:wrap;gap:0;">' + holdPills + '</div>' : '')
-      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (hasFilters ? filteredOrders.length + ' of ' + orders.length + ' orders' : '') + '</span>'
-      + (hasFilters ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
+      + qtyFilterHtml
+      + '<span id="po-filter-count-' + c.id + '" style="font-size:11px;color:var(--text-muted);">' + (f.hasFilters ? filteredOrders.length + ' of ' + orders.length + ' orders · ' + filteredUnits + ' units' : '') + '</span>'
+      + (f.hasFilters ? '' : '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + refreshedStr + '</span>')
       + '</div>';
 
+    // Selection bar — select next N units / release selected (active campaigns only)
+    const nextVal = (POState.nextUnits || {})[c.id] || '';
+    const selBar = isActive
+      ? '<div id="po-selbar-' + c.id + '" style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);">'
+        + '<span style="font-size:11px;color:var(--text-muted);">Select next</span>'
+        + '<input id="po-nextn-' + c.id + '" type="number" min="1" placeholder="units" value="' + poEsc(nextVal) + '" style="' + numInput + 'width:70px;" />'
+        + '<span style="font-size:11px;color:var(--text-muted);">units</span>'
+        + '<button class="btn-secondary btn-sm po-btn" data-action="select-next" data-cid="' + c.id + '">Select</button>'
+        + '<span style="font-size:10px;color:var(--text-dim);">(oldest first, within current filter)</span>'
+        + '<span id="po-selcount-' + c.id + '" style="margin-left:auto;font-size:12px;font-weight:600;color:var(--text);font-family:\'DM Mono\',monospace;"></span>'
+        + '<button id="po-selclear-' + c.id + '" class="btn-secondary btn-sm po-btn" data-action="clear-selection" data-cid="' + c.id + '">Clear</button>'
+        + '<button id="po-selrelease-' + c.id + '" class="po-btn" data-action="release-selected" data-cid="' + c.id + '"'
+        + ' style="background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;">&#9654; Release Selected</button>'
+        + '</div>'
+      : '';
+
+    const selHeader = isActive
+      ? '<th style="' + th + 'text-align:center;width:32px;"><input type="checkbox" class="po-sel-all" data-cid="' + c.id + '" title="Select all ' + filteredOrders.length + ' filtered orders" style="cursor:pointer;width:15px;height:15px;" /></th>'
+      : '';
+    const colCount = isActive ? 6 : 5;
+
     orderRowsHtml = filterBar
+      + selBar
       + '<table id="po-table-' + c.id + '" style="width:100%;border-collapse:collapse;font-size:12px;">'
       + '<thead><tr style="background:var(--surface2);">'
+      + selHeader
       + '<th style="'+th+'text-align:left;">Order #</th>'
       + '<th style="'+th+'text-align:left;">Date</th>'
       + '<th style="'+th+'text-align:left;">Tags</th>'
@@ -487,9 +611,10 @@ function poCampaignCard(c) {
       + '<th style="'+th+'text-align:center;">Hold</th>'
       + '</tr></thead><tbody>'
       + (shown.length ? shown.map(o => '<tr data-order-id="' + o.orderId + '" style="border-bottom:1px solid var(--border);">'
+          + (isActive ? '<td style="padding:8px 10px;text-align:center;"><input type="checkbox" class="po-sel" data-cid="' + c.id + '" data-oid="' + poEsc(o.orderId) + '" style="cursor:pointer;width:15px;height:15px;" /></td>' : '')
           + '<td style="padding:8px 10px;font-family:\'DM Mono\',monospace;font-weight:600;color:var(--accent);">' + poEsc(o.orderNumber) + '</td>'
           + '<td style="padding:8px 10px;color:var(--text-muted);white-space:nowrap;">' + new Date(o.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + '</td>'
-          + '<td style="padding:8px 10px;">' + (o.tags||[]).filter(t => ['B2B','D2C','International'].some(a => a.toLowerCase()===t.toLowerCase())).map(t => '<span style="background:var(--surface2);padding:1px 6px;border-radius:10px;font-size:10px;margin-right:3px;border:1px solid var(--border2);">' + poEsc(t) + '</span>').join('') + '</td>'
+          + '<td style="padding:8px 10px;">' + (o.tags||[]).filter(t => PO_ALLOWED_TAGS.some(a => a.toLowerCase()===t.toLowerCase())).map(t => '<span style="background:var(--surface2);padding:1px 6px;border-radius:10px;font-size:10px;margin-right:3px;border:1px solid var(--border2);">' + poEsc(t) + '</span>').join('') + '</td>'
           + '<td style="padding:8px 10px;text-align:right;font-family:\'DM Mono\',monospace;font-weight:600;">' + o.qty + '</td>'
           + '<td style="padding:8px 10px;text-align:center;">'
           + (o.operatorHold ? '<span style="color:var(--red);font-size:11px;font-weight:700;">&#9632; Op Hold</span>'
@@ -497,7 +622,7 @@ function poCampaignCard(c) {
             : '<span style="color:var(--text-dim);font-size:11px;">&#9633; Open</span>')
           + '</td>'
           + '</tr>').join('')
-        : '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">No orders match this filter.</td></tr>')
+        : '<tr><td colspan="' + colCount + '" style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">No orders match this filter.</td></tr>')
       + '</tbody></table>'
       + (filteredOrders.length > 10
         ? '<div style="text-align:center;padding:10px;border-top:1px solid var(--border);">'
@@ -527,6 +652,7 @@ function poCampaignCard(c) {
     + '</div>'
     + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">'
     + '&#128197; Release: <strong>' + new Date(c.releaseDate).toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'}) + '</strong>'
+    + (c.releasedCount ? ' &nbsp;·&nbsp; ' + c.releasedCount + ' orders released so far' : '')
     + '</div>'
     + '<div>' + skuList + '</div>'
     + '</div>'
@@ -554,6 +680,137 @@ function poCampaignCard(c) {
     + '</div>';
 }
 
+// ── SELECTION ─────────────────────────────────────────────────
+// Updates checkboxes, header checkbox and the selection bar in place (no re-render)
+function poUpdateSelectionUI(campaignId) {
+  const sel        = (POState.selected || {})[campaignId] || {};
+  const filtered   = poGetFilteredOrders(campaignId);
+  const selOrders  = filtered.filter(function(o){ return !!sel[o.orderId]; });
+  const selUnits   = poSumUnits(selOrders);
+  const isReleasing = !!(POState.releasing && POState.releasing[campaignId]);
+
+  // Row checkboxes + highlight
+  document.querySelectorAll('#po-table-' + campaignId + ' .po-sel').forEach(function(cb) {
+    const on = !!sel[cb.dataset.oid];
+    cb.checked = on;
+    cb.disabled = isReleasing;
+    const row = cb.closest('tr');
+    if (row) row.style.background = on ? 'var(--surface2)' : '';
+  });
+
+  // Header checkbox
+  const all = document.querySelector('#po-table-' + campaignId + ' .po-sel-all');
+  if (all) {
+    all.checked = filtered.length > 0 && selOrders.length === filtered.length;
+    all.indeterminate = selOrders.length > 0 && selOrders.length < filtered.length;
+    all.disabled = isReleasing;
+  }
+
+  // Selection count
+  const countEl = document.getElementById('po-selcount-' + campaignId);
+  if (countEl) {
+    countEl.textContent = selOrders.length
+      ? selOrders.length + ' order' + (selOrders.length === 1 ? '' : 's') + ' · ' + selUnits + ' unit' + (selUnits === 1 ? '' : 's') + ' selected'
+      : 'Nothing selected';
+    countEl.style.color = selOrders.length ? 'var(--text)' : 'var(--text-muted)';
+  }
+
+  // Release Selected button
+  const relBtn = document.getElementById('po-selrelease-' + campaignId);
+  if (relBtn) {
+    const enabled = selOrders.length > 0 && !isReleasing;
+    relBtn.disabled = !enabled;
+    relBtn.style.opacity = enabled ? '1' : '0.45';
+    relBtn.style.cursor = enabled ? 'pointer' : 'default';
+    relBtn.innerHTML = isReleasing ? 'Releasing…' : '&#9654; Release Selected' + (selOrders.length ? ' (' + selUnits + ' units)' : '');
+  }
+  const clearBtn = document.getElementById('po-selclear-' + campaignId);
+  if (clearBtn) clearBtn.disabled = !selOrders.length || isReleasing;
+}
+
+function poToggleOrder(campaignId, orderId, on) {
+  if (!POState.selected) POState.selected = {};
+  if (!POState.selected[campaignId]) POState.selected[campaignId] = {};
+  if (on) POState.selected[campaignId][orderId] = true;
+  else delete POState.selected[campaignId][orderId];
+  poUpdateSelectionUI(campaignId);
+}
+
+function poToggleAll(campaignId, on) {
+  if (!POState.selected) POState.selected = {};
+  const sel = {};
+  if (on) poGetFilteredOrders(campaignId).forEach(function(o){ sel[o.orderId] = true; });
+  POState.selected[campaignId] = sel;
+  poUpdateSelectionUI(campaignId);
+}
+
+// Oldest-first within the current filter; stops before going over the cap
+// (strict first-ordered, first-shipped — never skips an older order to fill the gap)
+function poSelectNextUnits(campaignId) {
+  const input = document.getElementById('po-nextn-' + campaignId);
+  const cap = parseInt(input ? input.value : '', 10);
+  if (!cap || cap < 1) { toast('Enter how many units to select.', 'error'); return; }
+  if (!POState.nextUnits) POState.nextUnits = {};
+  POState.nextUnits[campaignId] = cap;
+
+  const filtered = poGetFilteredOrders(campaignId);
+  if (!filtered.length) { toast('No orders match the current filter.', 'error'); return; }
+
+  const sel = {};
+  let selectedUnits = 0;
+  let selectedCount = 0;
+  for (const o of filtered) {
+    const nextTotal = selectedUnits + o.qty;
+    if (nextTotal > cap) break;
+    sel[o.orderId] = true;
+    selectedUnits = nextTotal;
+    selectedCount++;
+  }
+
+  if (!selectedCount) {
+    toast('The oldest matching order (' + filtered[0].orderNumber + ') has ' + filtered[0].qty + ' units — more than ' + cap + '. Raise the number or select it by hand.', 'error');
+    return;
+  }
+
+  if (!POState.selected) POState.selected = {};
+  POState.selected[campaignId] = sel;
+  if (!POState.expandedOrders) POState.expandedOrders = {};
+  POState.expandedOrders[campaignId] = true;
+  renderPreOrders();
+  toast('Selected ' + selectedCount + ' orders · ' + selectedUnits + ' units.', 'success');
+}
+
+// Checkbox change events (delegated — survives re-renders)
+document.addEventListener('change', function(e) {
+  const t = e.target;
+  if (!t || !t.classList) return;
+  if (t.classList.contains('po-sel'))     { poToggleOrder(t.dataset.cid, t.dataset.oid, t.checked); return; }
+  if (t.classList.contains('po-sel-all')) { poToggleAll(t.dataset.cid, t.checked); return; }
+});
+
+// Enter in the "select next" box = click Select
+document.addEventListener('keydown', function(e) {
+  const t = e.target;
+  if (e.key !== 'Enter' || !t || !t.id || t.id.indexOf('po-nextn-') !== 0) return;
+  e.preventDefault();
+  poSelectNextUnits(t.id.replace('po-nextn-', ''));
+});
+
+// ── STATUS BAR ───────────────────────────────────────────────
+function poSetStatus(msg, pct) {
+  const bar = document.getElementById('po-status-bar');
+  const txt = document.getElementById('po-status-text');
+  const prg = document.getElementById('po-status-progress');
+  if (!bar) return;
+  bar.style.display = 'flex';
+  if (txt) txt.textContent = msg;
+  if (prg) prg.style.width = (pct || 0) + '%';
+}
+function poHideStatus() {
+  const bar = document.getElementById('po-status-bar');
+  if (bar) bar.style.display = 'none';
+}
+
 // ── LOAD HELD ORDERS FOR A CAMPAIGN ──────────────────────────
 window.loadCampaignOrders = async function(campaign) {
   const c = typeof campaign === 'string'
@@ -564,29 +821,14 @@ window.loadCampaignOrders = async function(campaign) {
 
   POState.loading[c.id] = true;
 
-  // Show status bar
-  function setStatus(msg, pct) {
-    const bar = document.getElementById('po-status-bar');
-    const txt = document.getElementById('po-status-text');
-    const prg = document.getElementById('po-status-progress');
-    if (!bar) return;
-    bar.style.display = 'flex';
-    if (txt) txt.textContent = msg;
-    if (prg) prg.style.width = (pct || 0) + '%';
-  }
-  function hideStatus() {
-    const bar = document.getElementById('po-status-bar');
-    if (bar) bar.style.display = 'none';
-  }
-
-  setStatus('Connecting to Packiyo…', 5);
+  poSetStatus('Connecting to Packiyo…', 5);
 
   try {
     // Fetch only operator-held orders — these are the pre-orders
     let page = 1, allOrders = [], allIncluded = [];
     let lastPage = null;
     do {
-      setStatus('Fetching page ' + page + (lastPage ? ' of ' + lastPage : '') + '…', lastPage ? Math.round((page/lastPage)*80) : 10);
+      poSetStatus('Fetching page ' + page + (lastPage ? ' of ' + lastPage : '') + '…', lastPage ? Math.round((page/lastPage)*80) : 10);
       const data = await packiyoFetch('/orders', {
         'page[number]': page,
         'page[size]': 100,
@@ -600,7 +842,7 @@ window.loadCampaignOrders = async function(campaign) {
       if (page <= lastPage) await new Promise(r => setTimeout(r, 200));
     } while (page <= lastPage && page <= 50);
 
-    setStatus('Scanning ' + allOrders.length + ' orders for matching SKUs…', 85);
+    poSetStatus('Scanning ' + allOrders.length + ' orders for matching SKUs…', 85);
 
     // Build order_items lookup
     const itemsById = {};
@@ -661,6 +903,9 @@ window.loadCampaignOrders = async function(campaign) {
     if (!POState.ordersRefreshedAt) POState.ordersRefreshedAt = {};
     POState.ordersRefreshedAt[c.id] = Date.now();
 
+    // Drop any selections for orders that are no longer held
+    poPruneSelection(c.id);
+
     // Save to Gist and localStorage so orders persist across sessions
     savePreOrderData();
 
@@ -670,19 +915,28 @@ window.loadCampaignOrders = async function(campaign) {
     toast('Failed to load orders: ' + e.message, 'error');
   } finally {
     POState.loading[c.id] = false;
-    hideStatus();
+    poHideStatus();
     renderPreOrders();
   }
 };
 
 // ── RELEASE HOLDS ─────────────────────────────────────────────
+function poFilterNote(campaignId, allCount, count) {
+  const f = poGetFilterState(campaignId);
+  let note = '';
+  if (f.activeTags.length)  note += '\nTag filter: ' + f.activeTags.join(', ');
+  if (f.activeHolds.length) note += '\nHold filter: ' + f.activeHolds.map(function(hk){ return hk.charAt(0).toUpperCase()+hk.slice(1)+' Hold'; }).join(', ');
+  if (f.hasQty)             note += '\nUnits filter: ' + (f.qtyMin !== null ? f.qtyMin : 'any') + ' – ' + (f.qtyMax !== null ? f.qtyMax : 'any');
+  if (f.searchTerm)         note += '\nSearch: ' + f.searchTerm;
+  if (f.hasFilters)         note += '\n(' + count + ' of ' + allCount + ' orders)';
+  return note ? '\n' + note : '';
+}
+
 window.poConfirmRelease = function(campaignId) {
   const c = POState.campaigns.find(x => x.id === campaignId);
   if (!c) return;
   if (POState.releasing[campaignId]) { toast('Already releasing this campaign — please wait for it to finish.', 'error'); return; }
-  const allOrders   = POState.orders[campaignId] || [];
-  const activeTags  = (POState.tagFilters  || {})[campaignId] || [];
-  const activeHolds = (POState.holdFilters || {})[campaignId] || [];
+  const allOrders = POState.orders[campaignId] || [];
 
   if (!allOrders.length) {
     if (!confirm('No held orders loaded yet. Click Refresh Orders first, then try releasing.\n\nClick OK to refresh now.')) return;
@@ -690,25 +944,28 @@ window.poConfirmRelease = function(campaignId) {
     return;
   }
 
-  const HOLD_TESTS = {
-    operator:   function(o){ return !!o.operatorHold; },
-    date:       function(o){ return !!o.holdUntil; },
-    allocation: function(o){ return !!o.allocationHold; },
-    address:    function(o){ return !!o.addressHold; },
-  };
+  const orders = poGetFilteredOrders(campaignId);
+  if (!orders.length) { toast('No orders match the current filter.', 'error'); return; }
+  const units = poSumUnits(orders);
 
-  // Apply tag filter (AND) then hold filter (OR)
-  let orders = activeTags.length
-    ? allOrders.filter(o => activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase())))
-    : allOrders;
-  if (activeHolds.length) {
-    orders = orders.filter(o => activeHolds.some(function(hk){ return HOLD_TESTS[hk] && HOLD_TESTS[hk](o); }));
-  }
+  if (!confirm('Release ' + orders.length + ' held orders (' + units + ' units) for "' + c.name + '"?' + poFilterNote(campaignId, allOrders.length, orders.length) + '\n\nThis will clear operator_hold and hold_until. Make sure Co-Pilot hold rule is turned off first.\n\nClick OK to proceed.')) return;
+  releaseHolds(campaignId, orders);
+};
 
-  const tagNote  = activeTags.length  ? '\n\nTag filter: '       + activeTags.join(', ')                                   : '';
-  const holdNote = activeHolds.length ? '\nHold filter: '        + activeHolds.map(function(hk){ return hk.charAt(0).toUpperCase()+hk.slice(1)+' Hold'; }).join(', ') : '';
-  const countNote = (activeTags.length || activeHolds.length) ? '\n(' + orders.length + ' of ' + allOrders.length + ' orders)' : '';
-  if (!confirm('Release ' + orders.length + ' held orders for "' + c.name + '"?' + tagNote + holdNote + countNote + '\n\nThis will clear operator_hold and hold_until. Make sure Co-Pilot hold rule is turned off first.\n\nClick OK to proceed.')) return;
+window.poConfirmReleaseSelected = function(campaignId) {
+  const c = POState.campaigns.find(x => x.id === campaignId);
+  if (!c) return;
+  if (POState.releasing[campaignId]) { toast('Already releasing this campaign — please wait for it to finish.', 'error'); return; }
+  const orders = poGetSelectedOrders(campaignId);
+  if (!orders.length) { toast('No orders selected.', 'error'); return; }
+  const units = poSumUnits(orders);
+  const remainingOrders = (POState.orders[campaignId] || []).length - orders.length;
+  const remainingUnits  = poSumUnits(POState.orders[campaignId] || []) - units;
+
+  if (!confirm('Release ' + orders.length + ' selected orders (' + units + ' units) for "' + c.name + '"?'
+    + '\n\nOldest: ' + orders[0].orderNumber + '  ·  Newest: ' + orders[orders.length - 1].orderNumber
+    + '\nStill held after this wave: ' + remainingOrders + ' orders (' + remainingUnits + ' units)'
+    + '\n\nThis will clear operator_hold and hold_until. Make sure Co-Pilot hold rule is turned off first.\n\nClick OK to proceed.')) return;
   releaseHolds(campaignId, orders);
 };
 
@@ -722,8 +979,13 @@ async function releaseHolds(campaignId, orders) {
   renderPreOrders();
 
   let released = 0, failed = 0;
+  let releasedUnits = 0;
+  const releasedIds = new Set();
+  const total = orders.length;
 
-  for (const o of orders) {
+  for (let i = 0; i < total; i++) {
+    const o = orders[i];
+    poSetStatus('Releasing ' + (i + 1) + ' of ' + total + ' — ' + o.orderNumber, Math.round(((i + 1) / total) * 100));
     try {
       const res = await fetch(CONFIG.WORKER_BASE + '/packiyo/orders/' + o.orderId, {
         method: 'PATCH',
@@ -739,8 +1001,11 @@ async function releaseHolds(campaignId, orders) {
           }
         }),
       });
-      if (res.ok) { released++; }
-      else {
+      if (res.ok) {
+        released++;
+        releasedUnits += o.qty || 0;
+        releasedIds.add(o.orderId);
+      } else {
         const err = await res.text().catch(() => '');
         console.warn('Release failed for order', o.orderNumber, res.status, err);
         failed++;
@@ -753,16 +1018,21 @@ async function releaseHolds(campaignId, orders) {
     }
   }
 
+  poHideStatus();
   POState.releasing[campaignId] = false;
 
-  // Only mark as released if ALL orders were released (no tag filter active)
-  // For partial/tag-filtered releases, keep the campaign active
+  // Remove released orders from the list; failed ones stay so they can be retried
+  const remaining = (POState.orders[campaignId] || []).filter(function(o){ return !releasedIds.has(o.orderId); });
+  POState.orders[campaignId] = remaining;
+
+  // Clear released orders from the selection
+  const sel = (POState.selected || {})[campaignId];
+  if (sel) releasedIds.forEach(function(id){ delete sel[id]; });
+
+  // Only mark the campaign released once nothing is left held
   const idx = POState.campaigns.findIndex(x => x.id === campaignId);
-  const activeTags = (POState.tagFilters || {})[campaignId] || [];
-  const wasFiltered = activeTags.length > 0;
   if (idx >= 0) {
-    // Only auto-release if no tag filter (full release)
-    if (!wasFiltered) {
+    if (!remaining.length) {
       POState.campaigns[idx].status = 'released';
       POState.campaigns[idx].releasedAt = new Date().toISOString();
     }
@@ -770,35 +1040,31 @@ async function releaseHolds(campaignId, orders) {
     POState.campaigns[idx].lastReleasedAt = new Date().toISOString();
   }
 
-  // Clear order cache for this campaign so it re-scans on next refresh
-  delete POState.orders[campaignId];
-  if (POState.ordersRefreshedAt) delete POState.ordersRefreshedAt[campaignId];
-  // Also update localStorage orders cache
-  try {
-    const lsOrders = JSON.parse(localStorage.getItem(PO_LS_KEY + '_orders') || '{}');
-    if (lsOrders.orders) { delete lsOrders.orders[campaignId]; localStorage.setItem(PO_LS_KEY + '_orders', JSON.stringify(lsOrders)); }
-  } catch(e) {}
-
   await savePreOrderData();
 
-  const msg = released + ' orders released' + (failed ? ', ' + failed + ' failed (check console)' : '') + '.';
+  const msg = released + ' orders (' + releasedUnits + ' units) released'
+    + (failed ? ', ' + failed + ' failed (still listed — check console)' : '')
+    + (remaining.length ? '. ' + remaining.length + ' orders still held.' : '.');
   toast(msg, failed ? 'error' : 'success');
 
   // Show in-app notification
   if (released > 0) {
-    poShowReleaseNotification(c.name, released, failed);
+    poShowReleaseNotification(c.name, released, failed, releasedUnits, remaining.length);
   }
 
   renderPreOrders();
 }
 
-function poShowReleaseNotification(campaignName, released, failed) {
+function poShowReleaseNotification(campaignName, released, failed, units, remainingCount) {
   const notifEl = document.getElementById('po-release-notification');
   if (!notifEl) return;
   notifEl.style.display = 'flex';
   notifEl.innerHTML = '<div style="flex:1;">'
     + '<div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:2px;">&#10003; Pre-Order Released: ' + poEsc(campaignName) + '</div>'
-    + '<div style="font-size:12px;color:var(--text-muted);">' + released + ' orders released to pack queue' + (failed ? ' &nbsp;·&nbsp; <span style="color:var(--red);">' + failed + ' failed</span>' : '') + ' &nbsp;·&nbsp; ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) + '</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);">' + released + ' orders' + (units ? ' (' + units + ' units)' : '') + ' released to pack queue'
+    + (failed ? ' &nbsp;·&nbsp; <span style="color:var(--red);">' + failed + ' failed</span>' : '')
+    + (remainingCount ? ' &nbsp;·&nbsp; ' + remainingCount + ' still held' : '')
+    + ' &nbsp;·&nbsp; ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) + '</div>'
     + '</div>'
     + '<button onclick="document.getElementById(\'po-release-notification\').style.display=\'none\'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-muted);">&#x2715;</button>';
   // Auto-hide after 60s
@@ -859,6 +1125,7 @@ window.poSaveModal = function() {
       POState.campaigns[idx] = { ...POState.campaigns[idx], name, releaseDate: date, skus, notes };
       // Clear cached orders so they refresh
       delete POState.orders[_poEditId];
+      if (POState.selected) delete POState.selected[_poEditId];
     }
   } else {
     POState.campaigns.push({
@@ -884,6 +1151,7 @@ window.poDelete = function(campaignId) {
   if (!confirm('Delete campaign "' + c.name + '"? This cannot be undone.')) return;
   POState.campaigns = POState.campaigns.filter(x => x.id !== campaignId);
   delete POState.orders[campaignId];
+  if (POState.selected) delete POState.selected[campaignId];
   savePreOrderData();
   renderPreOrders();
   toast('Campaign deleted.', '');
@@ -905,92 +1173,6 @@ document.addEventListener('click', e => {
 
 // Gist integration handled via loadPreOrderData() and savePreOrderData()
 
-// ── UTILITY ───────────────────────────────────────────────────
-// ── IN-PLACE FILTER — updates order table without full re-render ──
-// Avoids losing focus on search input
-function poFilterInPlace(campaignId) {
-  const orders      = POState.orders[campaignId] || [];
-  const activeTags  = (POState.tagFilters  || {})[campaignId] || [];
-  const activeHolds = (POState.holdFilters || {})[campaignId] || [];
-  const searchTerm  = (POState.searchTerms || {})[campaignId] || '';
-
-  const HOLD_TESTS = {
-    operator:   function(o){ return !!o.operatorHold; },
-    date:       function(o){ return !!o.holdUntil; },
-    allocation: function(o){ return !!o.allocationHold; },
-    address:    function(o){ return !!o.addressHold; },
-  };
-
-  const filtered = orders.filter(o => {
-    if (activeTags.length && !activeTags.every(at => (o.tags||[]).some(t => t.toLowerCase()===at.toLowerCase()))) return false;
-    if (activeHolds.length && !activeHolds.some(function(hk){ return HOLD_TESTS[hk] && HOLD_TESTS[hk](o); })) return false;
-    if (searchTerm && !o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    return true;
-  });
-
-  // Show/hide rows by toggling display
-  const tbody = document.querySelector('#po-table-' + campaignId + ' tbody');
-  if (!tbody) { renderPreOrders(); return; }
-  const rows = [...tbody.querySelectorAll('tr[data-order-id]')];
-
-  if (rows.length < orders.length && (activeTags.length > 0 || activeHolds.length > 0)) {
-    POState.expandedOrders[campaignId] = true;
-    renderPreOrders();
-    return;
-  }
-
-  const showAll = !!(POState.expandedOrders || {})[campaignId];
-  let shown = 0;
-  rows.forEach(row => {
-    const orderId = row.dataset.orderId;
-    const order   = filtered.find(o => o.orderId === orderId);
-    const withinLimit = showAll || shown < 10;
-    if (order && withinLimit) { row.style.display = ''; shown++; }
-    else row.style.display = 'none';
-  });
-
-  // Update no-results row
-  let noResults = tbody.querySelector('.po-no-results');
-  if (!filtered.length) {
-    if (!noResults) {
-      noResults = document.createElement('tr');
-      noResults.className = 'po-no-results';
-      noResults.innerHTML = '<td colspan="5" style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px;">No orders match this filter.</td>';
-      tbody.appendChild(noResults);
-    }
-    noResults.style.display = '';
-  } else if (noResults) {
-    noResults.style.display = 'none';
-  }
-
-  // Update count label
-  const countEl = document.getElementById('po-filter-count-' + campaignId);
-  if (countEl) {
-    const hasFilters = activeTags.length || activeHolds.length || searchTerm;
-    countEl.textContent = hasFilters ? filtered.length + ' of ' + orders.length + ' orders' : '';
-  }
-
-  // Update tag pill active states
-  const ALLOWED_TAGS = ['B2B', 'D2C', 'International'];
-  ALLOWED_TAGS.forEach(tag => {
-    const pill = document.getElementById('po-tag-' + campaignId + '-' + tag.replace(/\s+/g,'-'));
-    if (!pill) return;
-    pill.style.background = activeTags.includes(tag) ? 'var(--accent)' : 'var(--surface2)';
-    pill.style.color      = activeTags.includes(tag) ? '#fff' : 'var(--text-muted)';
-    pill.style.border     = activeTags.includes(tag) ? 'none' : '1px solid var(--border2)';
-  });
-
-  // Update hold pill active states
-  const HOLD_KEYS = ['operator','date','allocation','address'];
-  HOLD_KEYS.forEach(function(hk) {
-    const pill = document.getElementById('po-hold-' + campaignId + '-' + hk);
-    if (!pill) return;
-    pill.style.background = activeHolds.includes(hk) ? 'var(--red)' : 'var(--surface2)';
-    pill.style.color      = activeHolds.includes(hk) ? '#fff' : 'var(--text-muted)';
-    pill.style.border     = activeHolds.includes(hk) ? 'none' : '1px solid var(--border2)';
-  });
-}
-
 // ── EVENT DELEGATION for campaign buttons ────────────────────
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('.po-btn');
@@ -999,10 +1181,15 @@ document.addEventListener('click', function(e) {
   const cid    = btn.dataset.cid;
   if (!action || !cid) return;
   e.stopPropagation();
+  if (btn.disabled) return;
   if (action === 'expand')  { if (!POState.expandedOrders) POState.expandedOrders = {}; POState.expandedOrders[cid] = true;  renderPreOrders(); }
   if (action === 'collapse'){ if (!POState.expandedOrders) POState.expandedOrders = {}; POState.expandedOrders[cid] = false; renderPreOrders(); }
+  if (action === 'select-next')      poSelectNextUnits(cid);
+  if (action === 'clear-selection')  poToggleAll(cid, false);
+  if (action === 'release-selected') poConfirmReleaseSelected(cid);
 });
 
+// ── UTILITY ───────────────────────────────────────────────────
 function poEsc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
