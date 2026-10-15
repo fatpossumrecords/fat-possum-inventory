@@ -70,6 +70,18 @@ async function invPackiyoFetch(path, opts) {
   return res.json();
 }
 
+// Next invoice number = highest of: stored counter, and (highest invoice number in the app + 1)
+// Prevents the counter from ever pointing at a number an existing invoice already uses.
+function invComputeNextNum(stored, invoices) {
+  let highest = 0;
+  (invoices || []).forEach(function(i) {
+    const num = parseInt(i && i.number, 10);
+    if (!isNaN(num) && num > highest) highest = num;
+  });
+  const fromInvoices = highest ? highest + 1 : INV_START_NUM;
+  return Math.max(parseInt(stored, 10) || INV_START_NUM, fromInvoices);
+}
+
 // ── GIST LOAD / SAVE ──────────────────────────────────────────
 async function invLoad() {
   try {
@@ -88,14 +100,30 @@ async function invLoad() {
     const content = await fetchGistFile(INV_GIST_FILE);
     if (content) {
       const data = JSON.parse(content);
-      InvState.invoices     = data.invoices     || [];
+      const gistInvoices   = data.invoices   || [];
+      const gistDeletedIds = new Set(data.deletedIds || []);
+      const gistIds        = new Set(gistInvoices.map(function(i) { return i.id; }));
+
+      // Safety net: invoices this browser has that the cloud copy lost
+      // (pushed to Packiyo, never deleted) get put back instead of thrown away.
+      const localOnly = (InvState.invoices || []).filter(function(i) {
+        return i && i.id && !gistIds.has(i.id) && !gistDeletedIds.has(i.id)
+          && (i.packiyoOrderId || i.status !== 'draft');
+      });
+
+      InvState.invoices     = gistInvoices.concat(localOnly);
       InvState.customers    = data.customers    || [];
       InvState.priceCatalog = data.priceCatalog || {};
-      InvState.nextNum      = data.nextNum      || INV_START_NUM;
+      InvState.nextNum      = invComputeNextNum(Math.max(data.nextNum || INV_START_NUM, InvState.nextNum || INV_START_NUM), InvState.invoices);
       InvState.credits      = data.credits      || [];
       InvState.nextCrNum    = data.nextCrNum    || 1000;
       InvState._deletedIds  = data.deletedIds   || [];
       invSaveLocal();
+      if (localOnly.length) {
+        console.warn('Invoices missing from cloud copy, restoring:', localOnly.map(function(i) { return INV_PREFIX + i.number; }));
+        if (window.toast) toast('Restored ' + localOnly.length + ' invoice(s) missing from the cloud copy: ' + localOnly.map(function(i) { return INV_PREFIX + i.number; }).join(', '), 'success');
+        invSave();
+      }
       const view = document.getElementById('view-invoices');
       if (view && !view.classList.contains('hidden') && InvState.view !== 'edit') invRender();
     }
@@ -109,11 +137,18 @@ async function invSave() {
   try {
     // Fetch current Gist state and merge before writing
     // Prevents overwriting another user's concurrent changes
+    // If the current cloud copy can't be read, DON'T write — writing blind would
+    // replace everyone else's invoices with only what this browser has.
     let base = { invoices: [], customers: [], priceCatalog: {}, nextNum: INV_START_NUM };
     try {
       const content = await fetchGistFile(INV_GIST_FILE);
       if (content) base = JSON.parse(content);
-    } catch(e) {}
+    } catch(readErr) {
+      console.warn('Invoice save skipped — could not read current cloud copy:', readErr.message);
+      if (window.toast) toast('Invoices saved on this computer only — could not reach the cloud copy. Retrying in 30s.', 'error');
+      invScheduleRetry();
+      return;
+    }
 
     // Merge: our invoices win for IDs we own, keep others' invoices we don't have
     const ourIds = new Set(InvState.invoices.map(function(i) { return i.id; }));
@@ -122,7 +157,7 @@ async function invSave() {
     const merged = theirInvoices.concat(InvState.invoices);
 
     // Take highest nextNum to avoid duplicate invoice numbers
-    const nextNum = Math.max(InvState.nextNum, base.nextNum || INV_START_NUM);
+    const nextNum = invComputeNextNum(Math.max(InvState.nextNum || INV_START_NUM, base.nextNum || INV_START_NUM), merged);
 
     // Merge customers — union by company+name
     const allCustomers = InvState.customers.slice();
@@ -150,12 +185,46 @@ async function invSave() {
       deletedIds: Array.from(deletedIds),
       savedAt: new Date().toISOString(),
     };
-    await fetch(gistUrl(creds.gistId), {
+    const payloadStr = JSON.stringify(payload);
+    if (payloadStr.length > 900000) {
+      console.warn('fp_invoices.json is ' + Math.round(payloadStr.length / 1024) + 'KB — close to the Gist 1MB limit');
+    }
+    const res = await fetch(gistUrl(creds.gistId), {
       method: 'PATCH',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
-      body: JSON.stringify({ files: { [INV_GIST_FILE]: { content: JSON.stringify(payload) } } }),
+      body: JSON.stringify({ files: { [INV_GIST_FILE]: { content: payloadStr } } }),
     });
-  } catch(e) { console.warn('Invoice save error:', e.message); }
+    if (!res.ok) {
+      const errText = await res.text().catch(function() { return ''; });
+      throw new Error('Gist save HTTP ' + res.status + ' ' + errText.slice(0, 120));
+    }
+
+    // Verify: GitHub can return 200 even when the write was cut short
+    try {
+      const check = await fetchGistFile(INV_GIST_FILE);
+      if (!check || check.length !== payloadStr.length) {
+        throw new Error('saved size ' + (check ? check.length : 0) + ' ≠ sent size ' + payloadStr.length);
+      }
+    } catch(verifyErr) {
+      throw new Error('Gist save could not be verified: ' + verifyErr.message);
+    }
+    InvState._retryCount = 0;
+  } catch(e) {
+    console.warn('Invoice save error:', e.message);
+    if (window.toast) toast('Invoice cloud save failed (' + e.message + '). Saved on this computer — retrying in 30s.', 'error');
+    invScheduleRetry();
+  }
+}
+
+// One pending retry at a time, gives up after 5 attempts
+function invScheduleRetry() {
+  if (InvState._retryTimer) return;
+  InvState._retryCount = (InvState._retryCount || 0) + 1;
+  if (InvState._retryCount > 5) { console.warn('Invoice save: giving up after 5 retries'); return; }
+  InvState._retryTimer = setTimeout(function() {
+    InvState._retryTimer = null;
+    invSave();
+  }, 30000);
 }
 
 function invSaveLocal() {
@@ -391,7 +460,7 @@ function invRenderLog(body) {
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
     + '<div><h2 style="margin:0;font-size:20px;">Invoices</h2>'
     + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">'
-    + 'Next: ' + INV_PREFIX + InvState.nextNum
+    + 'Next: <a href="#" onclick="event.preventDefault();invEditNextNum()" title="Change the next invoice number" style="color:var(--accent);font-weight:600;text-decoration:none;border-bottom:1px dotted var(--accent);">' + INV_PREFIX + InvState.nextNum + ' &#9998;</a>'
     + ' &nbsp;·&nbsp; ' + Object.keys(InvState.priceCatalog).length + ' prices loaded'
     + '</div></div>'
     + '<div style="display:flex;gap:8px;">'
@@ -422,11 +491,29 @@ function invRenderLog(body) {
     + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
+// ── CHANGE NEXT NUMBER ───────────────────────────────────────
+// Can only move forward — never to a number an existing invoice already uses
+window.invEditNextNum = function() {
+  const minAllowed = invComputeNextNum(INV_START_NUM, InvState.invoices);
+  const answer = prompt('Next invoice number (just the number, e.g. 1117).\n\nMust be ' + minAllowed + ' or higher.', String(InvState.nextNum));
+  if (answer === null) return;
+  const num = parseInt(String(answer).replace(/[^0-9]/g, ''), 10);
+  if (!num) { if (window.toast) toast('Enter a number.', 'error'); return; }
+  if (num < minAllowed) { if (window.toast) toast(INV_PREFIX + num + ' is already used or below the last invoice — must be ' + minAllowed + ' or higher.', 'error'); return; }
+  InvState.nextNum = num;
+  // An unpushed draft picks up the new number too
+  if (InvState.draft && !InvState.draft.packiyoOrderId && InvState.draft.number < num) InvState.draft.number = num;
+  invSaveLocal();
+  invSave();
+  invRender();
+  if (window.toast) toast('Next invoice will be ' + INV_PREFIX + num + '.', 'success');
+};
+
 // ── NEW INVOICE ───────────────────────────────────────────────
 window.invNewInvoice = function() {
   InvState.draft = {
     id: 'draft-' + Date.now(),
-    number: InvState.nextNum,
+    number: invComputeNextNum(InvState.nextNum, InvState.invoices),
     status: 'draft',
     createdAt: new Date().toISOString(),
     createdBy: (typeof State !== 'undefined' && State.user) ? { name: State.user.name, email: State.user.email, picture: State.user.picture } : null,
@@ -1203,6 +1290,11 @@ window.invPushToPackiyo = function() {
   if (inv._pushing) { if (window.toast) toast('Already pushing to Packiyo...', ''); return; }
   if (!inv.items.length) { if (window.toast) toast('Add at least one line item first.', 'error'); return; }
   if (!inv.billTo.name && !inv.billTo.company) { if (window.toast) toast('Add customer info first.', 'error'); return; }
+  // A draft started a while ago may hold a number that's since been used
+  if (!inv.packiyoOrderId) {
+    const freshNum = invComputeNextNum(InvState.nextNum, InvState.invoices.filter(function(x) { return x.id !== inv.id; }));
+    if (inv.number < freshNum) inv.number = freshNum;
+  }
   if (!confirm('Push ' + INV_PREFIX + inv.number + ' to Packiyo as a new order?\n\n' + inv.items.length + ' items · Total ' + invFmt(invCalcTotal(inv)))) return;
   // Save draft first to ensure all data is persisted before push
   const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
@@ -1274,7 +1366,34 @@ async function invCreatePackiyoOrder(inv) {
       }
     };
 
-    const orderResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
+    // Try to create the order. If Packiyo says the order number is already taken:
+    //  - PO# collision → retry using the FPINV number (PO# stays in the packing note)
+    //  - FPINV collision → move to the next FPINV number and retry (up to 25 times)
+    const startNum   = inv.number;
+    let usedPoFallback = false;
+    let orderResult = null;
+    for (let attempt = 0; attempt < 26; attempt++) {
+      try {
+        orderResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
+        break;
+      } catch(postErr) {
+        const isNumberTaken = postErr.message.includes('422') && /number/i.test(postErr.message);
+        if (!isNumberTaken) throw postErr;
+        const usingPo = orderPayload.data.attributes.number !== INV_PREFIX + inv.number;
+        if (usingPo) {
+          console.warn('PO# already exists in Packiyo, retrying with ' + INV_PREFIX + inv.number);
+          usedPoFallback = true;
+          orderPayload.data.attributes.packing_note = 'PO# ' + inv.poNumber;
+        } else {
+          console.warn(INV_PREFIX + inv.number + ' already exists in Packiyo, trying ' + INV_PREFIX + (inv.number + 1));
+          inv.number++;
+        }
+        orderPayload.data.attributes.number      = INV_PREFIX + inv.number;
+        orderPayload.data.attributes.external_id = INV_PREFIX + inv.number + '-' + Date.now().toString().slice(-6);
+      }
+    }
+    if (!orderResult) throw new Error('Could not find a free invoice number after ' + INV_PREFIX + inv.number);
+
     const orderId  = orderResult.data && orderResult.data.id;
     const orderNum = orderResult.data && orderResult.data.attributes && orderResult.data.attributes.number;
 
@@ -1284,42 +1403,20 @@ async function invCreatePackiyoOrder(inv) {
     inv.packiyoOrderId  = orderId;
     inv.packiyoOrderNum = orderNum || null;
     inv.sentAt          = new Date().toISOString();
-    InvState.nextNum++;
+    InvState.nextNum    = Math.max(InvState.nextNum, inv.number + 1);
 
     const idx = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
     if (idx >= 0) InvState.invoices[idx] = inv; else InvState.invoices.push(inv);
 
     await invSave();
-    if (window.toast) toast('Order #' + (orderNum||orderId) + ' created in Packiyo with ' + inv.items.length + ' items!', 'success');
+    const skipped = inv.number - startNum;
+    let note = '';
+    if (skipped > 0) note = ' (' + INV_PREFIX + startNum + (skipped > 1 ? '–' + (inv.number - 1) : '') + ' already in Packiyo, used ' + INV_PREFIX + inv.number + ')';
+    else if (usedPoFallback) note = ' (PO# already existed, used ' + INV_PREFIX + inv.number + ')';
+    if (window.toast) toast('Order #' + (orderNum||orderId) + ' created in Packiyo with ' + inv.items.length + ' items!' + note, 'success');
     invRender();
 
-
   } catch(e) {
-    // If number collision, retry without PO# as the order number
-    if (e.message.includes('422') && e.message.includes('number') && inv.poNumber) {
-      console.warn('PO# collision, retrying with FPINV number...');
-      try {
-        orderPayload.data.attributes.number = INV_PREFIX + inv.number;
-        orderPayload.data.attributes.packing_note = 'PO# ' + inv.poNumber;
-        const retryResult = await invPackiyoFetch('/orders', { method:'POST', body: JSON.stringify(orderPayload) });
-        const orderId  = retryResult.data && retryResult.data.id;
-        const orderNum = retryResult.data && retryResult.data.attributes && retryResult.data.attributes.number;
-        if (!orderId) throw new Error('No order ID returned from Packiyo on retry');
-        inv.status          = inv.paymentHold ? 'pending_payment' : 'pending_shipment';
-        inv.packiyoOrderId  = orderId;
-        inv.packiyoOrderNum = orderNum || null;
-        inv.sentAt          = new Date().toISOString();
-        InvState.nextNum++;
-        const idx = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
-        if (idx >= 0) InvState.invoices[idx] = inv; else InvState.invoices.push(inv);
-        await invSave();
-        if (window.toast) toast('Order #' + (orderNum||orderId) + ' created in Packiyo (used FPINV# as PO# already existed).', 'success');
-        invRender();
-        return;
-      } catch(e2) {
-        console.error('Retry also failed:', e2);
-      }
-    }
     console.error('Packiyo order creation failed:', e);
     if (window.toast) toast('Packiyo error: ' + e.message, 'error');
   }
