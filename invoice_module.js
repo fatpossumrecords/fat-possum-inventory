@@ -145,8 +145,8 @@ async function invSave() {
       if (content) base = JSON.parse(content);
     } catch(readErr) {
       console.warn('Invoice save skipped — could not read current cloud copy:', readErr.message);
-      if (window.toast) toast('Invoices saved on this computer only — could not reach the cloud copy. Retrying in 30s.', 'error');
-      invScheduleRetry();
+      const delay = invScheduleRetry(false);
+      if (window.toast) toast('Invoices saved on this computer only — could not reach the cloud copy.' + invRetryNote(delay), 'error');
       return;
     }
 
@@ -196,7 +196,9 @@ async function invSave() {
     });
     if (!res.ok) {
       const errText = await res.text().catch(function() { return ''; });
-      throw new Error('Gist save HTTP ' + res.status + ' ' + errText.slice(0, 120));
+      const httpErr = new Error('Gist save HTTP ' + res.status + ' ' + errText.slice(0, 120));
+      httpErr.rateLimited = res.status === 403 || res.status === 429;
+      throw httpErr;
     }
 
     // Verify: GitHub can return 200 even when the write was cut short
@@ -209,22 +211,45 @@ async function invSave() {
       throw new Error('Gist save could not be verified: ' + verifyErr.message);
     }
     InvState._retryCount = 0;
+    InvState._rateLimitCount = 0;
   } catch(e) {
     console.warn('Invoice save error:', e.message);
-    if (window.toast) toast('Invoice cloud save failed (' + e.message + '). Saved on this computer — retrying in 30s.', 'error');
-    invScheduleRetry();
+    const delay = invScheduleRetry(!!e.rateLimited);
+    if (window.toast) toast('Invoice cloud save failed (' + e.message + '). Saved on this computer.' + invRetryNote(delay), 'error');
   }
 }
 
-// One pending retry at a time, gives up after 5 attempts
-function invScheduleRetry() {
-  if (InvState._retryTimer) return;
-  InvState._retryCount = (InvState._retryCount || 0) + 1;
-  if (InvState._retryCount > 5) { console.warn('Invoice save: giving up after 5 retries'); return; }
+// One pending retry at a time. Returns the delay in ms, 0 if already pending
+// or given up, or -1 if giving up now.
+// Ordinary failures: every 30s, give up after 5 attempts (the next load
+// re-uploads anything only on this computer — see invLoad).
+// GitHub rate limit (403/429): its write lockout can last ~45 minutes, and
+// retrying every 30s just adds to it, so wait 2, 5, 10, then every 15 minutes
+// and keep going for as long as the tab is open.
+const INV_RATE_LIMIT_DELAYS_MIN = [2, 5, 10, 15];
+function invScheduleRetry(rateLimited) {
+  if (InvState._retryTimer) return 0;
+  let delay;
+  if (rateLimited) {
+    const n = InvState._rateLimitCount || 0;
+    InvState._rateLimitCount = n + 1;
+    delay = INV_RATE_LIMIT_DELAYS_MIN[Math.min(n, INV_RATE_LIMIT_DELAYS_MIN.length - 1)] * 60000;
+  } else {
+    InvState._retryCount = (InvState._retryCount || 0) + 1;
+    if (InvState._retryCount > 5) { console.warn('Invoice save: giving up after 5 retries'); return -1; }
+    delay = 30000;
+  }
   InvState._retryTimer = setTimeout(function() {
     InvState._retryTimer = null;
     invSave();
-  }, 30000);
+  }, delay);
+  return delay;
+}
+
+function invRetryNote(delay) {
+  if (delay > 0) return delay < 60000 ? ' Retrying in ' + Math.round(delay / 1000) + 's.' : ' GitHub is rate-limiting saves — retrying in ' + Math.round(delay / 60000) + ' min. Keep this tab open.';
+  if (delay < 0) return ' Stopped retrying — reload the app or make another change to try again.';
+  return '';
 }
 
 function invSaveLocal() {
