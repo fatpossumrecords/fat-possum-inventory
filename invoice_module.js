@@ -954,6 +954,21 @@ window.invToggleBillToArtist = function(checked) {
   }
 };
 
+// Flip Bill to Artist on an invoice that's already saved/sent — the monthly
+// report reads this flag, so it can be set any time before the 1st.
+window.invToggleBillToArtistSaved = function() {
+  const inv = InvState.draft;
+  if (!inv) return;
+  inv.billToArtist = !inv.billToArtist;
+  const i = InvState.invoices.findIndex(function(x) { return x.id === inv.id; });
+  if (i >= 0) InvState.invoices[i].billToArtist = inv.billToArtist;
+  else if (inv.status !== 'draft') InvState.invoices.push(JSON.parse(JSON.stringify(inv)));
+  invSaveLocal();
+  invSave();
+  invRender();
+  if (window.toast) toast(INV_PREFIX + inv.number + (inv.billToArtist ? ' will be on the Bill to Artist report.' : ' removed from the Bill to Artist report.'), 'success');
+};
+
 window.invTogglePaymentHold = function(checked) {
   InvState.draft.paymentHold = checked;
   // Update checkbox label color in place
@@ -1185,7 +1200,8 @@ function invRenderDetail(body) {
     + ((inv.status === 'pending_payment' || inv.status === 'sent') ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
     + ((inv.status === 'pending_shipment' || inv.status === 'paid' || inv.status === 'sent' || inv.status === 'shipped') && inv.packiyoOrderId ? '<button onclick="invSyncShipment()" class="btn-secondary btn-sm">&#8635; Sync from Packiyo</button>' : '')
     + ((inv.status === 'pending_payment' || inv.status === 'pending_shipment' || inv.status === 'sent') && !inv.packiyoOrderId ? '<button onclick="invRepushToPackiyo()" style="background:var(--yellow);color:#111;border:none;border-radius:4px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">&#8635; Re-push to Packiyo</button>' : '')
-    + (inv.billToArtist ? '<span style="font-size:11px;font-weight:700;background:#7c3aed;color:#fff;padding:6px 10px;border-radius:4px;">Bill to Artist</span>' : '')
+    + '<button onclick="invToggleBillToArtistSaved()" title="Include this order\'s shipping on the monthly Bill to Artist report" style="font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;padding:8px 12px;'
+    + (inv.billToArtist ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed;">&#10004; Bill to Artist' : 'background:none;color:#7c3aed;border:1px solid #7c3aed;">&#9744; Bill to Artist') + '</button>'
     + (inv.trackingNumber ? '<span style="font-size:12px;font-family:monospace;background:var(--surface2);padding:6px 12px;border-radius:4px;">&#128230; ' + invEsc(inv.trackingNumber) + '</span>' : '')
     + '<button onclick="invDelete()" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;">&#128465; Delete</button>'
     + '</div></div>'

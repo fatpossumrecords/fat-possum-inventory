@@ -99,12 +99,16 @@ async function fetchEasypostShipments(from, to) {
   return all;
 }
 
-// What the label actually cost: every fee EasyPost charged and didn't refund
-// (postage, label fee, insurance). Falls back to the purchased rate.
+// What the label actually cost: the purchased rate (your negotiated carrier
+// rate, not list/retail) plus any extra EasyPost fees charged and not refunded
+// (insurance, label fee). PostageFee is skipped since it's the rate itself.
+// Labels billed straight to your own carrier account have no fees at all.
 function easypostCost(sh) {
-  const fees = (sh.fees || []).filter(f => f.charged && !f.refunded);
-  if (fees.length) return fees.reduce((s, f) => s + parseFloat(f.amount || 0), 0);
-  return sh.selected_rate ? parseFloat(sh.selected_rate.rate || 0) : null;
+  if (!sh.selected_rate) return null;
+  const extras = (sh.fees || [])
+    .filter(f => f.charged && !f.refunded && f.type !== 'PostageFee')
+    .reduce((s, f) => s + parseFloat(f.amount || 0), 0);
+  return parseFloat(sh.selected_rate.rate || 0) + extras;
 }
 
 // Previous calendar month in Central time, or MONTH_OVERRIDE (YYYY-MM)

@@ -383,6 +383,7 @@ async function main() {
   if (!notifyLog.notified) notifyLog.notified = {};
 
   let sent = 0, skipped = 0, errors = 0;
+  let logChanged = false; // only write the log back when it actually changed — gist writes are rate limited
 
   for (const inv of invoices) {
     const invNum = inv.invoiceNumber || inv.packiyoOrderNum || inv.id;
@@ -436,6 +437,7 @@ async function main() {
       if (!toEmail) {
         console.log(`  No email address on invoice — skipping notification`);
         notifyLog.notified[invNum] = { skippedAt: new Date().toISOString(), reason: 'no_email', ...tracking };
+        logChanged = true;
         skipped++;
         continue;
       }
@@ -454,6 +456,7 @@ async function main() {
         carrier:        tracking.carrier,
         trackingNumber: tracking.trackingNumber,
       };
+      logChanged = true;
       sent++;
 
       // Throttle between emails
@@ -466,7 +469,7 @@ async function main() {
   }
 
   // Save notification log back to Gist
-  if (!DRY_RUN && (sent > 0 || Object.keys(notifyLog.notified).length > 0)) {
+  if (!DRY_RUN && logChanged) {
     console.log('\nSaving notification log to Gist…');
     await gistSet(NOTIFY_GIST_FILE, notifyLog);
   }
