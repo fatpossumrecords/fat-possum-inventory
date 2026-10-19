@@ -439,7 +439,8 @@ function invRenderLog(body) {
         const canMarkPaid = inv.status === 'pending_payment' || inv.status === 'sent';
         return '<tr data-inv-id="' + inv.id + '" style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="invOpenDetail(\'' + inv.id + '\')">'
           + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--accent);font-size:13px;">' + invEsc(INV_PREFIX + inv.number) + '</td>'
-          + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '') + '</td>'
+          + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '')
+          + (inv.billToArtist ? ' <span title="Bill to Artist" style="background:#7c3aed;color:#fff;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;vertical-align:middle;">BILL ARTIST</span>' : '') + '</td>'
           + '<td style="padding:10px 16px;font-size:12px;color:var(--text-muted);">' + invDate(inv.createdAt) + '</td>'
           + '<td style="padding:8px 16px;">'
           + (inv.createdBy ? (inv.createdBy.picture ? '<img src="' + invEsc(inv.createdBy.picture) + '" alt="' + invEsc(inv.createdBy.name || '') + '" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px;" title="' + invEsc(inv.createdBy.name) + '">' : '') + '<span style="font-size:11px;color:var(--text-muted);">' + invEsc(inv.createdBy.name || inv.createdBy.email || '') + '</span>' : '<span style="font-size:11px;color:var(--text-dim);">—</span>')
@@ -524,6 +525,7 @@ window.invNewInvoice = function() {
     shipping: { method:'', methodName:'', cost:0 },
     poNumber: '',
     paymentHold: false,
+    billToArtist: false, // shipping gets billed back to the artist on the monthly Bill to Artist report
     includeInReports: false, // set true by default if customer is in reports opt-in list
     notes: '',
     terms: 'Net 30',
@@ -649,7 +651,11 @@ function invRenderEdit(body) {
     + '<input type="checkbox" id="inv-payment-hold" ' + (inv.paymentHold?'checked':'') + ' onchange="invTogglePaymentHold(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'
     + '<span><strong style="color:' + (inv.paymentHold?'var(--red)':'var(--text)') + ';">Payment Hold</strong> <span style="font-size:11px;color:var(--text-muted);">Order enters Packiyo on hold — not pickable until payment received</span></span>'
     + '</label></div>'
-    + '<div style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;background:' + (inv.includeInReports?'rgba(30,126,74,0.08)':'var(--surface2)') + ';border:1px solid ' + (inv.includeInReports?'var(--green)':'var(--border2)') + ';border-radius:4px;">'    + '<input type="checkbox" id="inv-include-reports" ' + (inv.includeInReports?'checked':'') + ' onchange="invToggleIncludeReports(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'    + '<span><strong style="color:' + (inv.includeInReports?'var(--green)':'var(--text)') + ';">Include in Sales Reports</strong> <span style="font-size:11px;color:var(--text-muted);">This invoice will be included in monthly sales report exports</span></span>'    + '</label></div>'    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Notes</label>'
+    + '<div style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;background:' + (inv.includeInReports?'rgba(30,126,74,0.08)':'var(--surface2)') + ';border:1px solid ' + (inv.includeInReports?'var(--green)':'var(--border2)') + ';border-radius:4px;">'    + '<input type="checkbox" id="inv-include-reports" ' + (inv.includeInReports?'checked':'') + ' onchange="invToggleIncludeReports(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'    + '<span><strong style="color:' + (inv.includeInReports?'var(--green)':'var(--text)') + ';">Include in Sales Reports</strong> <span style="font-size:11px;color:var(--text-muted);">This invoice will be included in monthly sales report exports</span></span>'    + '</label></div>'    + '<div style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;background:' + (inv.billToArtist?'rgba(124,58,237,0.08)':'var(--surface2)') + ';border:1px solid ' + (inv.billToArtist?'#7c3aed':'var(--border2)') + ';border-radius:4px;">'
+    + '<input type="checkbox" id="inv-bill-artist" ' + (inv.billToArtist?'checked':'') + ' onchange="invToggleBillToArtist(this.checked)" style="width:14px;height:14px;cursor:pointer;" />'
+    + '<span><strong style="color:' + (inv.billToArtist?'#7c3aed':'var(--text)') + ';">Bill to Artist</strong> <span style="font-size:11px;color:var(--text-muted);">Shipping is billed back to the artist on the monthly report</span></span>'
+    + '</label></div>'
+    + '<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Notes</label>'
     + '<textarea id="inv-notes" rows="3" placeholder="Notes or message..." '
     + 'style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);resize:vertical;">'
     + invEsc(inv.notes) + '</textarea></div></div>'
@@ -936,6 +942,18 @@ window.invToggleIncludeReports = function(checked) {
   }
 };
 
+window.invToggleBillToArtist = function(checked) {
+  if (!InvState.draft) return;
+  InvState.draft.billToArtist = checked;
+  const label = document.querySelector('label:has(#inv-bill-artist)');
+  if (label) {
+    label.style.background = checked ? 'rgba(124,58,237,0.08)' : 'var(--surface2)';
+    label.style.border = '1px solid ' + (checked ? '#7c3aed' : 'var(--border2)');
+    const strong = label.querySelector('strong');
+    if (strong) strong.style.color = checked ? '#7c3aed' : 'var(--text)';
+  }
+};
+
 window.invTogglePaymentHold = function(checked) {
   InvState.draft.paymentHold = checked;
   // Update checkbox label color in place
@@ -1049,6 +1067,7 @@ function invCollectForm() {
   inv.terms    = g('inv-terms') || 'Net 30';
   inv.discount = parseFloat(g('inv-discount')) || 0;
   inv.includeInReports = !!(document.getElementById('inv-include-reports') && document.getElementById('inv-include-reports').checked);
+  inv.billToArtist = !!(document.getElementById('inv-bill-artist') && document.getElementById('inv-bill-artist').checked);
 
   // Auto-save/update address book — upsert by company/name
   const company = inv.billTo.company || inv.billTo.name;
@@ -1166,6 +1185,7 @@ function invRenderDetail(body) {
     + ((inv.status === 'pending_payment' || inv.status === 'sent') ? '<button onclick="invMarkPaid()" style="background:var(--green);color:#000;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#10004; Mark as Paid</button>' : '')
     + ((inv.status === 'pending_shipment' || inv.status === 'paid' || inv.status === 'sent' || inv.status === 'shipped') && inv.packiyoOrderId ? '<button onclick="invSyncShipment()" class="btn-secondary btn-sm">&#8635; Sync from Packiyo</button>' : '')
     + ((inv.status === 'pending_payment' || inv.status === 'pending_shipment' || inv.status === 'sent') && !inv.packiyoOrderId ? '<button onclick="invRepushToPackiyo()" style="background:var(--yellow);color:#111;border:none;border-radius:4px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">&#8635; Re-push to Packiyo</button>' : '')
+    + (inv.billToArtist ? '<span style="font-size:11px;font-weight:700;background:#7c3aed;color:#fff;padding:6px 10px;border-radius:4px;">Bill to Artist</span>' : '')
     + (inv.trackingNumber ? '<span style="font-size:12px;font-family:monospace;background:var(--surface2);padding:6px 12px;border-radius:4px;">&#128230; ' + invEsc(inv.trackingNumber) + '</span>' : '')
     + '<button onclick="invDelete()" style="background:none;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;">&#128465; Delete</button>'
     + '</div></div>'
@@ -1323,7 +1343,7 @@ async function invCreatePackiyoOrder(inv) {
           shipping:      inv.shipping.cost || 0,
           internal_note: inv.notes || '',
           packing_note:  inv.poNumber ? 'PO# ' + inv.poNumber : '',
-          tags:          'B2B, Invoice',
+          tags:          inv.billToArtist ? 'B2B, Invoice, Bill to Artist' : 'B2B, Invoice',
           payment_hold:  inv.paymentHold ? 1 : 0,
           is_wholesale:  true,
           shipping_method_name: inv.shipping.method || inv.shipping.methodName || '',

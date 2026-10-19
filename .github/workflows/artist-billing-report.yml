@@ -1,0 +1,44 @@
+name: Bill to Artist Report (Monthly)
+
+on:
+  schedule:
+    - cron: '0 14 1 * *'  # 9:00 AM CDT / 8:00 AM CST on the 1st — reports the previous month
+  workflow_dispatch:
+    inputs:
+      month_override:
+        description: 'Month to report (YYYY-MM). Leave blank for last month.'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Dry run — print the report without emailing (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  artist-billing-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install node-fetch@2
+
+      - name: Build and email Bill to Artist report
+        env:
+          PACKIYO_TOKEN:    ${{ secrets.PACKIYO_TOKEN }}
+          EASYPOST_API_KEY: ${{ secrets.EASYPOST_API_KEY }}
+          GIST_ID:          ${{ secrets.GIST_ID }}
+          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
+          RESEND_API_KEY:   ${{ secrets.RESEND_API_KEY }}
+          ARTIST_REPORT_TO: ${{ secrets.ARTIST_REPORT_TO }}
+          REPORT_TO:        ${{ secrets.REPORT_TO }}
+          MONTH_OVERRIDE:   ${{ github.event.inputs.month_override }}
+          DRY_RUN:          ${{ github.event.inputs.dry_run || 'false' }}
+        run: node scripts/artist-billing-report.js
