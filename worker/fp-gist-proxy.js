@@ -33,6 +33,9 @@ const GIST_ID           = 'e79a142da6ddbc0a77560802db1ce780';
 const PACKIYO_BASE      = 'https://fatpossum.app.packiyo.com/api/v1';
 const ERROR_LOG_FILE    = 'fp_error_log.json';
 const ERROR_LOG_MAX     = 200;
+const ERROR_LOG_WINDOW_MS      = 10 * 60 * 1000;
+const ERROR_LOG_MAX_PER_WINDOW = 10; // gist writes per isolate per window
+let errorLogWrites = [];
 
 const GOOGLE_CLIENT_ID  = '955463970238-o8p7ujrhusedtkavkskjhjlh87gr1844.apps.googleusercontent.com';
 const ADMIN_EMAIL       = 'patrick@fatpossum.com';
@@ -162,7 +165,29 @@ async function authenticate(request, env) {
   return { ok: true, email: verify.email, role: authz.role };
 }
 
+// Each gist log entry costs a GitHub read + a gist write. A signed-out tab
+// (expired/missing Google token) fails auth on EVERY request — e.g. ~35
+// Packiyo product pages in a few seconds — and on 2026-10-19 that turned into
+// ~100 gist writes in a few minutes, which tripped GitHub's secondary
+// (write-burst) rate limit and blocked ALL gist saves for ~45 minutes.
+// So: every failure still goes to the Worker's console (Cloudflare logs), but
+// the gist only gets one entry per (reason, email) per window, carrying a
+// count of how many repeats were folded into it. State is per isolate, which
+// is fine — it only needs to cap bursts, not be exact.
+const AUTH_LOG_WINDOW_MS = 10 * 60 * 1000;
+const authLogSeen = new Map(); // key -> { last: ms, suppressed: n }
+
 async function logAuthCheck(route, method, result, env) {
+  console.log('auth check failed', route, method, result.email || '', result.reason || '');
+  const key = (result.reason || '') + '|' + (result.email || '');
+  const now = Date.now();
+  const seen = authLogSeen.get(key);
+  if (seen && now - seen.last < AUTH_LOG_WINDOW_MS) {
+    seen.suppressed++;
+    return;
+  }
+  const suppressed = seen ? seen.suppressed : 0;
+  authLogSeen.set(key, { last: now, suppressed: 0 });
   try {
     await appendToGistLog(AUTH_LOG_FILE, {
       ts: new Date().toISOString(),
@@ -172,6 +197,7 @@ async function logAuthCheck(route, method, result, env) {
       role: result.role || '',
       reason: result.reason || '',
       mode: AUTH_MODE,
+      repeatsSincePrevEntry: suppressed,
     }, AUTH_LOG_MAX, env);
   } catch (e) { /* never let logging itself break the request */ }
 }
@@ -302,6 +328,19 @@ async function handleErrorLog(request, env) {
     user:      String(entry.user || '').slice(0, 200),
     userAgent: String(entry.userAgent || '').slice(0, 300),
   };
+
+  // Same burst risk as the auth log (see logAuthCheck): an error thrown in a
+  // loop would otherwise become a gist write per occurrence.
+  const now = Date.now();
+  errorLogWrites = errorLogWrites.filter(t => now - t < ERROR_LOG_WINDOW_MS);
+  if (errorLogWrites.length >= ERROR_LOG_MAX_PER_WINDOW) {
+    console.log('error-log write skipped (rate cap)', clean.message);
+    return new Response(JSON.stringify({ ok: true, logged: false }), {
+      status: 200,
+      headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+    });
+  }
+  errorLogWrites.push(now);
 
   try {
     await appendToGistLog(ERROR_LOG_FILE, clean, ERROR_LOG_MAX, env);
