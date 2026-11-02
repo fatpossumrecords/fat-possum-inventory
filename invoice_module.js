@@ -32,6 +32,8 @@ const InvState = {
   logFilter:    'all', // all | pending | past
   logSearch:    '',
   deletedLog:   [], // snapshots of deleted invoices, with who deleted them and when
+  artistCharges: [], // manual Bill to Artist lines (past items, things that never went through Packiyo)
+  deletedArtistChargeIds: [],
 };
 
 // Store search results for index-based add (avoids JSON-in-onclick)
@@ -93,6 +95,8 @@ async function invLoad() {
       InvState.priceCatalog = cached.priceCatalog || {};
       InvState.nextNum      = cached.nextNum      || INV_START_NUM;
       InvState.deletedLog   = cached.deletedLog   || [];
+      InvState.artistCharges = cached.artistCharges || [];
+      InvState.deletedArtistChargeIds = cached.deletedArtistChargeIds || [];
     }
   } catch(e) {}
 
@@ -121,6 +125,8 @@ async function invLoad() {
       InvState.nextCrNum    = data.nextCrNum    || 1000;
       InvState._deletedIds  = data.deletedIds   || [];
       InvState.deletedLog   = invMergeDeletedLog(data.deletedLog, InvState.deletedLog);
+      InvState.deletedArtistChargeIds = invUnion(data.deletedArtistChargeIds, InvState.deletedArtistChargeIds);
+      InvState.artistCharges = invMergeArtistCharges(data.artistCharges, InvState.artistCharges, InvState.deletedArtistChargeIds);
       invSaveLocal();
       if (localOnly.length) {
         console.warn('Invoices missing from cloud copy, restoring:', localOnly.map(function(i) { return INV_PREFIX + i.number; }));
@@ -177,9 +183,15 @@ async function invSave() {
     // Deleted-invoice log — union by id, keep everyone's entries
     const deletedLog = invMergeDeletedLog(base.deletedLog, InvState.deletedLog);
 
+    // Manual Bill to Artist lines — union by id, ours win, deletions stick
+    const deletedArtistChargeIds = invUnion(base.deletedArtistChargeIds, InvState.deletedArtistChargeIds);
+    const artistCharges = invMergeArtistCharges(base.artistCharges, InvState.artistCharges, deletedArtistChargeIds);
+
     // Update local state with merged data
     InvState.invoices     = merged;
     InvState.deletedLog   = deletedLog;
+    InvState.artistCharges = artistCharges;
+    InvState.deletedArtistChargeIds = deletedArtistChargeIds;
     InvState.nextNum      = nextNum;
     InvState.customers    = allCustomers;
     InvState.priceCatalog = priceCatalog;
@@ -191,6 +203,8 @@ async function invSave() {
       credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
       deletedIds: Array.from(deletedIds),
       deletedLog: deletedLog,
+      artistCharges: artistCharges,
+      deletedArtistChargeIds: deletedArtistChargeIds,
       savedAt: new Date().toISOString(),
     };
     const payloadStr = JSON.stringify(payload);
@@ -241,6 +255,17 @@ function invMergeDeletedLog(theirs, ours) {
   return Object.keys(byId).map(function(k) { return byId[k]; });
 }
 
+function invUnion(a, b) {
+  return Array.from(new Set((a || []).concat(b || [])));
+}
+
+function invMergeArtistCharges(theirs, ours, deletedIds) {
+  const gone = new Set(deletedIds || []);
+  const byId = {};
+  (theirs || []).concat(ours || []).forEach(function(c) { if (c && c.id && !gone.has(c.id)) byId[c.id] = c; });
+  return Object.keys(byId).map(function(k) { return byId[k]; });
+}
+
 // Keep a copy of a deleted invoice in the log, stamped with who deleted it and when
 function invLogDeletion(inv) {
   const rec = JSON.parse(JSON.stringify(inv));
@@ -259,6 +284,8 @@ function invSaveLocal() {
       credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
       deletedIds: InvState._deletedIds || [],
       deletedLog: InvState.deletedLog || [],
+      artistCharges: InvState.artistCharges || [],
+      deletedArtistChargeIds: InvState.deletedArtistChargeIds || [],
     }));
   } catch(e) {}
 }
@@ -365,6 +392,7 @@ function invRender() {
   if (InvState.view === 'edit')     return invRenderEdit(body);
   if (InvState.view === 'detail')   return invRenderDetail(body);
   if (InvState.view === 'addrbook') return invRenderAddrBook(body);
+  if (InvState.view === 'artist')   return invRenderArtistCharges(body);
 }
 
 window.switchToInvoices = function(mode) {
@@ -513,6 +541,7 @@ function invRenderLog(body) {
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="invShowPriceImport()" class="btn-secondary btn-sm">&#8593; Import Prices</button>'
     + '<button onclick="invNewInvoice()" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ New Invoice</button><button onclick="InvState.view=\'addrbook\';invRender()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:8px 14px;font-size:13px;cursor:pointer;margin-left:8px;">📋 Address Book</button>'
+    + '<button onclick="InvState.view=\'artist\';invRender()" title="Add Bill to Artist charges that didn\'t go through Packiyo" style="background:none;color:#7c3aed;border:1px solid #7c3aed;border-radius:4px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;">Bill to Artist</button>'
     + '</div></div>'
     + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">'
     + tabBtn('All', 'all') + tabBtn('Pending', 'pending') + tabBtn('Past', 'past')
@@ -537,6 +566,163 @@ function invRenderLog(body) {
     + '<th style="padding:10px 16px;width:40px;"></th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
+
+// ── BILL TO ARTIST: MANUAL CHARGES ───────────────────────────
+// Lines that go on the monthly Bill to Artist report without an invoice /
+// Packiyo order — past shipments, things shipped outside Packiyo, etc.
+// The amount is billed as entered (no materials fee added).
+window._invAcResults = [];
+
+function invRenderArtistCharges(body) {
+  const month = InvState.acMonth || '';
+  const all = (InvState.artistCharges || []).slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  const months = Array.from(new Set(all.map(function(c) { return (c.date || '').slice(0, 7); }).filter(Boolean))).sort().reverse();
+  const shown = month ? all.filter(function(c) { return (c.date || '').slice(0, 7) === month; }) : all;
+  const total = shown.reduce(function(s, c) { return s + (parseFloat(c.amount) || 0); }, 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const th = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);';
+  const td = 'padding:8px 12px;font-size:12px;';
+  const inp = 'width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);box-sizing:border-box;';
+  function field(id, label, type, extra) {
+    return '<div style="' + (extra || '') + '"><label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">' + label + '</label>'
+      + '<input id="' + id + '" type="' + (type || 'text') + '"' + (type === 'number' ? ' step="0.01" min="0"' : '') + (id === 'inv-ac-date' ? ' value="' + today + '"' : '') + (id === 'inv-ac-qty' ? ' value="1" step="1"' : '') + ' style="' + inp + '" /></div>';
+  }
+  function monthLabel(k) {
+    const parts = k.split('-');
+    return new Date(+parts[0], +parts[1] - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  const rows = shown.length ? shown.map(function(c) {
+    return '<tr style="border-bottom:1px solid var(--border);">'
+      + '<td style="' + td + 'white-space:nowrap;">' + invEsc(c.date || '') + '</td>'
+      + '<td style="' + td + 'font-weight:600;">' + invEsc(c.artist || '') + '</td>'
+      + '<td style="' + td + '">' + invEsc(c.title || '') + (c.format ? ' <span style="color:var(--text-muted);">(' + invEsc(c.format) + ')</span>' : '') + '</td>'
+      + '<td style="' + td + 'font-family:monospace;">' + invEsc(c.catalog || '') + '</td>'
+      + '<td style="' + td + 'text-align:center;">' + invEsc(c.qty || '') + '</td>'
+      + '<td style="' + td + 'font-family:monospace;font-weight:700;text-align:right;">' + invFmt(c.amount) + '</td>'
+      + '<td style="' + td + '">' + invEsc(c.recipient || '') + '</td>'
+      + '<td style="' + td + 'font-family:monospace;">' + invEsc(c.tracking || '') + '</td>'
+      + '<td style="' + td + 'color:var(--text-muted);">' + invEsc(c.ref || '') + (c.note ? '<div style="font-size:11px;">' + invEsc(c.note) + '</div>' : '') + '</td>'
+      + '<td style="' + td + 'color:var(--text-muted);font-size:11px;">' + invEsc(c.createdBy ? (c.createdBy.name || c.createdBy.email || '') : '') + '</td>'
+      + '<td style="padding:6px 10px;"><button onclick="invDeleteArtistCharge(\'' + c.id + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">&#128465;</button></td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="11" style="padding:28px;text-align:center;color:var(--text-muted);font-size:13px;">No manual charges' + (month ? ' for ' + invEsc(monthLabel(month)) : ' yet') + '.</td></tr>';
+
+  body.innerHTML = '<div style="padding:24px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+    + '<div><h2 style="margin:0;font-size:20px;color:#7c3aed;">Bill to Artist — Manual Charges</h2>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">These go on the monthly Bill to Artist report for the month of their date, alongside invoices marked Bill to Artist. Amounts are billed as entered.</div></div>'
+    + '<button onclick="InvState.view=\'log\';invRender()" class="btn-secondary btn-sm">&larr; Back to Invoices</button>'
+    + '</div>'
+
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:20px;">'
+    + '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">Add a charge</div>'
+    + '<div style="position:relative;margin-bottom:12px;">'
+    + '<input id="inv-ac-search" type="text" placeholder="Search catalog to fill in artist / title / catalog # (optional)..." oninput="invAcSearch(this.value)" style="' + inp + '" />'
+    + '<div id="inv-ac-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--surface);border:1px solid var(--border2);border-radius:4px;max-height:280px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">'
+    + field('inv-ac-date', 'Date shipped *', 'date')
+    + field('inv-ac-artist', 'Artist *')
+    + field('inv-ac-title', 'Title')
+    + field('inv-ac-catalog', 'Catalog #')
+    + field('inv-ac-upc', 'UPC')
+    + field('inv-ac-format', 'Format')
+    + field('inv-ac-qty', 'Qty', 'number')
+    + field('inv-ac-amount', 'Amount to bill * ($)', 'number')
+    + field('inv-ac-recipient', 'Shipped to')
+    + field('inv-ac-tracking', 'Tracking #')
+    + field('inv-ac-ref', 'Reference / Invoice #')
+    + field('inv-ac-note', 'Note')
+    + '</div>'
+    + '<div style="margin-top:12px;text-align:right;"><button onclick="invAddArtistCharge()" style="background:#7c3aed;color:#fff;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">+ Add Charge</button></div>'
+    + '</div>'
+
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+    + '<select onchange="InvState.acMonth=this.value;invRender()" style="padding:6px 10px;font-size:12px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--text);">'
+    + '<option value="">All months</option>'
+    + months.map(function(m) { return '<option value="' + m + '"' + (m === month ? ' selected' : '') + '>' + invEsc(monthLabel(m)) + '</option>'; }).join('')
+    + '</select>'
+    + '<div style="font-size:12px;color:var(--text-muted);">' + shown.length + ' charge' + (shown.length === 1 ? '' : 's') + ' · <strong style="color:var(--text);">' + invFmt(total) + '</strong></div>'
+    + '</div>'
+    + '<div style="background:var(--surface);border-radius:8px;border:1px solid var(--border);overflow-x:auto;">'
+    + '<table style="width:100%;border-collapse:collapse;">'
+    + '<thead><tr style="background:var(--surface2);">'
+    + ['Date', 'Artist', 'Title', 'Catalog #', 'Qty', 'Amount', 'Shipped To', 'Tracking #', 'Ref / Note', 'Added By', ''].map(function(h) { return '<th style="' + th + '">' + h + '</th>'; }).join('')
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+}
+
+window.invAcSearch = function(q) {
+  const results = document.getElementById('inv-ac-results');
+  if (!results) return;
+  if (!q || q.length < 2) { results.style.display = 'none'; return; }
+  const term = q.toLowerCase();
+  const catalog = (typeof State !== 'undefined' && State.merged) ? State.merged : [];
+  const matches = catalog.filter(function(p) {
+    return (p.artist||'').toLowerCase().includes(term)
+      || (p.title||'').toLowerCase().includes(term)
+      || (p.catalog||'').toLowerCase().includes(term)
+      || (p.upc||'').includes(term);
+  }).slice(0, 12);
+  window._invAcResults = matches;
+  if (!matches.length) { results.style.display = 'none'; return; }
+  results.innerHTML = matches.map(function(p, idx) {
+    return '<div style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'" onclick="invAcPick(' + idx + ')">'
+      + '<div style="font-size:12px;font-weight:600;">' + invEsc(p.artist||'') + ' — ' + invEsc(p.title||'') + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + invEsc(p.catalog||'') + ' &nbsp;·&nbsp; ' + invEsc(p.upc||'') + ' &nbsp;·&nbsp; ' + invEsc(p.format||'') + '</div>'
+      + '</div>';
+  }).join('');
+  results.style.display = 'block';
+};
+
+window.invAcPick = function(idx) {
+  const p = (window._invAcResults || [])[idx];
+  if (!p) return;
+  const set = function(id, v) { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set('inv-ac-artist', p.artist);
+  set('inv-ac-title', p.title);
+  set('inv-ac-catalog', p.catalog);
+  set('inv-ac-upc', p.upc);
+  set('inv-ac-format', p.format);
+  set('inv-ac-search', '');
+  const results = document.getElementById('inv-ac-results');
+  if (results) results.style.display = 'none';
+};
+
+window.invAddArtistCharge = function() {
+  const val = function(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const date = val('inv-ac-date');
+  const artist = val('inv-ac-artist');
+  const amount = parseFloat(val('inv-ac-amount'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { if (window.toast) toast('Enter the date it shipped.', 'error'); return; }
+  if (!artist) { if (window.toast) toast('Enter an artist.', 'error'); return; }
+  if (!(amount > 0)) { if (window.toast) toast('Enter the amount to bill.', 'error'); return; }
+  const charge = {
+    id: 'ac_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    date: date, artist: artist,
+    title: val('inv-ac-title'), catalog: val('inv-ac-catalog'), upc: val('inv-ac-upc'), format: val('inv-ac-format'),
+    qty: parseInt(val('inv-ac-qty'), 10) || 0,
+    amount: Math.round(amount * 100) / 100,
+    recipient: val('inv-ac-recipient'), tracking: val('inv-ac-tracking'),
+    ref: val('inv-ac-ref'), note: val('inv-ac-note'),
+    createdAt: new Date().toISOString(),
+    createdBy: (typeof State !== 'undefined' && State.user) ? { name: State.user.name, email: State.user.email } : null,
+  };
+  InvState.artistCharges = (InvState.artistCharges || []).concat([charge]);
+  InvState.acMonth = date.slice(0, 7);
+  invRender();
+  invSave();
+  if (window.toast) toast('Added ' + invFmt(charge.amount) + ' for ' + artist + '.', 'success');
+};
+
+window.invDeleteArtistCharge = function(id) {
+  const c = (InvState.artistCharges || []).find(function(x) { return x.id === id; });
+  if (!c || !confirm('Delete this ' + invFmt(c.amount) + ' charge for ' + c.artist + '?')) return;
+  InvState.artistCharges = InvState.artistCharges.filter(function(x) { return x.id !== id; });
+  InvState.deletedArtistChargeIds = invUnion(InvState.deletedArtistChargeIds, [id]);
+  invRender();
+  invSave();
+};
 
 // ── CHANGE NEXT NUMBER ───────────────────────────────────────
 // Can only move forward — never to a number an existing invoice already uses

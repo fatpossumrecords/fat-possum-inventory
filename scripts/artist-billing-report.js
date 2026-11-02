@@ -225,11 +225,41 @@ async function main() {
     epShipments.slice(0, 15).forEach(sh => console.log(`    ${sh.created_at?.slice(0, 10)}  ref=${sh.reference || '(none)'}  tracking=${sh.tracking_code || ''}`));
   }
 
+  // 4. Manual charges entered in the app (past items, things that never went
+  // through Packiyo) — billed as entered, no materials fee added
+  const manual = (invData?.artistCharges || []).filter(c => String(c.date || '').slice(0, 7) === period.key);
+  manual.forEach(c => rows.push({
+    artist: c.artist || '', title: c.title || '',
+    catalog: c.catalog || '', upc: c.upc || '', format: c.format || '',
+    qty: c.qty || '', price: Math.round((parseFloat(c.amount) || 0) * 100) / 100,
+    recipient: c.recipient || '', tracking: c.tracking || '',
+    invNum: c.ref || 'Manual', key: c.id, shippedAt: c.date,
+  }));
+  console.log(`  ${manual.length} manual charge(s) in ${period.label}`);
+
+  // "Al Green" and "AL GREEN" are the same artist — group case/space-
+  // insensitively and show the most common spelling, preferring one that
+  // isn't all caps.
+  const artistKey = a => norm(a).replace(/\s+/g, ' ');
+  const spellings = {};
+  rows.forEach(r => {
+    const name = String(r.artist || '').trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    const counts = (spellings[artistKey(name)] ||= {});
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  const isAllCaps = s => s === s.toUpperCase() && s !== s.toLowerCase();
+  const display = {};
+  Object.entries(spellings).forEach(([k, counts]) => {
+    display[k] = Object.keys(counts).sort((a, b) => (isAllCaps(a) - isAllCaps(b)) || (counts[b] - counts[a]))[0];
+  });
+  rows.forEach(r => { if (r.artist) r.artist = display[artistKey(r.artist)] || r.artist; });
+
   rows.sort((a, b) => a.artist.localeCompare(b.artist) || a.shippedAt.localeCompare(b.shippedAt));
   const total = rows.reduce((s, r) => s + (r.price || 0), 0);
   const byArtist = {};
   rows.forEach(r => { const a = r.artist || '(no artist)'; byArtist[a] = (byArtist[a] || 0) + (r.price || 0); });
-  const shipmentCount = new Set(rows.map(r => r.invNum)).size;
+  const shipmentCount = new Set(rows.map(r => r.key || r.invNum)).size;
   console.log(`\n  ${shipmentCount} shipments, ${rows.length} lines, total ${money(total)}`);
 
   // ── Build email ──
