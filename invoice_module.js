@@ -31,6 +31,7 @@ const InvState = {
   view:         'log',
   logFilter:    'all', // all | pending | past
   logSearch:    '',
+  deletedLog:   [], // snapshots of deleted invoices, with who deleted them and when
 };
 
 // Store search results for index-based add (avoids JSON-in-onclick)
@@ -91,6 +92,7 @@ async function invLoad() {
       InvState.customers    = cached.customers    || [];
       InvState.priceCatalog = cached.priceCatalog || {};
       InvState.nextNum      = cached.nextNum      || INV_START_NUM;
+      InvState.deletedLog   = cached.deletedLog   || [];
     }
   } catch(e) {}
 
@@ -118,6 +120,7 @@ async function invLoad() {
       InvState.credits      = data.credits      || [];
       InvState.nextCrNum    = data.nextCrNum    || 1000;
       InvState._deletedIds  = data.deletedIds   || [];
+      InvState.deletedLog   = invMergeDeletedLog(data.deletedLog, InvState.deletedLog);
       invSaveLocal();
       if (localOnly.length) {
         console.warn('Invoices missing from cloud copy, restoring:', localOnly.map(function(i) { return INV_PREFIX + i.number; }));
@@ -171,8 +174,12 @@ async function invSave() {
     // Price catalog — ours wins
     const priceCatalog = Object.assign({}, base.priceCatalog || {}, InvState.priceCatalog);
 
+    // Deleted-invoice log — union by id, keep everyone's entries
+    const deletedLog = invMergeDeletedLog(base.deletedLog, InvState.deletedLog);
+
     // Update local state with merged data
     InvState.invoices     = merged;
+    InvState.deletedLog   = deletedLog;
     InvState.nextNum      = nextNum;
     InvState.customers    = allCustomers;
     InvState.priceCatalog = priceCatalog;
@@ -183,6 +190,7 @@ async function invSave() {
       priceCatalog: priceCatalog, nextNum: nextNum,
       credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
       deletedIds: Array.from(deletedIds),
+      deletedLog: deletedLog,
       savedAt: new Date().toISOString(),
     };
     const payloadStr = JSON.stringify(payload);
@@ -227,6 +235,22 @@ function invScheduleRetry() {
   }, 30000);
 }
 
+function invMergeDeletedLog(theirs, ours) {
+  const byId = {};
+  (theirs || []).concat(ours || []).forEach(function(r) { if (r && r.id) byId[r.id] = r; });
+  return Object.keys(byId).map(function(k) { return byId[k]; });
+}
+
+// Keep a copy of a deleted invoice in the log, stamped with who deleted it and when
+function invLogDeletion(inv) {
+  const rec = JSON.parse(JSON.stringify(inv));
+  delete rec._pushing;
+  rec.deletedAt = new Date().toISOString();
+  rec.deletedBy = (typeof State !== 'undefined' && State.user) ? { name: State.user.name, email: State.user.email, picture: State.user.picture } : null;
+  InvState.deletedLog = (InvState.deletedLog || []).filter(function(r) { return r.id !== inv.id; });
+  InvState.deletedLog.push(rec);
+}
+
 function invSaveLocal() {
   try {
     localStorage.setItem(INV_LS_KEY, JSON.stringify({
@@ -234,6 +258,7 @@ function invSaveLocal() {
       priceCatalog: InvState.priceCatalog, nextNum: InvState.nextNum,
       credits: InvState.credits || [], nextCrNum: InvState.nextCrNum || 1000,
       deletedIds: InvState._deletedIds || [],
+      deletedLog: InvState.deletedLog || [],
     }));
   } catch(e) {}
 }
@@ -382,13 +407,15 @@ function invIsPending(inv) {
 
 function invRenderLog(body) {
   const filter = InvState.logFilter || 'all';
-  const all = InvState.invoices.slice().sort(function(a, b) { return b.number - a.number; });
+  const liveIds = new Set(InvState.invoices.map(function(i) { return i.id; }));
+  const deleted = (InvState.deletedLog || []).filter(function(r) { return !liveIds.has(r.id); });
+  const all = InvState.invoices.concat(deleted).sort(function(a, b) { return b.number - a.number; });
 
   const search = (InvState.logSearch || '').toLowerCase().trim();
   const filtered = all.filter(function(inv) {
     // Tab filter
-    if (filter === 'pending' && !(invIsPending(inv) || inv.status === 'draft')) return false;
-    if (filter === 'past'    && !invIsPast(inv)) return false;
+    if (filter === 'pending' && (inv.deletedAt || !(invIsPending(inv) || inv.status === 'draft'))) return false;
+    if (filter === 'past'    && !(inv.deletedAt || invIsPast(inv))) return false;
     // Search filter
     if (search) {
       const invNum  = (INV_PREFIX + inv.number).toLowerCase();
@@ -403,8 +430,8 @@ function invRenderLog(body) {
   function tabBtn(label, f) {
     const active = filter === f;
     const count  = all.filter(function(inv) {
-      if (f === 'pending') return invIsPending(inv) || inv.status === 'draft';
-      if (f === 'past')    return invIsPast(inv);
+      if (f === 'pending') return !inv.deletedAt && (invIsPending(inv) || inv.status === 'draft');
+      if (f === 'past')    return !!inv.deletedAt || invIsPast(inv);
       return true;
     }).length; // tab counts ignore search so you can see totals
     return '<button onclick="InvState.logFilter=\'' + f + '\';invRender()" style="padding:6px 14px;font-size:12px;font-weight:' + (active?'700':'500') + ';border:none;border-radius:4px;cursor:pointer;background:' + (active?'var(--accent)':'var(--surface2)') + ';color:' + (active?'#fff':'var(--text-muted)') + ';">'
@@ -433,8 +460,27 @@ function invRenderLog(body) {
     return '<span style="background:' + (map[s]||'#888') + ';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">' + invEsc(labels[s] || s) + '</span>';
   }
 
+  function deletedRow(inv) {
+    const who = inv.deletedBy ? (inv.deletedBy.name || inv.deletedBy.email) : 'unknown';
+    const when = new Date(inv.deletedAt).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+    return '<tr data-inv-id="' + inv.id + '" style="border-bottom:1px solid var(--border);opacity:0.6;" title="Deleted by ' + invEsc(who) + ' on ' + invEsc(when) + '">'
+      + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;color:var(--text-muted);font-size:13px;text-decoration:line-through;">' + invEsc(INV_PREFIX + inv.number) + '</td>'
+      + '<td style="padding:10px 16px;font-size:13px;">' + invEsc(inv.billTo.company || inv.billTo.name || '') + '</td>'
+      + '<td style="padding:10px 16px;font-size:12px;color:var(--text-muted);">' + invDate(inv.createdAt) + '</td>'
+      + '<td style="padding:8px 16px;font-size:11px;color:var(--text-muted);">' + invEsc(inv.createdBy ? (inv.createdBy.name || inv.createdBy.email || '') : '—') + '</td>'
+      + '<td style="padding:10px 16px;font-family:monospace;font-weight:700;font-size:13px;text-decoration:line-through;">' + invFmt(invCalcTotal(inv)) + '</td>'
+      + '<td style="padding:10px 16px;" colspan="2">'
+      + '<span style="background:var(--red);color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Deleted</span>'
+      + '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">by ' + invEsc(who) + ' · ' + invEsc(when) + '</div>'
+      + (inv.packiyoOrderId ? '<div style="font-size:11px;color:var(--text-muted);">Packiyo ' + invEsc(inv.packiyoOrderNum || inv.packiyoOrderId) + ' cancelled</div>' : '')
+      + '</td>'
+      + '<td colspan="3"></td>'
+      + '</tr>';
+  }
+
   const rows = filtered.length
     ? filtered.map(function(inv) {
+        if (inv.deletedAt) return deletedRow(inv);
         const total = invCalcTotal(inv);
         const canMarkPaid = inv.status === 'pending_payment' || inv.status === 'sent';
         return '<tr data-inv-id="' + inv.id + '" style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="invOpenDetail(\'' + inv.id + '\')">'
@@ -1468,6 +1514,7 @@ window.invDelete = function() {
   if (!confirm(msg)) return;
   InvState._deletedIds = InvState._deletedIds || [];
   InvState._deletedIds.push(inv.id);
+  invLogDeletion(inv);
   InvState.invoices = InvState.invoices.filter(function(x) { return x.id !== inv.id; });
   InvState.draft = null;
   InvState.view  = 'log';
@@ -1486,6 +1533,7 @@ window.invDeleteById = function(id) {
   if (!confirm(msg)) return;
   InvState._deletedIds = InvState._deletedIds || [];
   InvState._deletedIds.push(id);
+  invLogDeletion(inv);
   InvState.invoices = InvState.invoices.filter(function(x) { return x.id !== id; });
   invSave();
   invRender();
