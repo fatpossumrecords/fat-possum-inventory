@@ -9,7 +9,8 @@ const CCState = {
   session:    null,   // active count session
   history:    [],     // loaded from Gist
   historyLoaded: false,
-  users:      [],     // for email dropdown
+  historyFile: null,  // which Gist file history was read from (see CC_GIST_FILE_V2)
+  users:     [],     // for email dropdown
 };
 
 // Session shape:
@@ -19,7 +20,14 @@ const CCState = {
 //   currentIdx, complete, submittedAt, discrepancies: []
 // }
 
-const CC_GIST_FILE = 'fp_cycle_counts.json';
+// History lives in CC_GIST_FILE until GitHub refuses to update it. Gist
+// files can get stuck on HTTP 409 "Gist cannot be updated" after enough
+// revisions (fp_config.json hit this, see CONFIG.GIST_CONFIG_FILE), and
+// cycle counts save every 5 products. When a save still 409s after
+// retries, the history moves to CC_GIST_FILE_V2. From then on every reader
+// (this module and scripts/ship-notify.js) uses V2 whenever it exists.
+const CC_GIST_FILE    = 'fp_cycle_counts.json';
+const CC_GIST_FILE_V2 = 'fp_cycle_counts_v2.json';
 
 // Zone definitions — what sub-sections each zone has
 function ccGetSubZones(zone) {
@@ -97,9 +105,26 @@ window.ccInit = async function() {
 
 // ── GIST ─────────────────────────────────────────────────────
 
+// Read whichever history file is active: V2 once it exists, else the
+// original. Returns the file's text, or null if neither exists yet.
+async function ccFetchHistoryText() {
+  const v2 = await fetchGistFile(CC_GIST_FILE_V2);
+  if (v2) { CCState.historyFile = CC_GIST_FILE_V2; return v2; }
+  CCState.historyFile = CC_GIST_FILE;
+  return await fetchGistFile(CC_GIST_FILE);
+}
+
+async function ccPatchHistoryFile(filename, historyArr) {
+  return await fetchWithGistConflictRetry(gistUrl(CONFIG.GIST_ID), {
+    method: 'PATCH',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
+    body: JSON.stringify({ files: { [filename]: { content: JSON.stringify(historyArr) } } }),
+  });
+}
+
 async function ccLoadHistory() {
   try {
-    const content = await fetchGistFile(CC_GIST_FILE);
+    const content = await ccFetchHistoryText();
     CCState.history = content ? JSON.parse(content) : [];
     CCState.historyLoaded = true;
     ccUpdateHistoryPanel();
@@ -111,11 +136,15 @@ async function ccLoadHistory() {
 
 async function ccSaveHistory(historyArr) {
   try {
-    const res = await fetch(gistUrl(CONFIG.GIST_ID), {
-      method: 'PATCH',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
-      body: JSON.stringify({ files: { [CC_GIST_FILE]: { content: JSON.stringify(historyArr) } } }),
-    });
+    const file = CCState.historyFile || CC_GIST_FILE;
+    let res = await ccPatchHistoryFile(file, historyArr);
+    if (res.status === 409 && file === CC_GIST_FILE) {
+      // Still refused after retries: treat the original file as stuck and
+      // move the full history to V2. The old file is left as an archive.
+      console.warn('Cycle count file still 409 after retries — moving history to', CC_GIST_FILE_V2);
+      res = await ccPatchHistoryFile(CC_GIST_FILE_V2, historyArr);
+      if (res.ok) CCState.historyFile = CC_GIST_FILE_V2;
+    }
     if (!res.ok) {
       const err = await res.text();
       console.error('Cycle count Gist save failed:', res.status, err.slice(0,200));
@@ -141,7 +170,7 @@ async function ccSaveSession() {
 
   let remoteHistory = CCState.history;
   try {
-    const remoteTxt = await fetchGistFile(CC_GIST_FILE);
+    const remoteTxt = await ccFetchHistoryText();
     if (remoteTxt) remoteHistory = JSON.parse(remoteTxt);
   } catch(e) {
     console.warn('Could not fetch latest cycle count history before save — using local copy:', e.message);

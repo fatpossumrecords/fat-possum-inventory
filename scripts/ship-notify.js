@@ -491,11 +491,19 @@ main().catch(e => { console.error('Fatal:', e); process.exit(1); });
 // ── CYCLE COUNT PENDING EMAILS ────────────────────────────────
 async function processCycleCountEmails() {
   console.log('\nChecking for pending cycle count emails…');
-  let counts;
+  // The app moves cycle count history to the _v2 file if GitHub stops
+  // accepting updates to the original (see cycle_count_module.js). Use V2
+  // whenever it exists so emails and the write-back go to the live file.
+  let counts, ccFile;
   try {
-    const content = await fetchGistFile('fp_cycle_counts.json');
+    let content = await fetchGistFile('fp_cycle_counts_v2.json');
+    ccFile = 'fp_cycle_counts_v2.json';
+    if (!content) {
+      content = await fetchGistFile('fp_cycle_counts.json');
+      ccFile = 'fp_cycle_counts.json';
+    }
     counts = content ? JSON.parse(content) : [];
-  } catch(e) { console.error('  Could not load fp_cycle_counts.json:', e.message); return; }
+  } catch(e) { console.error('  Could not load cycle count history:', e.message); return; }
 
   const pending = counts.filter(c => c.complete && c.pendingEmails?.length);
   if (!pending.length) { console.log('  No pending cycle count emails'); return; }
@@ -565,6 +573,6 @@ async function processCycleCountEmails() {
 
   // Save updated counts back to Gist
   if (!DRY_RUN) {
-    await gistSet('fp_cycle_counts.json', counts);
+    await gistSet(ccFile, counts);
   }
 }
