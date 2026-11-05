@@ -162,7 +162,21 @@ async function authenticate(request, env) {
   return { ok: true, email: verify.email, role: authz.role };
 }
 
+// Every log entry is a Gist read + PATCH. A client that loads Packiyo
+// products page by page without a valid token used to log one failure
+// per page — dozens of Gist commits a minute, which collided with real
+// saves (cycle counts) and caused 409s. Log each distinct failure (route,
+// reason, email) at most once per AUTH_LOG_THROTTLE_MS per isolate.
+const AUTH_LOG_THROTTLE_MS = 10 * 60 * 1000;
+const _authLogLastSeen = new Map();
+
 async function logAuthCheck(route, method, result, env) {
+  const key = route + '|' + method + '|' + (result.reason || '') + '|' + (result.email || '');
+  const now = Date.now();
+  const last = _authLogLastSeen.get(key);
+  if (last && now - last < AUTH_LOG_THROTTLE_MS) return;
+  _authLogLastSeen.set(key, now);
+  if (_authLogLastSeen.size > 500) _authLogLastSeen.clear(); // keep memory bounded
   try {
     await appendToGistLog(AUTH_LOG_FILE, {
       ts: new Date().toISOString(),

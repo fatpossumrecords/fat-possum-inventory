@@ -571,8 +571,14 @@ async function processCycleCountEmails() {
     }
   }
 
-  // Save updated counts back to Gist
-  if (!DRY_RUN) {
-    await gistSet(ccFile, counts);
+  // Clear the sent flags on the latest copy rather than writing back the
+  // array read minutes ago, which would erase any count the app uploaded
+  // while emails were going out.
+  const sentIds = new Set(pending.filter(c => !c.pendingEmails.length).map(c => c.id));
+  if (!DRY_RUN && sentIds.size) {
+    const latestTxt = await fetchGistFile(ccFile);
+    const latest = latestTxt ? JSON.parse(latestTxt) : [];
+    for (const c of latest) if (sentIds.has(c.id)) c.pendingEmails = [];
+    await gistSet(ccFile, latest);
   }
 }

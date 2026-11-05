@@ -131,10 +131,100 @@ async function ccLoadHistory() {
   } catch(e) {
     console.warn('Cycle count history load failed:', e.message);
     CCState.history = [];
+    ccUpdateHistoryPanel();
+    return;
   }
+  // Upload anything a previous visit on this device couldn't save.
+  if (Object.keys(ccGetUnsynced()).length) ccSyncPending({ quiet: true });
 }
 
-async function ccSaveHistory(historyArr) {
+// ── LOCAL QUEUE ──────────────────────────────────────────────
+// Every save goes to this device's localStorage first, then uploads to the
+// Gist. A session stays queued until an upload that includes it succeeds,
+// so a failed save is retried automatically (every minute, when the device
+// comes back online, and on the next app load) instead of being lost.
+const CC_UNSYNCED_KEY = 'fp_cc_unsynced';
+const CC_SYNC_INTERVAL_MS = 60 * 1000;
+
+function ccGetUnsynced() {
+  try { return JSON.parse(localStorage.getItem(CC_UNSYNCED_KEY) || '{}') || {}; }
+  catch(e) { return {}; }
+}
+function ccSetUnsynced(obj) {
+  try {
+    if (Object.keys(obj).length) localStorage.setItem(CC_UNSYNCED_KEY, JSON.stringify(obj));
+    else localStorage.removeItem(CC_UNSYNCED_KEY);
+  } catch(e) { console.warn('Could not write cycle count queue to localStorage:', e.message); }
+}
+function ccQueueLocal(session) {
+  const q = ccGetUnsynced();
+  q[session.id] = JSON.parse(JSON.stringify(session));
+  ccSetUnsynced(q);
+}
+
+let _ccSyncPromise = null;
+let _ccSyncAgain = false;
+// Uploads every queued session in one Gist write. Returns true when the
+// queue is empty afterwards. Concurrent calls share one upload, plus one
+// follow-up pass if something was queued while it was running.
+function ccSyncPending(opts) {
+  if (_ccSyncPromise) { _ccSyncAgain = true; return _ccSyncPromise; }
+  _ccSyncPromise = (async () => {
+    let ok;
+    do {
+      _ccSyncAgain = false;
+      ok = await _ccSyncPendingOnce(opts || {});
+    } while (ok && _ccSyncAgain);
+    return ok;
+  })().finally(() => { _ccSyncPromise = null; ccUpdateHistoryPanel(); });
+  return _ccSyncPromise;
+}
+
+async function _ccSyncPendingOnce({ quiet }) {
+  const queued = ccGetUnsynced();
+  const ids = Object.keys(queued);
+  if (!ids.length) return true;
+
+  // Never write without the current server copy — saving a stale or empty
+  // local list could erase other people's counts. Stay queued instead.
+  let remoteHistory;
+  try {
+    const remoteTxt = await ccFetchHistoryText();
+    remoteHistory = remoteTxt ? JSON.parse(remoteTxt) : [];
+  } catch(e) {
+    console.warn('Cycle count sync: could not read latest history, will retry:', e.message);
+    if (!quiet && window.toast) toast('⚠ Count saved on this device — upload will retry automatically.', 'error');
+    return false;
+  }
+
+  const pending = ids.map(id => queued[id])
+    .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  let merged = remoteHistory.filter(h => !queued[h.id]);
+  merged = pending.concat(merged);
+  if (merged.length > 100) merged = merged.slice(0, 100);
+
+  const saved = await ccSaveHistory(merged, { quiet });
+  if (!saved) return false;
+
+  CCState.history = merged;
+  // Drop only what was uploaded unchanged; a session edited mid-upload
+  // stays queued for the next pass.
+  const now = ccGetUnsynced();
+  for (const id of ids) {
+    if (now[id] && JSON.stringify(now[id]) === JSON.stringify(queued[id])) delete now[id];
+  }
+  ccSetUnsynced(now);
+  return Object.keys(now).length === 0;
+}
+
+setInterval(() => {
+  if (Object.keys(ccGetUnsynced()).length && State.idToken) ccSyncPending({ quiet: true });
+}, CC_SYNC_INTERVAL_MS);
+window.addEventListener('online', () => {
+  if (Object.keys(ccGetUnsynced()).length) ccSyncPending({ quiet: true });
+});
+
+async function ccSaveHistory(historyArr, { quiet } = {}) {
   try {
     const file = CCState.historyFile || CC_GIST_FILE;
     let res = await ccPatchHistoryFile(file, historyArr);
@@ -148,40 +238,26 @@ async function ccSaveHistory(historyArr) {
     if (!res.ok) {
       const err = await res.text();
       console.error('Cycle count Gist save failed:', res.status, err.slice(0,200));
-      if (window.toast) toast('⚠ Cycle count save failed (' + res.status + ')', 'error');
+      if (!quiet && window.toast) toast('⚠ Upload failed (' + res.status + ') — count saved on this device, will retry automatically.', 'error');
       return false;
     }
     console.log('Cycle count saved to Gist OK, entries:', historyArr.length);
     return true;
   } catch(e) {
     console.error('Cycle count Gist save error:', e.message);
-    if (window.toast) toast('⚠ Cycle count save failed: ' + e.message, 'error');
+    if (!quiet && window.toast) toast('⚠ Upload failed — count saved on this device, will retry automatically.', 'error');
     return false;
   }
 }
 
-// Save in-progress session to Gist so it can be resumed. Upserts just this
-// session into the latest server copy of the history (by id) instead of
-// saving over it with the locally-cached array, so two people counting
-// different zones at the same time can't silently erase each other's
-// sessions the way a stale array-overwrite would.
+// Save the session so it can be resumed and reviewed. It's queued on this
+// device first, then upserted (by id) into the latest server copy of the
+// history along with anything else still queued, so two people counting
+// at once can't erase each other's sessions and a failed upload is retried.
 async function ccSaveSession() {
   if (!CCState.session) return false;
-
-  let remoteHistory = CCState.history;
-  try {
-    const remoteTxt = await ccFetchHistoryText();
-    if (remoteTxt) remoteHistory = JSON.parse(remoteTxt);
-  } catch(e) {
-    console.warn('Could not fetch latest cycle count history before save — using local copy:', e.message);
-  }
-
-  let merged = remoteHistory.filter(h => h.id !== CCState.session.id);
-  merged.unshift(CCState.session);
-  if (merged.length > 100) merged = merged.slice(0, 100);
-
-  CCState.history = merged;
-  return await ccSaveHistory(merged);
+  ccQueueLocal(CCState.session);
+  return await ccSyncPending();
 }
 
 // ── SUGGEST ──────────────────────────────────────────────────
@@ -562,6 +638,9 @@ window.ccSubmitCount = function() {
   const s    = CCState.session;
   if (!s) return;
   const item = s.items[s.currentIdx];
+  // A second Enter/tap right after the last product lands here with no
+  // item left (it was throwing "Cannot set properties of undefined").
+  if (!item) return;
   const val  = parseInt(document.getElementById('cc-actual-input')?.value);
 
   if (isNaN(val) || val < 0) {
@@ -859,7 +938,7 @@ window.ccEmailReport = async function() {
     if (saved) {
       statusEl.innerHTML = '<span style="color:var(--green);">✓ Queued — will be emailed within 30 min.</span>';
     } else {
-      statusEl.innerHTML = '<span style="color:var(--red);">⚠ Save failed — check console for errors.</span>';
+      statusEl.innerHTML = '<span style="color:#b45309;">⏳ Saved on this device — the email will queue once the upload goes through (retries automatically).</span>';
     }
   }
 };
@@ -869,13 +948,21 @@ window.ccEmailReport = async function() {
 function ccUpdateHistoryPanel() {
   const el = document.getElementById('cc-history-list');
   if (!el) return;
-  const history = CCState.history.filter(h => h.complete).slice(0, 20);
+  // Include counts saved on this device that haven't uploaded yet, flagged
+  // so it's clear they aren't in the shared history for others to see.
+  const queued = ccGetUnsynced();
+  const all = Object.values(queued).concat(CCState.history.filter(h => !queued[h.id]))
+    .sort((a, b) => String(b.submittedAt || b.startedAt).localeCompare(String(a.submittedAt || a.startedAt)));
+  const history = all.filter(h => h.complete).slice(0, 20);
   if (!history.length) { el.textContent = 'No completed counts yet.'; return; }
   el.innerHTML = history.map(h => {
     const d = new Date(h.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     const disc = (h.discrepancies||[]).length;
+    const unsynced = queued[h.id]
+      ? ' <span title="Saved on this device only — uploading automatically" style="color:#b45309;font-weight:700;">⏳ not uploaded</span>'
+      : '';
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">' +
-      '<div><span style="font-weight:600;">' + ccEsc(h.subZone) + '</span> <span style="color:var(--text-dim);">· ' + d + ' · ' + ccEsc(h.countedBy) + '</span></div>' +
+      '<div><span style="font-weight:600;">' + ccEsc(h.subZone) + '</span> <span style="color:var(--text-dim);">· ' + d + ' · ' + ccEsc(h.countedBy) + '</span>' + unsynced + '</div>' +
       '<div>' + (disc > 0 ? '<span style="color:var(--red);font-weight:700;">' + disc + ' discrepancy' + (disc > 1 ? 'ies' : '') + '</span>' : '<span style="color:var(--green);">✓ Clean</span>') + '</div>' +
       '</div>';
   }).join('');
