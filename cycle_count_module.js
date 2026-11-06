@@ -176,7 +176,7 @@ function ccSyncPending(opts) {
       ok = await _ccSyncPendingOnce(opts || {});
     } while (ok && _ccSyncAgain);
     return ok;
-  })().finally(() => { _ccSyncPromise = null; ccUpdateHistoryPanel(); });
+  })().finally(() => { _ccSyncPromise = null; ccUpdateHistoryPanel(); ccUpdateNetBanner(); });
   return _ccSyncPromise;
 }
 
@@ -256,9 +256,77 @@ async function ccSaveHistory(historyArr, { quiet } = {}) {
 // at once can't erase each other's sessions and a failed upload is retried.
 async function ccSaveSession() {
   if (!CCState.session) return false;
+  ccSaveActiveLocal();
   ccQueueLocal(CCState.session);
-  return await ccSyncPending();
+  const p = ccSyncPending();
+  ccUpdateNetBanner();
+  return await p;
 }
+
+// ── IN-PROGRESS COUNT ON THIS DEVICE ─────────────────────────
+// The count being worked on is written to localStorage after every product
+// (no network needed), so a reload, a closed tab, or Safari discarding the
+// page while wifi is down doesn't lose it. On next open the home screen
+// offers to resume it. Uploading still happens every 5 products via the
+// queue above; this copy is only for picking up where you left off.
+const CC_ACTIVE_KEY = 'fp_cc_active';
+
+function ccSaveActiveLocal() {
+  const s = CCState.session;
+  try {
+    if (s && !s.complete) localStorage.setItem(CC_ACTIVE_KEY, JSON.stringify(s));
+    else localStorage.removeItem(CC_ACTIVE_KEY);
+  } catch(e) { console.warn('Could not save in-progress count on this device:', e.message); }
+}
+function ccGetActiveLocal() {
+  try {
+    const s = JSON.parse(localStorage.getItem(CC_ACTIVE_KEY) || 'null');
+    return s && !s.complete && Array.isArray(s.items) ? s : null;
+  } catch(e) { return null; }
+}
+function ccClearActiveLocal() {
+  try { localStorage.removeItem(CC_ACTIVE_KEY); } catch(e) {}
+}
+
+window.ccResumeLocal = function() {
+  const s = ccGetActiveLocal();
+  if (!s) { ccRenderHome(); return; }
+  CCState.session = s;
+  if (s.currentIdx >= s.items.length) ccRenderComplete();
+  else ccRenderCountScreen();
+};
+window.ccDiscardLocal = function() {
+  if (!confirm('Discard the unfinished count saved on this device? Its progress will be lost.')) return;
+  ccClearActiveLocal();
+  ccRenderHome();
+};
+
+// ── CONNECTION BANNER ────────────────────────────────────────
+// Small pill at the bottom of the cycle count screen: offline, or counts
+// waiting to upload. Hidden when everything's uploaded or on other views.
+function ccUpdateNetBanner() {
+  let el = document.getElementById('cc-net-banner');
+  const area = document.getElementById('cc-content-area');
+  const visible = area && area.offsetParent !== null;
+  const waiting = Object.keys(ccGetUnsynced()).length;
+  let text = '';
+  if (!navigator.onLine) text = '📴 Offline — keep counting, it\'s saving on this device';
+  else if (waiting) text = '⏳ ' + waiting + ' count' + (waiting > 1 ? 's' : '') + ' saved on this device, uploading…';
+  if (!visible || !text) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cc-net-banner';
+    el.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;' +
+      'background:#fef3c7;border:1px solid #f59e0b;color:#92400e;border-radius:20px;padding:8px 16px;' +
+      'font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.15);max-width:calc(100% - 32px);text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.display = 'block';
+}
+window.addEventListener('offline', ccUpdateNetBanner);
+window.addEventListener('online', ccUpdateNetBanner);
+setInterval(ccUpdateNetBanner, 15 * 1000);
 
 // ── SUGGEST ──────────────────────────────────────────────────
 
@@ -416,6 +484,29 @@ function ccRenderHome() {
     '</div>';
 
   ccUpdateHistoryPanel();
+  ccRenderResumeCard();
+  ccUpdateNetBanner();
+}
+
+// Offer to pick up an unfinished count saved on this device.
+function ccRenderResumeCard() {
+  const s = ccGetActiveLocal();
+  const area = document.getElementById('cc-content-area');
+  const wrap = area && area.firstElementChild;
+  if (!s || !wrap || CCState.session) return;
+  const done = s.items.filter(i => i.status !== 'pending').length;
+  const when = new Date(s.startedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:20px;margin-bottom:24px;color:#92400e;';
+  card.innerHTML =
+    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Unfinished count on this device</div>' +
+    '<div style="font-size:18px;font-weight:700;margin-bottom:4px;">' + ccEsc(s.subZone) + ' — ' + done + ' of ' + s.items.length + ' products done</div>' +
+    '<div style="font-size:12px;margin-bottom:14px;">Started ' + ccEsc(when) + ' · ' + ccEsc(s.countedBy) + '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+    '<button onclick="ccResumeLocal()" style="background:#b45309;color:#fff;border:none;border-radius:6px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer;">▶ Resume Count</button>' +
+    '<button onclick="ccDiscardLocal()" style="background:none;color:#92400e;border:1px solid #f59e0b;border-radius:6px;padding:12px 18px;font-size:13px;cursor:pointer;">Discard</button>' +
+    '</div>';
+  wrap.insertBefore(card, wrap.firstChild);
 }
 
 window.ccUpdateBinSelect = function() {
@@ -486,6 +577,8 @@ window.ccStartManual = function() {
 window.ccStartSession = async function(subZoneId) {
   const area = document.getElementById('cc-content-area');
   if (!area) return;
+  const unfinished = ccGetActiveLocal();
+  if (unfinished && !confirm('There\'s an unfinished count for ' + unfinished.subZone + ' on this device. Start a new count and discard it?')) return;
   area.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;">Loading location data from Packiyo…</div>';
 
   try {
@@ -671,6 +764,7 @@ window.ccSubmitCount = function() {
     ccAdvance();
   } else {
     // First fail — prompt recount, stay on same item
+    ccSaveActiveLocal();
     ccRenderCountScreen();
   }
 };
@@ -686,6 +780,7 @@ async function ccAdvance() {
   const s = CCState.session;
   if (!s) return;
   s.currentIdx++;
+  ccSaveActiveLocal(); // every product, on this device — no network needed
   // Auto-save progress every 5 items
   if (s.currentIdx % 5 === 0) ccSaveSession();
 
@@ -971,6 +1066,7 @@ function ccUpdateHistoryPanel() {
 window.ccAbandonSession = function() {
   if (!confirm('Abandon this count session? Progress will be lost.')) return;
   CCState.session = null;
+  ccClearActiveLocal();
   ccRenderHome();
 };
 
