@@ -511,8 +511,9 @@ async function processCycleCountEmails() {
   for (const count of pending) {
     try {
       const discrepant = (count.discrepancies || []).length;
-      const passed     = (count.items || []).filter(i => i.status === 'pass').length;
-      const skipped    = (count.items || []).filter(i => i.status === 'skipped').length;
+      // Older sessions are compacted by the app (items emptied, summary kept).
+      const passed     = count.summary ? count.summary.passed  : (count.items || []).filter(i => i.status === 'pass').length;
+      const skipped    = count.summary ? count.summary.skipped : (count.items || []).filter(i => i.status === 'skipped').length;
       const dateStr    = new Date(count.submittedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
 
       const discRows = (count.discrepancies || []).map(d =>
@@ -528,7 +529,7 @@ async function processCycleCountEmails() {
         `<h2 style="font-family:sans-serif;">Fat Possum — Cycle Count Report</h2>` +
         `<p style="font-family:sans-serif;color:#555;">Zone: <strong>${count.subZone}</strong> &nbsp;·&nbsp; Date: ${dateStr} &nbsp;·&nbsp; Counted by: ${count.countedBy}</p>` +
         `<table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;margin-bottom:20px;">` +
-        `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Total Products</td><td style="padding:8px 16px;">${(count.items||[]).length}</td></tr>` +
+        `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Total Products</td><td style="padding:8px 16px;">${count.summary ? count.summary.total : (count.items||[]).length}</td></tr>` +
         `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Matched</td><td style="padding:8px 16px;color:green;">${passed}</td></tr>` +
         `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Discrepancies</td><td style="padding:8px 16px;color:${discrepant > 0 ? 'red' : 'green'};">${discrepant}</td></tr>` +
         `<tr><td style="padding:8px 16px;background:#f3f3f3;font-weight:700;">Skipped</td><td style="padding:8px 16px;">${skipped}</td></tr></table>` +

@@ -200,8 +200,7 @@ async function _ccSyncPendingOnce({ quiet }) {
   const pending = ids.map(id => queued[id])
     .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
   let merged = remoteHistory.filter(h => !queued[h.id]);
-  merged = pending.concat(merged);
-  if (merged.length > 100) merged = merged.slice(0, 100);
+  merged = ccCompactHistory(pending.concat(merged), queued);
 
   const saved = await ccSaveHistory(merged, { quiet });
   if (!saved) return false;
@@ -215,6 +214,61 @@ async function _ccSyncPendingOnce({ quiet }) {
   }
   ccSetUnsynced(now);
   return Object.keys(now).length === 0;
+}
+
+// Keeps the history useful as a long-running log without the file growing
+// without bound. It used to be a flat "newest 100 sessions" cap, which with
+// several sessions a day (including abandoned starts) dropped completed
+// counts within weeks — losing them from the admin log and making zones
+// look never-counted to ccSuggestSubZone.
+//   - Unfinished sessions older than 2 days are dropped (abandoned starts),
+//     unless still queued on this device.
+//   - Completed sessions keep full product lists for the newest 40; older
+//     ones keep a summary + discrepancies + skipped list only.
+//   - Hard cap of 600 sessions.
+const CC_KEEP_FULL = 40;
+const CC_MAX_SESSIONS = 600;
+const CC_STALE_UNFINISHED_MS = 2 * 24 * 60 * 60 * 1000;
+
+function ccSummarize(h) {
+  if (h.summary) return h.summary;
+  const items = h.items || [];
+  return {
+    total:     items.length,
+    passed:    items.filter(i => i.status === 'pass').length,
+    skipped:   items.filter(i => i.status === 'skipped').length,
+    recounted: items.filter(i => i.status === 'pass' && (i.attempts || 0) > 1).length,
+  };
+}
+function ccSkippedList(h) {
+  if (h.skippedItems) return h.skippedItems;
+  return (h.items || []).filter(i => i.status === 'skipped')
+    .map(i => ({ locName: i.locName, name: i.name, artist: i.artist, catalog: i.catalog, expected: i.expected }));
+}
+
+function ccCompactHistory(arr, keep) {
+  const now = Date.now();
+  let fullKept = 0;
+  const out = [];
+  const sorted = arr.slice().sort((a, b) =>
+    String(b && (b.submittedAt || b.startedAt)).localeCompare(String(a && (a.submittedAt || a.startedAt))));
+  for (const h of sorted) {
+    if (!h || !h.id) continue;
+    if (!h.complete) {
+      const age = now - new Date(h.startedAt || 0).getTime();
+      if (age > CC_STALE_UNFINISHED_MS && !(keep && keep[h.id])) continue;
+      out.push(h);
+      continue;
+    }
+    if (fullKept < CC_KEEP_FULL || !(h.items && h.items.length)) {
+      if (h.items && h.items.length) fullKept++;
+      out.push(h);
+      continue;
+    }
+    const slim = Object.assign({}, h, { summary: ccSummarize(h), skippedItems: ccSkippedList(h), items: [] });
+    out.push(slim);
+  }
+  return out.slice(0, CC_MAX_SESSIONS);
 }
 
 setInterval(() => {
@@ -478,7 +532,12 @@ function ccRenderHome() {
 
     // History
     '<div id="cc-history-panel">' +
-    '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">Recent Counts</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+    '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Recent Counts</div>' +
+    (ccIsAdmin()
+      ? '<button onclick="ccRenderLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📋 Count Log</button>'
+      : '') +
+    '</div>' +
     '<div id="cc-history-list" style="font-size:12px;color:var(--text-muted);">Loading history…</div>' +
     '</div>' +
     '</div>';
@@ -1062,6 +1121,170 @@ function ccUpdateHistoryPanel() {
       '</div>';
   }).join('');
 }
+
+// ── ADMIN COUNT LOG ───────────────────────────────────────────
+// Every session in the shared history: who, when, how long, which zone,
+// and the result — with discrepancy and skipped-product detail per count.
+
+function ccIsAdmin() {
+  const email = (typeof State !== 'undefined' && State.user?.email || '').toLowerCase();
+  return email === String(typeof ADMIN_EMAIL !== 'undefined' ? ADMIN_EMAIL : '').toLowerCase()
+    || (typeof State !== 'undefined' && State.userRole === 'admin');
+}
+
+const CCLog = { who: '', days: '7', onlyDisc: false, unfinished: false, open: {} };
+
+function ccLogSessions() {
+  const queued = ccGetUnsynced();
+  const all = Object.values(queued).concat(CCState.history.filter(h => !queued[h.id]));
+  const cutoff = CCLog.days === 'all' ? 0 : Date.now() - parseInt(CCLog.days) * 86400000;
+  return all.filter(h => {
+    if (!h.complete && !CCLog.unfinished) return false;
+    if (CCLog.who && h.countedBy !== CCLog.who) return false;
+    if (CCLog.onlyDisc && !(h.discrepancies || []).length) return false;
+    return new Date(h.submittedAt || h.startedAt).getTime() >= cutoff;
+  }).sort((a, b) => String(b.submittedAt || b.startedAt).localeCompare(String(a.submittedAt || a.startedAt)));
+}
+
+function ccFmtTime(iso) {
+  return iso ? new Date(iso).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
+}
+function ccFmtDuration(a, b) {
+  if (!a || !b) return '';
+  const m = Math.round((new Date(b) - new Date(a)) / 60000);
+  return m < 60 ? m + ' min' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+}
+
+window.ccRenderLog = async function() {
+  const area = document.getElementById('cc-content-area');
+  if (!area) return;
+  if (!ccIsAdmin()) { ccRenderHome(); return; }
+  area.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;">Loading count log…</div>';
+  await ccLoadHistory();
+  ccDrawLog();
+};
+
+window.ccLogSet = function(key, val) { CCLog[key] = val; ccDrawLog(); };
+window.ccLogToggle = function(id) { CCLog.open[id] = !CCLog.open[id]; ccDrawLog(); };
+
+function ccDrawLog() {
+  const area = document.getElementById('cc-content-area');
+  if (!area) return;
+  const queued = ccGetUnsynced();
+  const people = [...new Set(CCState.history.map(h => h.countedBy).filter(Boolean))].sort();
+  const rows = ccLogSessions();
+
+  const done = rows.filter(h => h.complete);
+  const withDisc = done.filter(h => (h.discrepancies || []).length).length;
+  const discLines = done.reduce((n, h) => n + (h.discrepancies || []).length, 0);
+  const netUnits = done.reduce((n, h) => n + (h.discrepancies || []).reduce((m, d) => m + (d.variance || 0), 0), 0);
+
+  const sel = 'padding:8px 10px;font-size:13px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);';
+  const chk = (key, label) =>
+    '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer;">' +
+    '<input type="checkbox" ' + (CCLog[key] ? 'checked ' : '') + 'onchange="ccLogSet(\'' + key + '\', this.checked)"> ' + label + '</label>';
+
+  const cards = rows.map(h => {
+    const s = ccSummarize(h);
+    const disc = h.discrepancies || [];
+    const skipped = ccSkippedList(h);
+    const open = !!CCLog.open[h.id];
+    const result = !h.complete
+      ? '<span style="color:var(--text-muted);font-weight:700;">Unfinished · ' + (h.items || []).filter(i => i.status !== 'pending').length + '/' + (h.items || []).length + '</span>'
+      : disc.length
+        ? '<span style="color:var(--red);font-weight:700;">' + disc.length + ' discrepanc' + (disc.length > 1 ? 'ies' : 'y') + '</span>'
+        : '<span style="color:var(--green);font-weight:700;">✓ Clean</span>';
+    const hasDetail = disc.length || skipped.length;
+
+    const discTable = disc.length
+      ? '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:12px 0 6px;">Discrepancies</div>' +
+        '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+        '<thead><tr style="background:var(--surface2);color:var(--text-muted);">' +
+        '<th style="padding:6px;text-align:left;">Location</th><th style="padding:6px;text-align:left;">Product</th><th style="padding:6px;text-align:left;">Catalog #</th>' +
+        '<th style="padding:6px;">Expected</th><th style="padding:6px;">Counted</th><th style="padding:6px;">Variance</th></tr></thead><tbody>' +
+        disc.map(d =>
+          '<tr style="border-bottom:1px solid var(--border);">' +
+          '<td style="padding:6px;">' + ccEsc(d.locName) + '</td>' +
+          '<td style="padding:6px;">' + ccEsc(d.artist ? d.artist + ' — ' + d.name : d.name) + '</td>' +
+          '<td style="padding:6px;font-family:monospace;">' + ccEsc(d.catalog) + '</td>' +
+          '<td style="padding:6px;text-align:center;font-family:monospace;">' + d.expected + '</td>' +
+          '<td style="padding:6px;text-align:center;font-family:monospace;">' + d.actual + '</td>' +
+          '<td style="padding:6px;text-align:center;font-family:monospace;font-weight:700;color:' + (d.variance > 0 ? 'var(--green)' : 'var(--red)') + ';">' + (d.variance > 0 ? '+' : '') + d.variance + '</td></tr>'
+        ).join('') + '</tbody></table></div>'
+      : '';
+    const skipList = skipped.length
+      ? '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin:12px 0 6px;">Skipped</div>' +
+        skipped.map(i => '<div style="font-size:12px;padding:3px 0;">' + ccEsc(i.locName) + ' · ' + ccEsc(i.artist ? i.artist + ' — ' + i.name : i.name) +
+          ' <span style="font-family:monospace;color:var(--text-dim);">' + ccEsc(i.catalog) + '</span> · expected ' + i.expected + '</div>').join('')
+      : '';
+
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;">' +
+      '<div ' + (hasDetail ? 'onclick="ccLogToggle(\'' + ccEsc(h.id) + '\')" ' : '') + 'style="' + (hasDetail ? 'cursor:pointer;' : '') + 'display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between;">' +
+      '<div><span style="font-weight:700;font-size:15px;">' + ccEsc(h.subZone) + '</span>' +
+      ' <span style="color:var(--text-muted);font-size:12px;">· ' + ccEsc(h.countedBy) + '</span>' +
+      (queued[h.id] ? ' <span style="color:#b45309;font-size:12px;font-weight:700;">⏳ not uploaded</span>' : '') + '</div>' +
+      '<div style="font-size:13px;">' + result + (hasDetail ? ' <span style="color:var(--text-dim);">' + (open ? '▾' : '▸') + '</span>' : '') + '</div>' +
+      '</div>' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' +
+      ccFmtTime(h.startedAt) + (h.submittedAt ? ' → ' + new Date(h.submittedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) + ' (' + ccFmtDuration(h.startedAt, h.submittedAt) + ')' : '') +
+      ' · ' + s.total + ' product' + (s.total === 1 ? '' : 's') + ' · ' + s.passed + ' matched' +
+      (s.recounted ? ' (' + s.recounted + ' on recount)' : '') +
+      (s.skipped ? ' · <span style="color:#b45309;">' + s.skipped + ' skipped</span>' : '') +
+      '</div>' +
+      (open ? discTable + skipList : '') +
+      '</div>';
+  }).join('');
+
+  area.innerHTML =
+    '<div style="max-width:760px;margin:0 auto;padding:24px 16px;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:16px;">' +
+    '<div style="font-size:20px;font-weight:700;">Count Log</div>' +
+    '<div style="display:flex;gap:8px;">' +
+    '<button onclick="ccLogExportCsv()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ CSV</button>' +
+    '<button onclick="ccRenderHome(); ccLoadHistory();" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">← Back</button>' +
+    '</div></div>' +
+
+    '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:16px;">' +
+    '<select onchange="ccLogSet(\'who\', this.value)" style="' + sel + '"><option value="">All employees</option>' +
+    people.map(p => '<option value="' + ccEsc(p) + '"' + (CCLog.who === p ? ' selected' : '') + '>' + ccEsc(p) + '</option>').join('') + '</select>' +
+    '<select onchange="ccLogSet(\'days\', this.value)" style="' + sel + '">' +
+    [['1','Today + yesterday'],['7','Last 7 days'],['30','Last 30 days'],['all','All time']].map(([v,l]) =>
+      '<option value="' + v + '"' + (CCLog.days === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>' +
+    chk('onlyDisc', 'Discrepancies only') + chk('unfinished', 'Show unfinished') +
+    '</div>' +
+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px;">' +
+    ccStatCard(done.length, 'Counts', 'var(--text)') +
+    ccStatCard(done.length - withDisc, 'Clean', 'var(--green)') +
+    ccStatCard(withDisc, 'With Discrepancies', withDisc ? 'var(--red)' : 'var(--green)') +
+    ccStatCard((netUnits > 0 ? '+' : '') + netUnits, 'Net Units (' + discLines + ' lines)', netUnits ? 'var(--red)' : 'var(--text)') +
+    '</div>' +
+
+    (cards || '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">No counts match these filters.</div>') +
+    '</div>';
+}
+
+// One row per discrepancy (and one per clean count) so it opens cleanly in
+// a spreadsheet.
+window.ccLogExportCsv = function() {
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const lines = [['Started','Submitted','Minutes','Employee','Zone','Products','Matched','Recounted','Skipped','Result','Location','Product','Catalog','Expected','Counted','Variance'].map(q).join(',')];
+  for (const h of ccLogSessions()) {
+    const s = ccSummarize(h);
+    const mins = h.submittedAt ? Math.round((new Date(h.submittedAt) - new Date(h.startedAt)) / 60000) : '';
+    const base = [h.startedAt, h.submittedAt || '', mins, h.countedBy, h.subZone, s.total, s.passed, s.recounted, s.skipped];
+    const disc = h.discrepancies || [];
+    if (!h.complete) lines.push(base.concat(['Unfinished']).map(q).join(','));
+    else if (!disc.length) lines.push(base.concat(['Clean']).map(q).join(','));
+    else for (const d of disc) lines.push(base.concat(['Discrepancy', d.locName, d.artist ? d.artist + ' — ' + d.name : d.name, d.catalog, d.expected, d.actual, d.variance]).map(q).join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cycle-count-log-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
 
 window.ccAbandonSession = function() {
   if (!confirm('Abandon this count session? Progress will be lost.')) return;
