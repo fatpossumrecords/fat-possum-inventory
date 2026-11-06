@@ -534,9 +534,7 @@ function ccRenderHome() {
     '<div id="cc-history-panel">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
     '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Recent Counts</div>' +
-    (ccIsAdmin()
-      ? '<button onclick="ccRenderLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📋 Count Log</button>'
-      : '') +
+    '<button onclick="ccRenderLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📋 Count Log</button>' +
     '</div>' +
     '<div id="cc-history-list" style="font-size:12px;color:var(--text-muted);">Loading history…</div>' +
     '</div>' +
@@ -1122,15 +1120,9 @@ function ccUpdateHistoryPanel() {
   }).join('');
 }
 
-// ── ADMIN COUNT LOG ───────────────────────────────────────────
+// ── COUNT LOG ─────────────────────────────────────────────────
 // Every session in the shared history: who, when, how long, which zone,
 // and the result — with discrepancy and skipped-product detail per count.
-
-function ccIsAdmin() {
-  const email = (typeof State !== 'undefined' && State.user?.email || '').toLowerCase();
-  return email === String(typeof ADMIN_EMAIL !== 'undefined' ? ADMIN_EMAIL : '').toLowerCase()
-    || (typeof State !== 'undefined' && State.userRole === 'admin');
-}
 
 const CCLog = { who: '', days: '7', onlyDisc: false, unfinished: false, open: {} };
 
@@ -1158,7 +1150,6 @@ function ccFmtDuration(a, b) {
 window.ccRenderLog = async function() {
   const area = document.getElementById('cc-content-area');
   if (!area) return;
-  if (!ccIsAdmin()) { ccRenderHome(); return; }
   area.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted);font-size:13px;">Loading count log…</div>';
   await ccLoadHistory();
   ccDrawLog();
