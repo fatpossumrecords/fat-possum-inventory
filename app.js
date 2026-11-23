@@ -835,6 +835,10 @@ function slimOrchardData(rows) {
     if (str(row['Artist Name']))   s.an = str(row['Artist Name']);
     if (str(row['Label Name']))    s.ln = str(row['Label Name']);
     if (str(row['Configuration'])) s.cf = str(row['Configuration']);
+    // Release date + per-warehouse "deleted" flags (used by the Overstock report)
+    if (str(String(row['Release Date'] ?? ''))) s.rd = str(String(row['Release Date']));
+    if (/^y/i.test(str(row['Deleted in OA'])))            s.xo = 1;
+    if (/^y/i.test(str(row['Deleted at UK warehouse'])))  s.xu = 1;
     // Numeric fields — only save if non-zero
     const num = (k, sk) => { const v = n(row[k]); if (v) s[sk] = v; };
     num('US Available',          'ua');
@@ -854,6 +858,12 @@ function slimOrchardData(rows) {
     num('EU This Month',         'em');
     num('EU Last Month',         'el');
     num('EU This Year',          'ey');
+    num('EU Last Year',          'ely');
+    num('EU Backorders',         'eb');
+    num('US Inbound',            'ui');
+    num('CA Inbound',            'ci');
+    num('DPW Inbound',           'di');
+    num('EU Inbound',            'ei');
     return s;
   }).filter(s => s.u); // must have UPC
 }
@@ -884,6 +894,15 @@ function expandOrchardRow(s) {
     'EU This Month':         s.em  || 0,
     'EU Last Month':         s.el  || 0,
     'EU This Year':          s.ey  || 0,
+    'EU Last Year':          s.ely || 0,
+    'EU Backorders':         s.eb  || 0,
+    'US Inbound':            s.ui  || 0,
+    'CA Inbound':            s.ci  || 0,
+    'DPW Inbound':           s.di  || 0,
+    'EU Inbound':            s.ei  || 0,
+    'Release Date':          s.rd  || '',
+    'Deleted in OA':         s.xo ? 'Yes' : '',
+    'Deleted at UK warehouse': s.xu ? 'Yes' : '',
   };
 }
 
@@ -1795,10 +1814,51 @@ function deduplicateOrchard(rows) {
       }
     }
   }
-  return Array.from(byUPC.values());
+  const out = Array.from(byUPC.values());
+  mapOrchardEuMonthColumns(out);
+  return out;
+}
+// The Orchard sheet names EU monthly sales by month ("EU Sales 2026-11",
+// "EU Sales 2026-10") rather than "EU This Month" / "EU Last Month". Copy the
+// newest two into the fixed names the rest of the app reads.
+function mapOrchardEuMonthColumns(rows) {
+  if (!rows.length) return;
+  const monthCols = Object.keys(rows[0])
+    .filter(k => /^EU Sales \d{4}-\d{1,2}$/.test(k))
+    .sort((a, b) => {
+      const [ay, am] = a.slice(9).split('-').map(Number);
+      const [by, bm] = b.slice(9).split('-').map(Number);
+      return (by * 12 + bm) - (ay * 12 + am);
+    });
+  if (!monthCols.length) return;
+  for (const row of rows) {
+    if (!row['EU This Month']) row['EU This Month'] = row[monthCols[0]] || '';
+    if (monthCols[1] && !row['EU Last Month']) row['EU Last Month'] = row[monthCols[1]] || '';
+  }
 }
 function normalizeUPC(upc) {
   return String(upc).replace(/\D/g,'').replace(/^0+/,'') || '';
+}
+// Orchard release dates arrive as UK-style "31/05/2019" text, or as a Sheets
+// date serial (days since 1899-12-30) when synced with UNFORMATTED_VALUE.
+// Returns "YYYY-MM-DD", or '' if it can't be read.
+function parseOrchardDate(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  let y, m, d;
+  let match;
+  if (/^\d{4,6}(\.\d+)?$/.test(s)) {
+    const dt = new Date(Date.UTC(1899, 11, 30) + Math.floor(parseFloat(s)) * 86400000);
+    y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; d = dt.getUTCDate();
+  } else if ((match = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/))) {
+    d = +match[1]; m = +match[2]; y = +match[3];
+  } else if ((match = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) {
+    y = +match[1]; m = +match[2]; d = +match[3];
+  } else {
+    return '';
+  }
+  if (!y || m < 1 || m > 12 || d < 1 || d > 31 || y < 1950 || y > 2100) return '';
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 }
 
 // ── MERGE DATA ────────────────────────────────────────────────
@@ -1864,6 +1924,15 @@ function mergeData() {
       eu_mtd:     safeNum(row['EU This Month']),
       eu_last_mo: safeNum(row['EU Last Month']),
       eu_this_yr: safeNum(row['EU This Year']),
+      eu_last_yr: safeNum(row['EU Last Year']),
+      eu_backorders: safeNum(row['EU Backorders']),
+      us_inbound: safeNum(row['US Inbound']),
+      ca_inbound: safeNum(row['CA Inbound']),
+      uk_inbound: safeNum(row['DPW Inbound']),
+      eu_inbound: safeNum(row['EU Inbound']),
+      release_date: parseOrchardDate(row['Release Date']),
+      orchard_deleted_oa: /^y/i.test(String(row['Deleted in OA'] || '').trim()),
+      orchard_deleted_uk: /^y/i.test(String(row['Deleted at UK warehouse'] || '').trim()),
     };
     if (products.has(upc)) {
       const p = products.get(upc);
@@ -1930,6 +1999,7 @@ function mergeData() {
   renderManufacturing();
   renderAlerts();
   renderDashboard();
+  if (window.renderOverstock && !document.getElementById('view-overstock')?.classList.contains('hidden')) renderOverstock();
 }
 
 function populateLabelDropdown() {
@@ -5166,6 +5236,7 @@ function switchView(viewName, pushHistory=true) {
   document.getElementById('search-input')?.setAttribute('placeholder', 'Search titles… (press / anywhere)');
   if (viewName === 'replenishment') { setTimeout(() => { if (window.whLoadSettings) whLoadSettings(); }, 50); }
   if (viewName === 'suppressed') renderSuppressedLog();
+  if (viewName === 'overstock' && window.renderOverstock) renderOverstock();
   if (viewName === 'manufacturing') setTimeout(() => { if (!window._mfgTabOverride) switchMfgTab('runs'); window._mfgTabOverride = false; }, 80);
 }
 
