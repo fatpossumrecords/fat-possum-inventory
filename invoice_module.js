@@ -662,6 +662,8 @@ window.invAcSearch = function(q) {
     return (p.artist||'').toLowerCase().includes(term)
       || (p.title||'').toLowerCase().includes(term)
       || (p.catalog||'').toLowerCase().includes(term)
+      || (p.orchard_catalog||'').toLowerCase().includes(term)
+      || (p.packiyo_sku||'').toLowerCase().includes(term)
       || (p.upc||'').includes(term);
   }).slice(0, 12);
   window._invAcResults = matches;
@@ -993,6 +995,8 @@ window.invSearchItems = function(q) {
     return (p.artist||'').toLowerCase().includes(term)
       || (p.title||'').toLowerCase().includes(term)
       || (p.catalog||'').toLowerCase().includes(term)
+      || (p.orchard_catalog||'').toLowerCase().includes(term)
+      || (p.packiyo_sku||'').toLowerCase().includes(term)
       || (p.upc||'').includes(term);
   }).slice(0, 12);
 
