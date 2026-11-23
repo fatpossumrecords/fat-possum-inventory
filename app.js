@@ -2131,7 +2131,9 @@ function renderInventory() {
 
   let rows = State.merged.filter(p => {
     if (search) {
-      if (!`${p.artist} ${p.title} ${p.catalog} ${p.upc} ${p.label}`.toLowerCase().includes(search)) return false;
+      // Include both SKUs: when a UPC is in Packiyo and Orchard, `catalog` shows the
+      // Packiyo SKU, so the Orchard product code would otherwise be unsearchable.
+      if (!`${p.artist} ${p.title} ${p.catalog} ${p.orchard_catalog||''} ${p.packiyo_sku||''} ${p.orchard_title||''} ${p.upc} ${p.label}`.toLowerCase().includes(search)) return false;
     }
     if (cfgFilter) {
       const fmt = (p.format||'').toLowerCase();
@@ -2869,7 +2871,7 @@ function updateMovementDropdown() {
   const q  = document.getElementById('mov-product-search').value.toLowerCase().trim();
   const dd = document.getElementById('mov-product-dropdown');
   if (q.length < 2) { dd.classList.add('hidden'); return; }
-  const matches = State.merged.filter(p => `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)).slice(0, 15);
+  const matches = State.merged.filter(p => `${p.artist} ${p.title} ${p.catalog} ${p.orchard_catalog||''} ${p.packiyo_sku||''} ${p.upc}`.toLowerCase().includes(q)).slice(0, 15);
   if (matches.length === 0) { dd.classList.add('hidden'); return; }
   dd.innerHTML = matches.map(p =>
     `<div class="product-dropdown-item" data-upc="${esc(p.upc)}">
@@ -3771,7 +3773,7 @@ function renderTitleSearchResults(query) {
   }
   const q = query.toLowerCase();
   const matches = State.merged.filter(p =>
-    `${p.artist} ${p.title} ${p.catalog} ${p.upc}`.toLowerCase().includes(q)
+    `${p.artist} ${p.title} ${p.catalog} ${p.orchard_catalog||''} ${p.packiyo_sku||''} ${p.upc}`.toLowerCase().includes(q)
   ).slice(0, 8);
   if (!matches.length) {
     el.innerHTML = '<p style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center">No results found.</p>';
