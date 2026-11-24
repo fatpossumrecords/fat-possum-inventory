@@ -18,11 +18,12 @@
    ============================================================ */
 
 const OVS_LS_KEY = 'fp_ovs_settings';
+// cur: 'gbp' warehouses use the UK & Ireland rate card; 'usd' ones use the US/CA storage rate.
 const OVS_WH = [
-  { key:'us', label:'Orchard US',     short:'US', avail:'us_avail', inbound:'us_inbound', deleted:'orchard_deleted_oa' },
-  { key:'ca', label:'Orchard Canada', short:'CA', avail:'ca_avail', inbound:'ca_inbound', deleted:'orchard_deleted_oa' },
-  { key:'uk', label:'Orchard UK',     short:'UK', avail:'uk_avail', inbound:'uk_inbound', deleted:'orchard_deleted_uk' },
-  { key:'eu', label:'Orchard EU',     short:'EU', avail:'eu_avail', inbound:'eu_inbound', deleted:null },
+  { key:'us', label:'Orchard US',     short:'US', cur:'usd', avail:'us_avail', inbound:'us_inbound', deleted:'orchard_deleted_oa' },
+  { key:'ca', label:'Orchard Canada', short:'CA', cur:'usd', avail:'ca_avail', inbound:'ca_inbound', deleted:'orchard_deleted_oa' },
+  { key:'uk', label:'Orchard UK',     short:'UK', cur:'gbp', avail:'uk_avail', inbound:'uk_inbound', deleted:'orchard_deleted_uk' },
+  { key:'eu', label:'Orchard EU',     short:'EU', cur:'gbp', avail:'eu_avail', inbound:'eu_inbound', deleted:null },
 ];
 // Standard Orchard→Orchard routes (same as Stock Movements' VALID_ROUTES)
 const OVS_ROUTES = { us:['ca','uk','eu'], uk:['eu'], ca:[], eu:[] };
@@ -32,9 +33,35 @@ const OVS_DEFAULTS = {
   minAgeMonths: 12,
   deleteMax: 2,
   countInbound: true,
-  skuFee: 0.30,
-  feePeriod: 'month',   // month | year
+  // UK & EU, from The Orchard's UK & Ireland rate card (GBP per month)
+  gbpStorageCd: 0.0075,     // per unit / month (CD, cassette, other)
+  gbpStorageVinyl: 0.0100,  // per unit / month
+  gbpSku: 0.0097,           // active SKU charge per SKU / month
+  // US & CA (USD)
+  usdStorage: 0.25,         // per unit, per usdPeriod
+  usdPeriod: 'year',        // month | year
 };
+const OVS_SETTING_KEYS = Object.keys(OVS_DEFAULTS);
+
+function ovsIsVinyl(format) {
+  return /vinyl|\blp\b|\d{1,2}"|\d{1,2}\s*inch/i.test(format || '');
+}
+
+// Yearly cost of holding `units` of a title at a warehouse, plus its SKU charge.
+// Returns { storage, sku } in that warehouse's currency.
+function ovsYearlyCost(wh, format, units, s) {
+  if (wh.cur === 'gbp') {
+    const rate = ovsIsVinyl(format) ? s.gbpStorageVinyl : s.gbpStorageCd;
+    return { storage: units * rate * 12, sku: s.gbpSku * 12 };
+  }
+  const perYear = s.usdPeriod === 'month' ? s.usdStorage * 12 : s.usdStorage;
+  return { storage: units * perYear, sku: 0 };
+}
+
+function ovsMoney(cur, n) {
+  const sym = cur === 'gbp' ? '£' : '$';
+  return sym + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 const OvsState = {
   rows: [],
@@ -43,19 +70,34 @@ const OvsState = {
   filterLabel: '',
   search: '',
   sort: 'overstock',
+  selected: new Set(),   // ticked lines, by ovsKey()
 };
+
+function ovsKey(r) { return r.upc + '|' + r.wh; }
+
+function ovsSelText() {
+  const n = OvsState.selected.size;
+  if (!n) return '';
+  const withMoves = OvsState.rows.filter(r => r.moveQty && OvsState.selected.has(ovsKey(r))).length;
+  return `${n} ticked · ${withMoves} with moves`;
+}
+function ovsUpdateSelCount() {
+  const el = document.getElementById('ovs-sel-count');
+  if (el) el.textContent = ovsSelText();
+}
 
 function ovsSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(OVS_LS_KEY) || '{}') || {}; } catch(e) {}
-  return Object.assign({}, OVS_DEFAULTS, s);
+  const out = Object.assign({}, OVS_DEFAULTS);
+  for (const k of OVS_SETTING_KEYS) if (k in s) out[k] = s[k];  // ignores old skuFee/feePeriod
+  return out;
 }
 function ovsSaveSettings(s) {
   try { localStorage.setItem(OVS_LS_KEY, JSON.stringify(s)); } catch(e) {}
 }
 
 function ovsNum(n) { return Math.round(n || 0).toLocaleString(); }
-function ovsGBP(n) { return '£' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 // Fraction of the current calendar year that has elapsed (0..1)
 function ovsYearElapsed(now) {
@@ -140,7 +182,11 @@ function ovsCompute(products, s, now) {
       const x = pos[wh.key];
       if (!x.overstock && !x.deleteCand) continue;
       const moved = (x.moves || []).reduce((a, m) => a + m.qty, 0);
+      const cost = ovsYearlyCost(wh, p.format, x.overstock, s);
       rows.push({
+        cur: wh.cur,
+        // What the overstock costs to hold for a year (+ the SKU charge if it's a delete candidate)
+        costYr: cost.storage + (x.deleteCand ? cost.sku : 0),
         upc: p.upc,
         artist: p.artist || '',
         title: p.title || p.orchard_title || '',
@@ -203,12 +249,14 @@ window.renderOverstock = function() {
   const withDates = merged.filter(p => p.release_date).length;
   OvsState.rows = ovsCompute(merged, s);
   const rows = OvsState.rows;
-  const monthlyFee = s.feePeriod === 'year' ? s.skuFee / 12 : s.skuFee;
+  // Drop selections for lines that no longer exist (e.g. after a settings change)
+  const liveKeys = new Set(rows.map(ovsKey));
+  for (const k of [...OvsState.selected]) if (!liveKeys.has(k)) OvsState.selected.delete(k);
 
-  // Totals per warehouse
+  // Totals per warehouse; cost is kept per currency so £ and $ never get added together
   const tot = {};
   for (const wh of OVS_WH.concat([{ key:'all', label:'All Orchard' }])) {
-    tot[wh.key] = { label: wh.label, overstock:0, titles:0, move:0, sell:0, del:0 };
+    tot[wh.key] = { label: wh.label, cur: wh.cur, overstock:0, titles:0, move:0, sell:0, del:0, cost: { gbp:0, usd:0 } };
   }
   for (const r of rows) {
     for (const k of [r.wh, 'all']) {
@@ -218,6 +266,7 @@ window.renderOverstock = function() {
       t.move += r.moveQty;
       t.sell += r.sellOff;
       if (r.deleteCand) t.del++;
+      t.cost[r.cur] += r.costYr;
     }
   }
 
@@ -241,9 +290,10 @@ window.renderOverstock = function() {
   html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
     + '<div><h2 style="margin:0;font-size:18px;">Orchard Overstock</h2>'
     + `<div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Stock above ${s.keepMonths} months of sales, on titles at least ${s.minAgeMonths} months past release · Orchard data from ${esc(tsText)}</div></div>`
-    + '<div style="display:flex;gap:6px;">'
+    + '<div style="display:flex;gap:6px;align-items:center;">'
+    + `<span id="ovs-sel-count" style="font-size:11px;color:var(--text-muted);">${ovsSelText()}</span>`
     + '<button class="btn-primary btn-sm" onclick="ovsQueueSelected()">Queue selected moves</button>'
-    + '<button class="btn-secondary btn-sm" onclick="ovsExportCSV()">Export CSV</button>'
+    + '<button class="btn-secondary btn-sm" onclick="ovsExportCSV()" title="Exports the ticked lines, or every line shown if none are ticked">Export CSV</button>'
     + '</div></div>';
 
   if (!withDates) {
@@ -258,9 +308,13 @@ window.renderOverstock = function() {
     + `<label style="${lbl}">Keep (months)<input type="number" min="0" max="60" value="${s.keepMonths}" style="${inputStyle}" onchange="ovsSet('keepMonths', this.value)"></label>`
     + `<label style="${lbl}">Min age (months)<input type="number" min="0" max="120" value="${s.minAgeMonths}" style="${inputStyle}" onchange="ovsSet('minAgeMonths', this.value)"></label>`
     + `<label style="${lbl}">Delete if sold ≤<input type="number" min="0" max="100" value="${s.deleteMax}" style="${inputStyle}" onchange="ovsSet('deleteMax', this.value)"></label>`
-    + `<label style="${lbl}">SKU fee (£)<input type="number" min="0" step="0.01" value="${s.skuFee}" style="${inputStyle}" onchange="ovsSet('skuFee', this.value)"></label>`
-    + `<label style="${lbl}">Fee per<select class="select-sm" onchange="ovsSet('feePeriod', this.value)"><option value="month"${s.feePeriod==='month'?' selected':''}>Month</option><option value="year"${s.feePeriod==='year'?' selected':''}>Year</option></select></label>`
     + `<label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text);padding-bottom:6px;"><input type="checkbox"${s.countInbound?' checked':''} onchange="ovsSet('countInbound', this.checked)"> Count inbound stock</label>`
+    + '<span style="width:1px;align-self:stretch;background:var(--border);"></span>'
+    + `<label style="${lbl}" title="UK & Ireland rate card: storage per CD (and other non-vinyl) unit per month">UK/EU CD £/mo<input type="number" min="0" step="0.0001" value="${s.gbpStorageCd}" style="${inputStyle}width:70px;" onchange="ovsSet('gbpStorageCd', this.value)"></label>`
+    + `<label style="${lbl}" title="UK & Ireland rate card: storage per vinyl unit per month">UK/EU vinyl £/mo<input type="number" min="0" step="0.0001" value="${s.gbpStorageVinyl}" style="${inputStyle}width:70px;" onchange="ovsSet('gbpStorageVinyl', this.value)"></label>`
+    + `<label style="${lbl}" title="UK & Ireland rate card: active SKU charge per SKU per month">UK/EU SKU £/mo<input type="number" min="0" step="0.0001" value="${s.gbpSku}" style="${inputStyle}width:70px;" onchange="ovsSet('gbpSku', this.value)"></label>`
+    + `<label style="${lbl}" title="US & Canada storage per unit">US/CA $ per unit<input type="number" min="0" step="0.01" value="${s.usdStorage}" style="${inputStyle}" onchange="ovsSet('usdStorage', this.value)"></label>`
+    + `<label style="${lbl}">US/CA per<select class="select-sm" onchange="ovsSet('usdPeriod', this.value)"><option value="year"${s.usdPeriod==='year'?' selected':''}>Year</option><option value="month"${s.usdPeriod==='month'?' selected':''}>Month</option></select></label>`
     + '<button class="btn-ghost btn-sm" style="margin-left:auto;" onclick="ovsResetSettings()">Reset</button>'
     + '</div>';
 
@@ -268,8 +322,10 @@ window.renderOverstock = function() {
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px;">';
   for (const k of ['all', 'us', 'ca', 'uk', 'eu']) {
     const t = tot[k];
-    const saving = t.del * monthlyFee * 12;
     const isAll = k === 'all';
+    const costHtml = isAll
+      ? `${ovsMoney('gbp', t.cost.gbp)} + ${ovsMoney('usd', t.cost.usd)}`
+      : ovsMoney(t.cur, t.cost[t.cur]);
     html += `<div style="background:var(--surface);border:1px solid ${isAll ? 'var(--text)' : 'var(--border)'};border-radius:6px;padding:12px 14px;cursor:${isAll?'default':'pointer'};" ${isAll ? '' : `onclick="ovsSetFilter('filterWh','${k}')"`}>`
       + `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);">${esc(t.label)}</div>`
       + `<div style="font-size:22px;font-weight:700;font-family:'DM Mono',monospace;margin:4px 0 2px;">${ovsNum(t.overstock)}</div>`
@@ -278,7 +334,7 @@ window.renderOverstock = function() {
       + `<div style="display:flex;justify-content:space-between;"><span>Move to other Orchard WH</span><strong>${ovsNum(t.move)}</strong></div>`
       + `<div style="display:flex;justify-content:space-between;"><span>Sell off / destroy</span><strong style="color:var(--red);">${ovsNum(t.sell)}</strong></div>`
       + `<div style="display:flex;justify-content:space-between;"><span>SKUs to delete</span><strong>${ovsNum(t.del)}</strong></div>`
-      + `<div style="display:flex;justify-content:space-between;color:var(--green);"><span>Fee saved / yr</span><strong>${ovsGBP(saving)}</strong></div>`
+      + `<div style="display:flex;justify-content:space-between;gap:6px;color:var(--red);" title="Storage on the overstock units for a year, plus SKU charges on delete candidates"><span>Costs / yr to hold</span><strong style="text-align:right;">${costHtml}</strong></div>`
       + '</div></div>';
   }
   html += '</div>';
@@ -300,18 +356,18 @@ window.renderOverstock = function() {
   const th = (t, num) => `<th${num ? ' class="num"' : ''} style="position:sticky;top:0;background:var(--surface2);white-space:nowrap;">${t}</th>`;
   html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;max-height:calc(100vh - 360px);">'
     + '<table class="dash-table" style="min-width:1100px;"><thead><tr>'
-    + `<th style="position:sticky;top:0;background:var(--surface2);width:24px;"><input type="checkbox" title="Select all moves shown" onchange="ovsToggleAll(this.checked)"></th>`
+    + `<th style="position:sticky;top:0;background:var(--surface2);width:24px;"><input type="checkbox" title="Select every line shown" onchange="ovsToggleAll(this.checked)"></th>`
     + th('Artist') + th('Title') + th('Cat #') + th('Format') + th('Warehouse') + th('Released')
-    + th('Stock', true) + th('12M sales', true) + th('Keep', true) + th('Overstock', true) + th('Action')
+    + th('Stock', true) + th('12M sales', true) + th('Keep', true) + th('Overstock', true) + th('Cost / yr', true) + th('Action')
     + '</tr></thead><tbody>';
   if (!shown.length) {
-    html += '<tr><td colspan="12" style="padding:24px;text-align:center;color:var(--text-muted);">No overstock matches these filters.</td></tr>';
+    html += '<tr><td colspan="13" style="padding:24px;text-align:center;color:var(--text-muted);">No overstock matches these filters.</td></tr>';
   }
   for (const r of shown.slice(0, LIMIT)) {
-    const key = r.upc + '|' + r.wh;
+    const key = ovsKey(r);
     const stockTitle = r.inbound ? `${r.avail} available + ${r.inbound} inbound` : `${r.avail} available`;
     html += '<tr>'
-      + `<td>${r.moveQty ? `<input type="checkbox" class="ovs-check" data-key="${esc(key)}">` : ''}</td>`
+      + `<td><input type="checkbox" class="ovs-check" data-key="${esc(key)}"${OvsState.selected.has(key) ? ' checked' : ''} onchange="ovsToggleOne(this)"></td>`
       + `<td>${esc(r.artist)}</td>`
       + `<td>${esc(r.title)}</td>`
       + `<td><code style="font-size:11px;">${esc(r.catalog)}</code></td>`
@@ -322,6 +378,7 @@ window.renderOverstock = function() {
       + `<td class="num"${r.estimated ? ' title="Estimated from This Year + Last Year ships"' : ''}>${ovsNum(r.sales12)}${r.estimated ? '<span style="font-size:9px;color:var(--text-muted);"> est</span>' : ''}</td>`
       + `<td class="num">${ovsNum(r.keep)}</td>`
       + `<td class="num" style="font-weight:700;">${ovsNum(r.overstock)}</td>`
+      + `<td class="num">${ovsMoney(r.cur, r.costYr)}</td>`
       + `<td style="font-size:11px;">${esc(ovsActionText(r))}</td>`
       + '</tr>';
   }
@@ -331,7 +388,8 @@ window.renderOverstock = function() {
   }
   html += '<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">'
     + 'est = estimated: UK and EU only report calendar-year ships, so 12-month sales = This Year + the remaining share of Last Year. '
-    + 'Moves only use standard routes (US → CA/UK/EU, UK → EU). Delete candidates only include SKUs that still hold stock at that warehouse.'
+    + 'Moves only use standard routes (US → CA/UK/EU, UK → EU). Delete candidates only include SKUs that still hold stock at that warehouse. '
+    + 'Cost / yr = storage on the overstock units for 12 months (UK/EU at the UK &amp; Ireland rate card, vinyl vs CD; US/CA at the $ rate), plus the SKU charge when the SKU is a delete candidate.'
     + '</div>';
   html += '</div>';
 
@@ -342,7 +400,7 @@ window.renderOverstock = function() {
 window.ovsSet = function(key, value) {
   const s = ovsSettings();
   if (key === 'countInbound') s[key] = !!value;
-  else if (key === 'feePeriod') s[key] = value === 'year' ? 'year' : 'month';
+  else if (key === 'usdPeriod') s[key] = value === 'month' ? 'month' : 'year';
   else {
     const n = parseFloat(value);
     s[key] = isNaN(n) || n < 0 ? OVS_DEFAULTS[key] : n;
@@ -372,18 +430,28 @@ window.ovsSetFilter = function(key, value) {
   renderOverstock();
 };
 
+window.ovsToggleOne = function(cb) {
+  if (cb.checked) OvsState.selected.add(cb.dataset.key);
+  else OvsState.selected.delete(cb.dataset.key);
+  ovsUpdateSelCount();
+};
+
+// Header box ticks/unticks every line that matches the current filters
+// (including ones past the 500-line display limit).
 window.ovsToggleAll = function(checked) {
+  for (const r of OvsState.rows.filter(ovsMatchesFilters)) {
+    if (checked) OvsState.selected.add(ovsKey(r)); else OvsState.selected.delete(ovsKey(r));
+  }
   document.querySelectorAll('#ovs-body .ovs-check').forEach(cb => { cb.checked = checked; });
+  ovsUpdateSelCount();
 };
 
 window.ovsQueueSelected = function() {
-  const checked = [...document.querySelectorAll('#ovs-body .ovs-check:checked')];
-  if (!checked.length) { toast('Tick the lines whose moves you want to queue.', 'error'); return; }
-  const byKey = new Map(OvsState.rows.map(r => [r.upc + '|' + r.wh, r]));
+  if (!OvsState.selected.size) { toast('Tick the lines whose moves you want to queue.', 'error'); return; }
+  const picked = OvsState.rows.filter(r => OvsState.selected.has(ovsKey(r)) && r.moves.length);
+  if (!picked.length) { toast('None of the ticked lines has a move — they are sell-off or delete only.', 'error'); return; }
   let added = 0, skipped = 0;
-  for (const cb of checked) {
-    const r = byKey.get(cb.dataset.key);
-    if (!r) continue;
+  for (const r of picked) {
     const prod = State.merged.find(p => p.upc === r.upc);
     if (!prod) continue;
     let leaves = r.avail;
@@ -422,11 +490,12 @@ window.ovsQueueSelected = function() {
 };
 
 window.ovsExportCSV = function() {
-  const rows = OvsState.rows.filter(ovsMatchesFilters);
+  // Ticked lines if any are ticked, otherwise everything matching the filters
+  const rows = OvsState.selected.size
+    ? OvsState.rows.filter(r => OvsState.selected.has(ovsKey(r)))
+    : OvsState.rows.filter(ovsMatchesFilters);
   if (!rows.length) { toast('Nothing to export.', 'error'); return; }
-  const s = ovsSettings();
-  const monthlyFee = s.feePeriod === 'year' ? s.skuFee / 12 : s.skuFee;
-  const cols = ['Artist','Title','Catalog #','UPC','Format','Label','Warehouse','Release Date','Available','Inbound','Stock','12M Sales','12M Sales Estimated','Keep','Overstock','Move Qty','Move To','Sell Off / Destroy','Delete SKU','Fee Saved / Yr (GBP)'];
+  const cols = ['Artist','Title','Catalog #','UPC','Format','Label','Warehouse','Release Date','Available','Inbound','Stock','12M Sales','12M Sales Estimated','Keep','Overstock','Move Qty','Move To','Sell Off / Destroy','Delete SKU','Cost / Yr','Currency'];
   const q = v => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
   const lines = [cols.join(',')];
   for (const r of rows) {
@@ -434,7 +503,7 @@ window.ovsExportCSV = function() {
       r.artist, r.title, r.catalog, r.upc, r.format, r.label, r.whLabel, r.release_date,
       r.avail, r.inbound, r.stock, r.sales12, r.estimated ? 'Yes' : '', r.keep, r.overstock,
       r.moveQty || '', r.moves.map(m => `${OVS_WH.find(w => w.key === m.to).short} ${m.qty}`).join('; '),
-      r.sellOff || '', r.deleteCand ? 'Yes' : '', r.deleteCand ? (monthlyFee * 12).toFixed(2) : '',
+      r.sellOff || '', r.deleteCand ? 'Yes' : '', r.costYr.toFixed(2), r.cur.toUpperCase(),
     ].map(q).join(','));
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -448,4 +517,4 @@ window.ovsExportCSV = function() {
 };
 
 // Exposed for testing in Node
-if (typeof module !== 'undefined') module.exports = { ovsCompute, ovsSales12, ovsMonthsSince, ovsYearElapsed, OVS_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { ovsCompute, ovsSales12, ovsMonthsSince, ovsYearElapsed, ovsYearlyCost, ovsIsVinyl, OVS_WH, OVS_DEFAULTS, OvsState };
